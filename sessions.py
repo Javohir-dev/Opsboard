@@ -384,11 +384,38 @@ def as_list(bucket, limit=40):
     return [{"name": k, "count": n, "last": ts} for k, (n, ts) in ordered]
 
 
+def workflow_journal(path):
+    """Agent states of one Workflow run, from its journal: running until a result or an error arrives."""
+    out = {}
+    try:
+        lines = path.read_text(errors="replace").splitlines()
+    except OSError:
+        return out
+    for line in lines:
+        try:
+            ev = json.loads(line)
+        except ValueError:
+            continue
+        aid, kind = ev.get("agentId"), ev.get("type")
+        if not aid:
+            continue
+        if kind == "started":
+            out.setdefault(aid, {"status": "running", "summary": ""})
+        elif kind == "result":
+            text = ev.get("result") if isinstance(ev.get("result"), str) else json.dumps(ev.get("result"), ensure_ascii=False)
+            out[aid] = {"status": "completed", "summary": (text or "").strip().split("\n")[0][:300]}
+        else:
+            out[aid] = {"status": "failed", "summary": str(ev.get("error") or ev.get("message") or kind)[:300]}
+    return out
+
+
 def session_agents(main, path):
     now = time.time()
     agents = {a["id"]: dict(a) for a in main.agents.values()}
     subs = []
-    for meta_path in (path.with_suffix("") / "subagents").glob("*.meta.json"):
+    root = path.with_suffix("") / "subagents"
+    flows = {wf.name: workflow_journal(wf / "journal.jsonl") for wf in root.glob("workflows/*") if wf.is_dir()}
+    for meta_path in [*root.glob("*.meta.json"), *root.glob("workflows/*/*.meta.json")]:
         log = meta_path.with_name(meta_path.name.replace(".meta.json", ".jsonl"))
         try:
             meta = json.loads(meta_path.read_text())
@@ -399,9 +426,10 @@ def session_agents(main, path):
         t = transcript(log)
         subs.append(t)
         key = aid if aid in agents else main.agent_by_tool.get(meta.get("toolUseId"), aid)
+        flow = flows.get(meta_path.parent.name, {}).get(aid) if meta_path.parent.parent.name == "workflows" else None
         a = agents.pop(key, None) or {
             "description": meta.get("description", ""),
-            "type": meta.get("agentType", ""),
+            "type": f"workflow · {meta['workflowPhase']}" if flow is not None and meta.get("workflowPhase") else meta.get("agentType", ""),
             "model": meta.get("model", ""),
             "started": getattr(st, "st_birthtime", st.st_mtime),
             "status": "unknown",
@@ -409,6 +437,11 @@ def session_agents(main, path):
             "summary": "",
             "background": True,
         }
+        if flow:
+            a["status"] = flow["status"]
+            a["summary"] = a.get("summary") or flow["summary"]
+            if flow["status"] != "running":
+                a["ended"] = a.get("ended") or st.st_mtime
         a["id"] = aid
         a["model"] = a.get("model") or meta.get("model", "")
         a["depth"] = meta.get("spawnDepth", 1)

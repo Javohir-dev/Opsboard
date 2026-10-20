@@ -13,6 +13,7 @@ All notable changes. Versions follow [semantic versioning](https://semver.org/);
 - Agents cannot switch *Live Claude usage* on through `opsboard config` (`--source agent` is refused); the setup prompt tells Claude never to read Claude Code's sign-in.
 
 ### Fixed
+- Agents started by a Claude Code *Workflow* show up under their session (running, completed or failed, with the workflow phase); they were missing because they live in `subagents/workflows/`.
 - A fix run stays *running* until its Claude process exits; a run with background jobs was marked done after its first turn, so only one of several runs showed as in progress.
 
 ### Changed
