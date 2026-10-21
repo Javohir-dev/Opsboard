@@ -21,6 +21,7 @@ const SVG = {
   tree: '<path d="M3 3v12a3 3 0 0 0 3 3h4"/><path d="M3 8h7"/><rect x="13" y="4" width="8" height="6" rx="1"/><rect x="13" y="14" width="8" height="6" rx="1"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
   diff: '<path d="M12 3v14M5 10h14M5 21h14"/>',
+  ext: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
 };
 
 function fileStats(f) {
@@ -117,16 +118,50 @@ function loadMr(iid, fresh = false) {
     .finally(() => { MRD.loading = null; if (route().page === "mr") render(); });
 }
 
-function md(text) {
+function mdLite(text) {
   return String(text || "").split(/```/).map((part, i) => {
     if (i % 2) return `<pre class="mdpre"><code>${esc(part.replace(/^[\w-]*\n/, ""))}</code></pre>`;
-    return esc(part)
-      .replace(/^#{1,6} +(.+)$/gm, '<b class="mdh">$1</b>')
-      .replace(/`([^`\n]+)`/g, "<code>$1</code>")
-      .replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
-      .replace(/!?\[([^\]\n]*)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-      .replace(/\n/g, "<br>");
+    return esc(part).replace(/^#{1,6} +(.+)$/gm, '<b class="mdh">$1</b>').replace(/`([^`\n]+)`/g, "<code>$1</code>").replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>").replace(/\n/g, "<br>");
   }).join("");
+}
+const MERMAID = { svg: {}, queue: new Set(), loading: false, n: 0 };
+let mdBase = "";
+if (window.DOMPurify) {
+  DOMPurify.addHook("afterSanitizeAttributes", node => {
+    for (const attr of ["href", "src"]) {
+      const v = node.getAttribute?.(attr);
+      if (v && v.startsWith("/") && !v.startsWith("//") && mdBase) node.setAttribute(attr, mdBase + v);
+    }
+    if (node.tagName === "A") { node.setAttribute("target", "_blank"); node.setAttribute("rel", "noopener"); }
+  });
+}
+if (window.marked) marked.use({ gfm: true, breaks: true });
+const darkTheme = () => document.documentElement.dataset.theme === "dark" || (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+function md(text, base = "") {
+  if (!window.marked || !window.DOMPurify) return mdLite(text);
+  mdBase = base;
+  let html;
+  try { html = DOMPurify.sanitize(marked.parse(String(text || "")), { FORBID_TAGS: ["style", "form", "input", "button", "textarea", "select"], FORBID_ATTR: ["style"] }); } catch (e) { return mdLite(text); }
+  return html.replace(/<pre><code class="language-mermaid">([\s\S]*?)<\/code><\/pre>/g, (_, code) => {
+    const src = new DOMParser().parseFromString(code, "text/html").documentElement.textContent;
+    const key = (darkTheme() ? "d:" : "l:") + src;
+    if (MERMAID.svg[key]) return `<div class="mdmermaid">${MERMAID.svg[key]}</div>`;
+    if (MERMAID.svg[key] !== false) { MERMAID.queue.add(key); drawMermaid(); }
+    return `<pre class="mdpre"><code>${code}</code></pre>`;
+  });
+}
+function drawMermaid() {
+  if (MERMAID.loading) return;
+  MERMAID.loading = true;
+  const ready = window.mermaid ? Promise.resolve() : new Promise((ok, fail) => { const sc = document.createElement("script"); sc.src = "/static/vendor/mermaid.min.js"; sc.onload = ok; sc.onerror = fail; document.head.appendChild(sc); });
+  ready.then(async () => {
+    while (MERMAID.queue.size) {
+      const key = [...MERMAID.queue][0];
+      MERMAID.queue.delete(key);
+      mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: key.startsWith("d:") ? "dark" : "default" });
+      try { MERMAID.svg[key] = (await mermaid.render("mmd" + ++MERMAID.n, key.slice(2))).svg; } catch (e) { MERMAID.svg[key] = false; }
+    }
+  }).catch(() => {}).finally(() => { MERMAID.loading = false; ui.lastView = null; if (route().page === "mr") render(); });
 }
 
 function parseDiff(diff) {
@@ -182,7 +217,7 @@ function diffFile(iid, f, i, byLine, threadsByFile, viewed, m) {
 
 const avatarOf = name => `<span class="avatar" title="${esc(name)}">${esc(initials(name || "?"))}</span>`;
 function noteHtml(n, withHead = true) {
-  return `<div class="thnote">${withHead ? avatarOf(n.author) : ""}<div class="grow">${withHead ? `<div class="thby"><b>${esc(n.author)}</b>${n.username ? `<span class="muted">@${esc(n.username)}</span>` : ""}<span class="muted" title="${esc(fmtDateTime(n.created))}">${ago(n.created)}</span></div>` : ""}<div class="thbody">${md(n.body)}</div></div></div>`;
+  return `<div class="thnote">${withHead ? avatarOf(n.author) : ""}<div class="grow">${withHead ? `<div class="thby"><b>${esc(n.author)}</b>${n.username ? `<span class="muted">@${esc(n.username)}</span>` : ""}<span class="muted" title="${esc(fmtDateTime(n.created))}">${ago(n.created)}</span></div>` : ""}<div class="thbody md">${md(n.body, ui.mrBase || "")}</div></div></div>`;
 }
 function threadCard(t) {
   const st = threadState(t), first = t.notes[0] || {}, rest = t.notes.slice(1), last = t.notes[t.notes.length - 1] || first;
@@ -211,6 +246,51 @@ function threadOrder(d) {
   });
 }
 
+const MR_TABS = ["overview", "commits", "pipelines", "changes"];
+function mrTab() { const t = location.hash.split("/")[3]; return MR_TABS.includes(t) ? t : "overview"; }
+const projectUrl = url => (url || "").split(isGitHub() ? "/pull/" : "/-/merge_requests")[0];
+const STATE_LABEL = { opened: ["Open", "mrs"], merged: ["Merged", "mrs"], closed: ["Closed", "x"] };
+
+function commitsTab(d) {
+  if (!d.commits?.length) return '<div class="empty">No commits.</div>';
+  const day = t => new Date(t * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  let last = "", html = "";
+  for (const c of d.commits) {
+    const dd = day(c.at);
+    if (dd !== last) { html += `${last ? "</div>" : ""}<div class="cday">${esc(dd)}</div><div class="panel list">`; last = dd; }
+    html += `<div class="crow">${avatarOf(c.author)}<div class="grow"><div class="ctitle">${esc(c.title)}</div><div class="muted fs-sm"><b class="ctext">${esc(c.author)}</b> authored <span title="${esc(fmtDateTime(c.at))}">${ago(c.at)}</span></div></div>
+      <code class="cha">${esc(c.short)}</code><button class="dicon" data-copy="${esc(c.sha)}" title="Copy commit SHA" aria-label="Copy commit SHA">${svg(SVG.copy, 14)}</button>${c.url ? `<a class="dicon" href="${esc(c.url)}" target="_blank" title="Open in ${hostName()}" aria-label="Open in ${hostName()}">${svg(SVG.ext, 14)}</a>` : ""}</div>`;
+  }
+  return html + "</div>";
+}
+function pipelinesTab(d) {
+  if (!d.pipelines?.length) return `<div class="empty">No ${isGitHub() ? "workflow runs" : "pipelines"}.</div>`;
+  return `<div class="tbl panel"><table><thead><tr><th>Status</th><th>${isGitHub() ? "Workflow" : "Pipeline"}</th><th>Ref</th><th>Trigger</th><th class="num">Created</th></tr></thead><tbody>${d.pipelines.map(p => {
+    const st = PIPE[p.status] || ["skip", "skipped", p.status];
+    return `<tr><td><span class="pstat p-${st[0]}">${icon(st[1], 16)}${esc(p.status)}</span></td><td>${p.url ? `<a href="${esc(p.url)}" target="_blank">#${esc(p.id)}</a>` : "#" + esc(p.id)}</td><td><span class="mono">${esc(p.ref)}</span> <code class="cha">${esc(p.sha)}</code></td><td class="muted">${esc(p.source)}</td><td class="num" title="${esc(fmtDateTime(p.at))}">${ago(p.at)}</td></tr>`;
+  }).join("")}</tbody></table></div>`;
+}
+function overviewTab(d, m) {
+  const threads = threadOrder(d), open = threads.filter(t => threadState(t) === "open").length;
+  const pipe = d.pipelines?.[0], pst = pipe && (PIPE[pipe.status] || ["skip", "skipped", pipe.status]);
+  const widget = [
+    pipe ? `<div class="wrow"><span class="pstat p-${pst[0]}">${icon(pst[1], 18)}</span><span>${isGitHub() ? "Workflow" : "Pipeline"} ${pipe.url ? `<a href="${esc(pipe.url)}" target="_blank">#${esc(pipe.id)}</a>` : "#" + esc(pipe.id)} <b>${esc(pipe.status)}</b> <span class="muted">for <code class="cha">${esc(pipe.sha)}</code> ${ago(pipe.at)}</span></span></div>` : "",
+    m ? `<div class="wrow">${m.approved ? `<span class="wic ok">${icon("ok", 18)}</span><span>Approved by <b>${esc(m.approved_by.join(", "))}</b></span>` : `<span class="wic">${icon("pending", 18)}</span><span class="muted">Not approved yet</span>`}</div>` : "",
+    threads.length ? `<div class="wrow"><span class="wic ${open ? "warn" : "ok"}">${icon(open ? "comment" : "ok", 18)}</span><span>${open ? `<b>${plural(open, "unresolved thread")}</b>` : "All threads resolved"} <span class="muted">· ${threads.length - open} of ${threads.length} resolved</span></span></div>` : "",
+    m?.conflicts ? `<div class="wrow"><span class="wic bad">${icon("warning", 18)}</span><span><b>Merge conflicts</b> <span class="muted">with ${esc(m.target)}</span></span></div>` : "",
+  ].filter(Boolean).join("");
+  const side = m ? `<aside class="mrside2">
+      <div class="sblock"><div class="sh">Reviewers</div>${m.reviewers.length ? m.reviewers.map(r => `<div class="sperson">${avatarOf(r)}<span>${esc(r)}</span>${m.approved_by.includes(r) ? `<span class="okp">${icon("check", 13)}</span>` : ""}</div>`).join("") : '<span class="muted">None</span>'}</div>
+      <div class="sblock"><div class="sh">Labels</div>${m.labels.length ? `<div class="slabels">${m.labels.map(mrLabel).join("")}</div>` : '<span class="muted">None</span>'}</div>
+      ${m.keys?.length ? `<div class="sblock"><div class="sh">Tasks</div>${m.keys.map(k => `<span class="mono">${esc(k)}</span>`).join(" ")}</div>` : ""}
+    </aside>` : "";
+  return `<div class="mrov"><div class="mrovmain">
+      ${d.description ? `<div class="panel md mrdesc">${md(d.description, projectUrl(d.url))}</div>` : '<div class="empty">No description.</div>'}
+      ${widget ? `<div class="panel mrwidget">${widget}</div>` : ""}
+      ${threads.length ? `<h2 class="mt-3">Threads<span class="count">${threads.length - open} of ${threads.length} resolved</span></h2><div class="ovthreads">${threads.map(threadCard).join("")}</div>` : ""}
+    </div>${side}</div>`;
+}
+
 function pageMr(ctx, arg) {
   const iid = parseInt(arg, 10);
   const m = (data.review?.mrs || []).find(x => x.iid === iid);
@@ -219,25 +299,25 @@ function pageMr(ctx, arg) {
   else if (d && now() - d.fetched > 120 && MRD.loading !== iid) loadMr(iid);
   const title = d?.title || m?.title || mrRef(iid);
   const url = d?.url || m?.url || "";
-  const pipe = m && PIPE[m.pipeline];
   const run = m && runningRun(iid);
-  const meta = m ? [
-    `<span class="badge ${m.state === "opened" ? "ok" : m.state === "merged" ? "busy" : "bad"}">${m.state === "opened" ? "Open" : m.state === "merged" ? "Merged" : "Closed"}</span>`,
-    `<span>${mrRef(iid)} · ${esc(m.author)} · created ${ago(m.created)}</span>`,
-    `<span class="mrbr" translate="no">${esc(m.source)} → ${esc(m.target)}</span>`,
-    m.conflicts ? '<span class="glbl glbl-conflict">merge conflict</span>' : "",
-    m.labels.map(mrLabel).join(""),
-    pipe ? `<span class="pipe p-${pipe[0]}" title="${pipe[2]}">${icon(pipe[1], 16)}</span>` : "",
-    m.approved ? `<span class="mrpill okp">${icon("check", 14)}Approved</span>` : "",
-  ].filter(Boolean).join("") : "";
   const actions = `<span class="h2-actions">
     <button class="iconbtn ${MRD.loading === iid ? "spin" : ""}" data-mr-refresh="${iid}" title="Update from ${hostName()} now" ${MRD.loading === iid ? "disabled" : ""}>${icon("refresh", 14)}</button>
     ${m && m.state === "opened" && canRunFix() ? (run ? `<span class="cnt running"><span class="dot busy"></span>${esc(conf("claude.fix_skill") || "fix")} ${dur(now() - run.started)}</span>` : `<button class="fixbtn" data-fix="${iid}">Run ${esc(conf("claude.fix_skill"))}</button>`) : ""}
     ${url ? `<a class="fixbtn" href="${esc(url)}" target="_blank">Open in ${hostName()}</a>` : ""}</span>`;
+  const tab = mrTab();
+  ui.mrBase = projectUrl(d?.url || m?.url);
+  const st = STATE_LABEL[m?.state] || STATE_LABEL.opened;
+  const chip = b => b ? `<code class="brchip" title="${esc(b)}" translate="no">${esc(b)}</code><button class="dicon" data-copy="${esc(b)}" title="Copy branch name" aria-label="Copy branch name">${svg(SVG.copy, 14)}</button>` : "";
+  const created = d?.created || m?.created;
+  const sub = `<div class="mrsub"><span class="mrstate s-${esc(m?.state || "opened")}">${icon(st[1], 14)}${m?.draft ? "Draft" : st[0]}</span><b>${esc(d?.author || m?.author || "")}</b><span class="muted">requested to merge</span>${chip(m?.source)}<span class="muted">into</span>${chip(m?.target)}${created ? `<span class="muted" title="${esc(fmtDateTime(created))}">${ago(created)}</span>` : ""}</div>`;
+  const tabs = [["overview", "Overview", d?.notes], ["commits", "Commits", d?.commits?.length], ["pipelines", isGitHub() ? "Checks" : "Pipelines", d?.pipelines?.length], ["changes", "Changes", d?.files?.length]];
+  const tabBar = `<nav class="mrtabs2" aria-label="Request sections">${tabs.map(([k, l, n]) => `<a href="#/mr/${iid}/${k}" class="${tab === k ? "on" : ""}" ${tab === k ? 'aria-current="page"' : ""}>${l}${n != null ? `<span class="n">${n}</span>` : ""}</a>`).join("")}<span class="grow"></span>${d ? `<span class="muted fs-sm">updated ${ago(d.fetched)}</span>` : ""}</nav>`;
   const head = `<div class="mrcrumb"><a href="#/mrs">${icon("chevron", 14, "flip")}${mrWord()}</a></div>
-    <div class="pagehead mrpagehead"><h1 class="mrh1">${esc(title)}</h1>${actions}</div>
-    <div class="mrmeta">${meta}${d ? `<span class="muted fs-sm">updated ${ago(d.fetched)}</span>` : ""}</div>`;
+    <div class="pagehead mrpagehead"><h1 class="mrh1">${esc(title)}</h1>${actions}</div>${sub}${tabBar}`;
   if (!d) return head + (err ? `<div class="err mt-3">${esc(err)}</div>` : `<div class="skel-page mt-3" aria-busy="true"><div class="skel skel-block"></div><div class="skel skel-block"></div></div>`);
+  if (tab === "overview") return head + overviewTab(d, m);
+  if (tab === "commits") return head + `<div class="mrcommits">${commitsTab(d)}</div>`;
+  if (tab === "pipelines") return head + pipelinesTab(d);
   const byLine = {}, threadsByFile = {};
   d.threads.filter(t => t.resolvable).forEach(t => { const k = threadKey(t); if (k) (byLine[k] ||= []).push(t); if (t.path) threadsByFile[t.path] = (threadsByFile[t.path] || 0) + 1; });
   const files = treeFiles(buildTree(d.files));
@@ -256,15 +336,15 @@ function pageMr(ctx, arg) {
     <span class="mrbtns"><button class="iconbtn" data-dall="1" title="Expand all files" aria-label="Expand all files">${svg(SVG.expand, 16)}</button><button class="iconbtn" data-dall="0" title="Collapse all files" aria-label="Collapse all files">${svg(SVG.collapse, 16)}</button></span>
     <button class="iconbtn thtoggle ${thOn ? "on" : ""}" data-threads-toggle title="${thOn ? "Hide" : "Show"} threads" aria-pressed="${thOn}">${icon("comment", 15)}<span>${open}/${threads.length}</span></button>
   </div>`;
-  const desc = d.description ? `<details class="dlist mrdescbox"><summary>Description</summary><div class="mrdesc">${md(d.description)}</div></details>` : "";
   return head + bar + `<div class="mrlayout ${treeOn ? "with-tree" : ""} ${thOn ? "with-threads" : ""}">
     ${treeOn ? fileTree({ files }, viewed) : ""}
-    <div class="mrdiff">${desc}${files.map((f, i) => diffFile(iid, f, i, byLine, threadsByFile, viewed, m)).join("")}</div>
+    <div class="mrdiff">${files.map((f, i) => diffFile(iid, f, i, byLine, threadsByFile, viewed, m)).join("")}</div>
     ${thOn ? `<aside class="mrthreads"><div class="thbar"><h2>Threads<span class="count">${resolved} of ${threads.length} resolved</span></h2>${nav}</div>${threads.map(threadCard).join("") || '<div class="empty">No threads.</div>'}</aside>` : ""}
   </div>`;
 }
 
 function gotoDiffLine(ln, file) {
+  if (mrTab() !== "changes") { ui.mrPending = { ln, file }; location.hash = `#/mr/${route().arg}/changes`; return; }
   let row = document.querySelector(`.dtable tr[data-ln="${CSS.escape(ln)}"]`);
   if (!row && file) {
     const key = `${route().arg}:${file}`;
@@ -302,9 +382,12 @@ function stepThread(dir) {
 function focusMrThread(iid, tid) {
   ui.mrFocus = { iid, tid };
   delete MRD.cache[iid];
-  if (route().page === "mr" && parseInt(route().arg, 10) === iid) { loadMr(iid, true); render(); } else location.hash = `#/mr/${iid}`;
+  setPref("mrThreads", true);
+  if (route().page === "mr" && parseInt(route().arg, 10) === iid && mrTab() === "changes") { loadMr(iid, true); render(); } else location.hash = `#/mr/${iid}/changes`;
 }
 function mrAfterRender() {
+  const pend = ui.mrPending;
+  if (pend && mrTab() === "changes" && document.querySelector(".mrdiff")) { ui.mrPending = null; setTimeout(() => gotoDiffLine(pend.ln, pend.file), 80); }
   const f = ui.mrFocus;
   if (!f || parseInt(route().arg, 10) !== f.iid || !MRD.cache[f.iid]) return;
   ui.mrFocus = null;
@@ -329,7 +412,7 @@ document.addEventListener("click", e => {
   if (all) { document.querySelectorAll(".thread details.threplies").forEach(x => x.open = all.dataset.thall === "1"); closeMenu(); return; }
   if (e.target.closest(".dviewed")) return;
   const cp = e.target.closest("[data-copy]");
-  if (cp) { e.stopPropagation(); navigator.clipboard?.writeText(cp.dataset.copy).then(() => { cp.classList.add("copied"); cp.title = t("Copied"); setTimeout(() => { cp.classList.remove("copied"); cp.title = t("Copy file path"); }, 1200); }).catch(() => {}); closeMenu(); return; }
+  if (cp) { e.stopPropagation(); navigator.clipboard?.writeText(cp.dataset.copy).then(() => { const was = cp.title; cp.classList.add("copied"); cp.title = t("Copied"); setTimeout(() => { cp.classList.remove("copied"); cp.title = was; }, 1200); }).catch(() => {}); closeMenu(); return; }
   const dm = e.target.closest("[data-dmenu]");
   if (dm) { e.stopImmediatePropagation(); openFileMenu(dm); return; }
   const ft = e.target.closest("[data-file-thread]");

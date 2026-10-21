@@ -286,7 +286,18 @@ def detail(iid):
         if exc.code != 404:
             raise
         raw = gitlab_get(f"{base}/changes").get("changes", [])
-    files = [{"path": f["new_path"], "old_path": f["old_path"], "status": _file_status(f), "diff": f.get("diff") or "", "too_large": bool(f.get("too_large") or f.get("collapsed")), "a_mode": f.get("a_mode") or "", "b_mode": f.get("b_mode") or ""} for f in raw]
+    files = [
+        {
+            "path": f["new_path"],
+            "old_path": f["old_path"],
+            "status": _file_status(f),
+            "diff": f.get("diff") or "",
+            "too_large": bool(f.get("too_large") or f.get("collapsed")),
+            "a_mode": f.get("a_mode") or "",
+            "b_mode": f.get("b_mode") or "",
+        }
+        for f in raw
+    ]
     threads = []
     for d in _paged(f"{base}/discussions"):
         notes = [n for n in d.get("notes", []) if not n.get("system")]
@@ -312,12 +323,45 @@ def detail(iid):
                 ],
             }
         )
+    commits = [
+        {
+            "sha": c["id"],
+            "short": c.get("short_id") or c["id"][:8],
+            "title": c.get("title") or "",
+            "message": c.get("message") or "",
+            "author": c.get("author_name") or "",
+            "at": epoch(c.get("authored_date") or c.get("created_at") or ""),
+            "url": c.get("web_url") or "",
+        }
+        for c in _paged(f"{base}/commits")
+    ]
+    try:
+        pipelines = [
+            {
+                "id": p["id"],
+                "status": p.get("status") or "",
+                "ref": p.get("ref") or "",
+                "sha": (p.get("sha") or "")[:8],
+                "source": p.get("source") or "",
+                "at": epoch(p.get("created_at") or ""),
+                "url": p.get("web_url") or "",
+            }
+            for p in gitlab_get(f"{base}/pipelines", {"per_page": 50})
+        ]
+    except error.HTTPError:
+        pipelines = []
+    author = m.get("author") or {}
     return {
         "number": m["iid"],
         "title": m["title"],
         "url": m["web_url"],
-        "author": (m.get("author") or {}).get("name", ""),
+        "author": author.get("name", ""),
+        "author_username": author.get("username", ""),
+        "created": epoch(m.get("created_at") or ""),
         "description": m.get("description") or "",
+        "notes": sum(len(t["notes"]) for t in threads),
         "files": files,
         "threads": threads,
+        "commits": commits,
+        "pipelines": pipelines,
     }

@@ -31,6 +31,14 @@ def fake_get(path, params=None, **kw):
         return DIFFS if (params or {}).get("page", 1) == 1 else []
     if path.endswith("/discussions"):
         return DISCUSSIONS
+    if path.endswith("/commits"):
+        return (
+            [{"id": "abcdef1234", "short_id": "abcdef12", "title": "Round totals", "author_name": "Dev", "authored_date": "2026-10-20T09:00:00Z", "web_url": "u"}]
+            if (params or {}).get("page", 1) == 1
+            else []
+        )
+    if path.endswith("/pipelines"):
+        return [{"id": 5, "status": "success", "ref": "feat", "sha": "abcdef1234", "created_at": "2026-10-20T09:05:00Z", "web_url": "p"}]
     return MR
 
 
@@ -48,6 +56,9 @@ class GitLabDetailTest(unittest.TestCase):
         self.assertEqual((d1["resolved"], d1["resolved_by"], d1["path"], d1["new_line"], len(d1["notes"])), (True, "Max", "a.py", 1, 2))
         self.assertEqual((d2["resolvable"], d2["resolved"]), (True, False))
         self.assertEqual((d4["resolvable"], d4["notes"][0]["author"]), (False, "Lena"))
+        self.assertEqual([(c["short"], c["title"]) for c in d["commits"]], [("abcdef12", "Round totals")])
+        self.assertEqual([(x["id"], x["status"], x["sha"]) for x in d["pipelines"]], [(5, "success", "abcdef12")])
+        self.assertEqual(d["notes"], 4)
 
     def test_old_gitlab_without_diffs_endpoint(self):
         def old_get(path, params=None, **kw):

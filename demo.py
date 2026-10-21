@@ -422,7 +422,15 @@ def mr_detail(iid):
         "title": "SHOP-139: brand and price filters",
         "url": f"https://github.com/acme/shop/pull/{iid}",
         "author": "dev",
-        "description": "Rounds cart totals and logs the checkout amounts.",
+        "author_username": "dev",
+        "created": now - 2 * 86400,
+        "description": "Rounds cart totals and logs the checkout amounts.\n\n## Changes\n- `cart_total` rounds to cents\n- checkout logs the totals\n\n<details><summary>Files</summary>\n\n| File | Why |\n|---|---|\n| cart.py | rounding |\n</details>\n\n```mermaid\nflowchart LR\n  cart --> checkout --> payment\n```",
+        "notes": 5,
+        "commits": [
+            {"sha": "a1b2c3d4e5", "short": "a1b2c3d4", "title": "Log checkout totals at debug level", "message": "", "author": "dev", "at": now - 8000, "url": ""},
+            {"sha": "f6e5d4c3b2", "short": "f6e5d4c3", "title": "Round cart totals to cents", "message": "", "author": "dev", "at": now - 90000, "url": ""},
+        ],
+        "pipelines": [{"id": 9812, "status": "success", "ref": "feat/search-filters", "sha": "a1b2c3d4", "source": "push", "at": now - 7900, "url": ""}],
         "files": [
             {"path": "shop/cart.py", "old_path": "shop/cart.py", "status": "modified", "diff": DEMO_DIFF, "too_large": False},
             {

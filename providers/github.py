@@ -366,7 +366,38 @@ def detail(number):
                 "notes": [{"author": who, "username": who, "body": c.get("body") or "", "created": epoch(c.get("created_at") or "")}],
             }
         )
+    commits = [
+        {
+            "sha": c["sha"],
+            "short": c["sha"][:7],
+            "title": (c["commit"].get("message") or "").split("\n")[0],
+            "message": c["commit"].get("message") or "",
+            "author": ((c["commit"].get("author") or {}).get("name")) or "",
+            "at": epoch(((c["commit"].get("author") or {}).get("date")) or ""),
+            "url": c.get("html_url") or "",
+        }
+        for c in get(f"repos/{repo()}/pulls/{int(number)}/commits", {"per_page": 100})
+    ]
+    runs = get(f"repos/{repo()}/actions/runs", {"head_sha": pr["head"]["sha"], "per_page": 50}).get("workflow_runs", [])
+    conclusion = {"success": "success", "failure": "failed", "timed_out": "failed", "cancelled": "canceled", "skipped": "skipped", "action_required": "manual"}
+    pipelines = [
+        {
+            "id": r["id"],
+            "status": conclusion.get(r.get("conclusion") or "") or ("running" if r.get("status") == "in_progress" else "pending"),
+            "ref": r.get("name") or r.get("head_branch") or "",
+            "sha": (r.get("head_sha") or "")[:7],
+            "source": r.get("event") or "",
+            "at": epoch(r.get("created_at") or ""),
+            "url": r.get("html_url") or "",
+        }
+        for r in runs
+    ]
     return {
+        "author_username": (pr.get("user") or {}).get("login", ""),
+        "created": epoch(pr.get("created_at") or ""),
+        "commits": commits,
+        "pipelines": pipelines,
+        "notes": sum(len(t["notes"]) for t in threads),
         "number": pr["number"],
         "title": pr["title"],
         "url": pr["html_url"],
