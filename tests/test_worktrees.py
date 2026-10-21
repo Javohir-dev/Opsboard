@@ -68,6 +68,9 @@ class WorktreeCleanupTest(unittest.TestCase):
         worktrees.remove("wt1", force=True)
         self.assertEqual(self.wait("wt1")["status"], "done")
         self.assertFalse(self.wt.exists())
+        self.assertIn("wt1", worktrees.jobs())
+        worktrees._jobs["wt1"]["ended"] -= worktrees.DONE_SHOWN + 1
+        self.assertNotIn("wt1", worktrees.jobs())
         branches = subprocess.run(["git", "-C", str(self.repo), "branch", "--list", "feature-x"], capture_output=True, text=True).stdout
         self.assertEqual(branches.strip(), "")
 

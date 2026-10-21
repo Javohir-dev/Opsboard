@@ -78,8 +78,13 @@ def plan(name):
     }
 
 
+DONE_SHOWN = 3
+
+
 def jobs():
     with _jobs_lock:
+        for name in [k for k, v in _jobs.items() if v.get("status") == "done" and time.time() - v.get("ended", 0) > DONE_SHOWN]:
+            _jobs.pop(name, None)
         return {k: {**{kk: vv for kk, vv in v.items() if kk != "log"}, "tail": v.get("log", "")[-1500:]} for k, v in _jobs.items()}
 
 

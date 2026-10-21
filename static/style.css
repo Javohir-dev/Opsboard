@@ -1000,3 +1000,6 @@ a.cnt:hover { filter: brightness(1.15); }
 .wtdialog { max-height: calc(100vh - 48px); overflow-y: auto; }
 .wtwarn ul li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wtwarn .grow { min-width: 0; }
+.wtnote.ok { animation: wtfade 3s ease forwards; }
+@keyframes wtfade { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .wtnote.ok { animation: none; } }
