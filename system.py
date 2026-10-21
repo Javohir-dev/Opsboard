@@ -202,23 +202,20 @@ CLAUDE_STATE = Path(os.environ.get("OPS_CLAUDE_JSON", Path.home() / ".claude.jso
 USAGE_LABELS = {"session": "Session (5hr)", "weekly_all": "Weekly (7 day)"}
 
 
-def collect_claude_usage():
+def claude_usage(live=True):
+    """Plan limits from Claude Code's cache, or asked from Anthropic when live; None without a Claude Code sign-in file."""
     try:
         raw = json.loads(CLAUDE_STATE.read_text())
     except (OSError, ValueError):
-        put("claude_usage", {})
-        return
+        return None
     cached = raw.get("cachedUsageUtilization") or {}
     acct = raw.get("oauthAccount") or {}
-    plan = str(acct.get("organizationType") or "").replace("_", " ").title().replace("Claude ", "Claude ")
+    plan = str(acct.get("organizationType") or "").replace("_", " ").title()
     utilization, fetched, source, live_error = cached.get("utilization") or {}, (cached.get("fetchedAtMs") or 0) / 1000, "cache", ""
-    if not cfg.get("claude.live_usage"):
-        claudeusage.reset()
-        put("claude_usage", {})
-        return
-    live, live_error = claudeusage.fetch()
     if live:
-        utilization, fetched, source = live, claudeusage.last_fetched(), "live"
+        data, live_error = claudeusage.fetch()
+        if data:
+            utilization, fetched, source = data, claudeusage.last_fetched(), "live"
     limits = []
     for item in utilization.get("limits") or []:
         model = (((item.get("scope") or {}).get("model") or {}).get("display_name")) or ""
@@ -227,4 +224,12 @@ def collect_claude_usage():
             {"label": label, "percent": item.get("percent") or 0, "severity": item.get("severity") or "normal", "resets_at": epoch(item.get("resets_at") or ""), "active": bool(item.get("is_active"))}
         )
     account = {"email": acct.get("emailAddress") or "", "org": acct.get("organizationName") or "", "plan": plan}
-    put("claude_usage", {"limits": limits, "fetched": fetched, "account": account, "source": source, "live_error": live_error})
+    return {"limits": limits, "fetched": fetched, "account": account, "source": source, "live_error": live_error}
+
+
+def collect_claude_usage():
+    if not cfg.get("claude.live_usage"):
+        claudeusage.reset()
+        put("claude_usage", {})
+        return
+    put("claude_usage", claude_usage(live=True) or {})

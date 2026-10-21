@@ -129,7 +129,7 @@ def _dur(s):
 
 def help_text():
     chat = "\n\nAny other message goes to Claude on your Mac. /new starts a fresh conversation, /cancel stops the current answer." if cfg.get("telegram.claude_chat") else ""
-    return f"<b>Opsboard</b>\n/mrs — your open requests\n/mr 7376 — one request\n/sessions — Claude sessions that are working, with their agents\n/info — linked accounts, this Mac and the bot's settings{chat}"
+    return f"<b>Opsboard</b>\n/mrs — your open requests\n/mr 7376 — one request\n/sessions — Claude sessions that are working, with their agents\n/usage — Claude plan limits and when they reset\n/info — linked accounts, this Mac and the bot's settings{chat}"
 
 
 def cmd_mrs():
@@ -259,6 +259,51 @@ def cmd_info():
 PERMISSIONS = {"plan": "read and answer only", "acceptEdits": "may edit files", "auto": "may edit files and run commands"}
 
 
+def _bar(pct, width=10):
+    full = max(0, min(width, round(pct / 100 * width)))
+    return "▰" * full + "▱" * (width - full)
+
+
+def _until(ts):
+    left = ts - time.time()
+    if left <= 0:
+        return "reset — open /usage in Claude Code to refresh"
+    when = time.strftime("%H:%M" if left < 20 * 3600 else "%a %d %b, %H:%M", time.localtime(ts))
+    return f"resets in {_dur(left)} · {when}"
+
+
+def cmd_usage():
+    import system
+
+    live_on = bool(cfg.get("claude.live_usage"))
+    with lock:
+        usage = dict(state.get("claude_usage") or {})
+    if not (live_on and usage.get("limits")):
+        usage = system.claude_usage(live=False) or {}
+    acct = usage.get("account") or {}
+    if not usage.get("limits"):
+        hint = "Run /usage once in Claude Code — it saves your limits there." if acct.get("email") else "Claude Code is not signed in on this Mac."
+        return f"<b>Claude usage</b>\nNo limits saved yet. {hint}", None
+    lines = ["<b>Claude usage</b>"]
+    if acct.get("email"):
+        lines.append(f"👤 {esc(acct['email'])}" + (f" · {esc(acct['org'])}" if acct.get("org") else "") + (f" · {esc(acct['plan'])}" if acct.get("plan") else ""))
+    lines.append("")
+    for lim in usage["limits"]:
+        past = lim.get("resets_at") and lim["resets_at"] < time.time()
+        pct = 0 if past else lim["percent"]
+        dot = "🔴" if pct >= 95 or lim.get("severity") == "critical" else "🟠" if pct >= 80 or lim.get("severity") == "warning" else "🟢"
+        lines.append(f"{dot} <b>{esc(lim['label'])}</b> · {'—' if past else str(pct) + '%'}\n<code>{_bar(pct)}</code>" + (f"\n{_until(lim['resets_at'])}" if lim.get("resets_at") else "") + "\n")
+    lines.append("")
+    if usage.get("source") == "live":
+        lines.append("⚡ live — updated every minute")
+    else:
+        age = time.time() - (usage.get("fetched") or 0)
+        lines.append(f"🗂 from Claude Code's cache, updated {_dur(age)} ago" + ("" if live_on else " · turn on Live Claude usage in Settings for fresh numbers"))
+    if usage.get("live_error"):
+        lines.append(f"⚠️ live usage: {esc(usage['live_error'])}")
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip(), None
+
+
 def on_notify(item):
     if item.get("kind") != "thread" or not chat_id() or not cfg.get("telegram.notify"):
         return
@@ -383,6 +428,8 @@ def reply_for(text):
         return cmd_sessions()
     if cmd == "/info":
         return cmd_info()
+    if cmd == "/usage":
+        return cmd_usage()
     if cmd == "/new":
         _save_chat({})
         return "🆕 New conversation with Claude.", None
@@ -440,6 +487,7 @@ COMMANDS = [
     {"command": "mrs", "description": "Your open requests"},
     {"command": "mr", "description": "One request: /mr 7376"},
     {"command": "sessions", "description": "Working Claude sessions and their agents"},
+    {"command": "usage", "description": "Claude plan limits and when they reset"},
     {"command": "info", "description": "Linked accounts, this Mac and the bot's settings"},
     {"command": "new", "description": "New conversation with Claude"},
     {"command": "cancel", "description": "Stop Claude's current answer"},

@@ -132,6 +132,26 @@ class TelegramTest(unittest.TestCase):
         self.assertNotIn("x" * 35, text)
         self.assertNotIn("\n\n\n", text)
 
+    def test_usage_from_live_state(self):
+        self.link()
+        cfg.set("claude.live_usage", True, "user")
+        with lock:
+            state["claude_usage"] = {
+                "limits": [{"label": "Session (5hr)", "percent": 42, "severity": "normal", "resets_at": time.time() + 3600}],
+                "fetched": time.time(),
+                "account": {"email": "dev@example.com"},
+                "source": "live",
+                "live_error": "",
+            }
+        telegram.handle_message(message("/usage"))
+        text = self.texts()[-1]
+        self.assertIn("Session (5hr)</b> · 42%", text)
+        self.assertIn("▰▰▰▰▱▱▱▱▱▱", text)
+        self.assertRegex(text, r"resets in (59m|1\.0h)")
+        self.assertNotIn("\n\n\n", text)
+        self.assertIn("live", text)
+        cfg.set("claude.live_usage", None, "user")
+
     def test_claude_chat(self):
         self.link()
         telegram.handle_message(message("what changed in !7?"))
