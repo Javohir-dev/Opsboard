@@ -949,3 +949,24 @@ a.cnt:hover { filter: brightness(1.15); }
 .fpill.bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 15%, transparent); }
 .mrtabs2 a .dot { margin: 0; }
 @media (max-width: 1100px) { .runlayout { grid-template-columns: 1fr; } .runmain { position: static; } }
+
+/* request page: sticky header like GitLab */
+.mrsticky { position: sticky; top: 0; z-index: 8; margin: 0 -32px; padding: 0 32px; background: var(--bg); }
+.mrsticky .mrtabs2 { margin-bottom: 0; }
+.mrsticky + * { margin-top: 16px; }
+.mrmini { display: none; align-items: center; gap: 8px; min-width: 0; padding: 10px 0 2px; font-size: var(--fs-md); }
+.mrsticky.stuck .mrmini { display: flex; }
+.mrsticky.stuck { box-shadow: 0 1px 0 var(--line), 0 6px 16px rgba(0, 0, 0, .18); }
+.mrminititle { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-base); }
+.mrmini .brchip { max-width: 220px; flex: none; }
+.mrmini .dicon { width: 24px; height: 24px; margin-left: -4px; flex: none; }
+.mrmini .mrstate { flex: none; padding: 1px 8px; font-size: var(--fs-sm); }
+.mrbar2 { top: var(--mrstick, 0px); }
+.mrlayout .dfh { top: calc(var(--mrstick, 0px) + 57px); }
+.dfile { scroll-margin-top: calc(var(--mrstick, 0px) + 70px); }
+.ftree, .mrlayout .mrthreads { top: calc(var(--mrstick, 0px) + 70px); max-height: calc(100vh - var(--mrstick, 0px) - 86px); }
+.mrside2, .runmain { top: calc(var(--mrstick, 0px) + 16px); }
+.mrthreads { top: calc(var(--mrstick, 0px) + 16px); max-height: calc(100vh - var(--mrstick, 0px) - 32px); }
+.feed { max-height: calc(100vh - var(--mrstick, 0px) - 120px); }
+@media (max-width: 1100px) { .mrsticky { margin: 0 -24px; padding: 0 24px; } .mrmini .brchip, .mrmini .dicon, .mrmini .muted { display: none; } }
+@media (max-width: 760px) { .mrsticky { top: 52px; margin: 0 -16px; padding: 0 16px; } .mrbar2 { top: calc(var(--mrstick, 0px) + 52px); } .mrtabs2 { overflow-x: auto; } }

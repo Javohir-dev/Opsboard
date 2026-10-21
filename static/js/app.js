@@ -60,6 +60,7 @@ function render() {
   hideEmptyColumns();
   labelDots();
   renderBell();
+  syncMrSticky();
   if (r.page === "mr") { mrAfterRender(); fixAfterRender(); }
 }
 

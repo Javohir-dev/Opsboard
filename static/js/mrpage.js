@@ -331,7 +331,8 @@ function pageMr(ctx, arg) {
   const nav = d && allThreads.length ? `<div class="thnav" role="group" aria-label="Unresolved threads"><span class="thnc" title="${plural(open, "unresolved thread")}">${icon("comment", 15)}${open}</span><button class="thnb" data-thnav="-1" ${open ? "" : "disabled"} title="Previous unresolved thread" aria-label="Previous unresolved thread">${icon("chevron", 16, "up")}</button><button class="thnb" data-thnav="1" ${open ? "" : "disabled"} title="Next unresolved thread" aria-label="Next unresolved thread">${icon("chevron", 16, "down")}</button><button class="thnb" data-thmenu title="Thread options" aria-label="Thread options">${icon("more", 16, "vert")}</button></div>` : "";
   const tabBar = `<nav class="mrtabs2" aria-label="Request sections">${tabs.map(([k, l, n]) => `<a href="#/mr/${iid}/${k}" class="${tab === k ? "on" : ""}" ${tab === k ? 'aria-current="page"' : ""}>${l}${n != null ? `<span class="n">${n}</span>` : ""}</a>`).join("")}<span class="grow"></span>${d ? `<span class="muted fs-sm">updated ${ago(d.fetched)}</span>` : ""}${nav}</nav>`;
   const head = `<div class="mrcrumb"><a href="#/mrs">${icon("chevron", 14, "flip")}${mrWord()}</a></div>
-    <div class="pagehead mrpagehead"><h1 class="mrh1">${esc(title)}</h1>${actions}</div>${sub}${tabBar}`;
+    <div class="pagehead mrpagehead"><h1 class="mrh1">${esc(title)}</h1>${actions}</div>${sub}
+    <div class="mrsticky ${ui.mrStuck ? "stuck" : ""}"><div class="mrmini"><span class="mrstate s-${esc(m?.state || "opened")}">${icon(st[1], 13)}${m?.draft ? "Draft" : st[0]}</span><b class="mrminititle">${esc(title)}</b>${chip(m?.source)}<span class="muted">into</span>${chip(m?.target)}</div>${tabBar}</div>`;
   if (!d && tab === "fix") return head + fixTab(iid, null);
   if (!d) return head + (err ? `<div class="err mt-3">${esc(err)}</div>` : `<div class="skel-page mt-3" aria-busy="true"><div class="skel skel-block"></div><div class="skel skel-block"></div></div>`);
   if (tab === "overview") return head + overviewTab(d, m);
@@ -516,3 +517,15 @@ document.addEventListener("keydown", e => {
   const tg = e.target.closest?.("[data-dtoggle]");
   if (tg && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); tg.click(); }
 });
+
+function syncMrSticky() {
+  const el = document.querySelector(".mrsticky");
+  if (!el) { document.documentElement.style.removeProperty("--mrstick"); return; }
+  const top = parseFloat(getComputedStyle(el).top) || 0;
+  const stuck = el.getBoundingClientRect().top <= top + 0.5 && scrollY > 0;
+  if (stuck !== !!ui.mrStuck) { ui.mrStuck = stuck; el.classList.toggle("stuck", stuck); }
+  document.documentElement.style.setProperty("--mrstick", el.offsetHeight + "px");
+}
+addEventListener("scroll", () => { if (route().page === "mr") syncMrSticky(); }, { passive: true });
+addEventListener("resize", () => { if (route().page === "mr") syncMrSticky(); });
+addEventListener("hashchange", () => { ui.mrStuck = false; });
