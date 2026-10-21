@@ -285,3 +285,81 @@ def describe(number, body):
 
 def upload(path):
     raise ValueError("GitHub has no API for attaching files — put the log into the reply or a gist")
+
+
+DETAIL_THREADS = """query($owner:String!,$name:String!,$number:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$number){
+reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor} nodes{id isResolved resolvedBy{login} path line originalLine diffSide
+comments(first:100){nodes{author{login} body url createdAt}}}}}}}"""
+
+
+def detail(number):
+    pr = get(f"repos/{repo()}/pulls/{int(number)}")
+    files, page = [], 1
+    while page <= 30:
+        batch = get(f"repos/{repo()}/pulls/{int(number)}/files", {"per_page": 100, "page": page})
+        files += batch
+        if len(batch) < 100:
+            break
+        page += 1
+    status = {"added": "added", "removed": "deleted", "renamed": "renamed"}
+    owner, name = repo().split("/")
+    threads, after = [], None
+    while True:
+        data = graphql(DETAIL_THREADS, {"owner": owner, "name": name, "number": int(number), "after": after})["repository"]["pullRequest"]["reviewThreads"]
+        for t in data["nodes"]:
+            comments = (t.get("comments") or {}).get("nodes") or []
+            if not comments:
+                continue
+            left = t.get("diffSide") == "LEFT"
+            line = t.get("line") or t.get("originalLine")
+            threads.append(
+                {
+                    "id": t["id"],
+                    "resolvable": True,
+                    "resolved": t["isResolved"],
+                    "resolved_by": (t.get("resolvedBy") or {}).get("login", ""),
+                    "path": t.get("path") or "",
+                    "new_line": None if left else line,
+                    "old_line": line if left else None,
+                    "url": comments[0].get("url"),
+                    "notes": [
+                        {
+                            "author": (c.get("author") or {}).get("login", ""),
+                            "username": (c.get("author") or {}).get("login", ""),
+                            "body": c.get("body", ""),
+                            "created": epoch(c.get("createdAt") or ""),
+                        }
+                        for c in comments
+                    ],
+                }
+            )
+        if not data["pageInfo"]["hasNextPage"]:
+            break
+        after = data["pageInfo"]["endCursor"]
+    for c in get(f"repos/{repo()}/issues/{int(number)}/comments", {"per_page": 100}):
+        who = (c.get("user") or {}).get("login", "")
+        threads.append(
+            {
+                "id": str(c["id"]),
+                "resolvable": False,
+                "resolved": False,
+                "resolved_by": "",
+                "path": "",
+                "new_line": None,
+                "old_line": None,
+                "url": c.get("html_url"),
+                "notes": [{"author": who, "username": who, "body": c.get("body") or "", "created": epoch(c.get("created_at") or "")}],
+            }
+        )
+    return {
+        "number": pr["number"],
+        "title": pr["title"],
+        "url": pr["html_url"],
+        "author": (pr.get("user") or {}).get("login", ""),
+        "description": pr.get("body") or "",
+        "files": [
+            {"path": f["filename"], "old_path": f.get("previous_filename") or f["filename"], "status": status.get(f["status"], "modified"), "diff": f.get("patch") or "", "too_large": "patch" not in f}
+            for f in files
+        ],
+        "threads": threads,
+    }

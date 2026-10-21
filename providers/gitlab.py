@@ -246,3 +246,62 @@ def upload(path):
     )
     with request.urlopen(req, timeout=60) as resp:
         return {"markdown": json.loads(resp.read().decode())["markdown"]}
+
+
+def _paged(path, params=None):
+    out, page = [], 1
+    while True:
+        batch = gitlab_get(path, {**(params or {}), "per_page": 100, "page": page})
+        out += batch
+        if len(batch) < 100 or page >= 30:
+            return out
+        page += 1
+
+
+def _file_status(f):
+    return "added" if f.get("new_file") else "deleted" if f.get("deleted_file") else "renamed" if f.get("renamed_file") else "modified"
+
+
+def detail(iid):
+    base = f"projects/{_pid()}/merge_requests/{int(iid)}"
+    m = gitlab_get(base)
+    try:
+        raw = _paged(f"{base}/diffs")
+    except error.HTTPError as exc:
+        if exc.code != 404:
+            raise
+        raw = gitlab_get(f"{base}/changes").get("changes", [])
+    files = [{"path": f["new_path"], "old_path": f["old_path"], "status": _file_status(f), "diff": f.get("diff") or "", "too_large": bool(f.get("too_large") or f.get("collapsed"))} for f in raw]
+    threads = []
+    for d in _paged(f"{base}/discussions"):
+        notes = [n for n in d.get("notes", []) if not n.get("system")]
+        if not notes:
+            continue
+        first = notes[0]
+        resolvable = [n for n in notes if n.get("resolvable")]
+        pos = first.get("position") or {}
+        threads.append(
+            {
+                "id": d["id"],
+                "resolvable": bool(resolvable),
+                "resolved": bool(resolvable) and all(n.get("resolved") for n in resolvable),
+                "resolved_by": next(((n["resolved_by"].get("name") or n["resolved_by"].get("username", "")) for n in reversed(resolvable) if n.get("resolved_by")), ""),
+                "path": pos.get("new_path") or pos.get("old_path") or "",
+                "new_line": pos.get("new_line"),
+                "old_line": pos.get("old_line"),
+                "url": f"{m['web_url']}#note_{first['id']}",
+                "notes": [
+                    {"author": n["author"].get("name") or n["author"]["username"], "username": n["author"]["username"], "body": n.get("body") or "", "created": epoch(n.get("created_at") or "")}
+                    for n in notes
+                ],
+            }
+        )
+    return {
+        "number": m["iid"],
+        "title": m["title"],
+        "url": m["web_url"],
+        "author": (m.get("author") or {}).get("name", ""),
+        "description": m.get("description") or "",
+        "files": files,
+        "threads": threads,
+    }

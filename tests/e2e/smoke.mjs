@@ -59,6 +59,10 @@ try {
   check(await bell.locator(".bcount").isHidden(), "opening a notification marks it read");
   check((await page.locator('#view [data-run="r1"]').count()) === 1, "the finished run is shown on Overview");
   check(JSON.parse(readFileSync(join(data, "notifications.json"), "utf8"))[0].read === true, "read state is saved on the server");
+  await page.goto(`${base}/#/mr/7`);
+  await page.waitForTimeout(1500);
+  check((await page.locator("#view .err").textContent()).includes("not one of your merge requests"), "the request page refuses requests that are not yours");
+  check((await page.locator("#nav .navi.on").textContent()).includes("Merge requests"), "the request page keeps Merge requests active in the menu");
   await page.goto(`${base}/#/notes`);
   await page.waitForTimeout(800);
   await page.click("[data-nadd]");

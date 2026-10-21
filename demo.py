@@ -1,5 +1,6 @@
 import math
 import random
+import time
 
 GB = 1024**3
 MB = 1024**2
@@ -387,6 +388,90 @@ DEMO_CONFIG = {
     "claude.bin": "/usr/local/bin/claude",
     "claude.version": "2.1.300",
 }
+
+
+DEMO_DIFF = "\n".join(
+    [
+        "@@ -12,9 +12,11 @@ def cart_total(cart):",
+        "     subtotal = sum(line.price * line.qty for line in cart.lines)",
+        "-    discount = subtotal * cart.discount_rate",
+        "-    total = subtotal - discount",
+        "+    discount = round(subtotal * cart.discount_rate, 2)",
+        "+    total = round(subtotal - discount, 2)",
+        "+    if total < 0:",
+        "+        total = 0",
+        "     return total",
+        " ",
+        " ",
+        " def cart_tax(cart):",
+        "@@ -40,6 +42,7 @@ def checkout(cart, payment):",
+        "     total = cart_total(cart)",
+        "     tax = cart_tax(cart)",
+        '+    log.info("checkout total=%s tax=%s", total, tax)',
+        "     return payment.charge(total + tax)",
+        "",
+    ]
+)
+
+
+def mr_detail(iid):
+    now = time.time()
+    note = lambda who, body, ago: {"author": who, "username": who.lower(), "body": body, "created": now - ago}  # noqa: E731
+    return {
+        "number": iid,
+        "title": "SHOP-139: brand and price filters",
+        "url": f"https://github.com/acme/shop/pull/{iid}",
+        "author": "dev",
+        "description": "Rounds cart totals and logs the checkout amounts.",
+        "files": [
+            {"path": "shop/cart.py", "old_path": "shop/cart.py", "status": "modified", "diff": DEMO_DIFF, "too_large": False},
+            {
+                "path": "shop/tests/test_cart.py",
+                "old_path": "shop/tests/test_cart.py",
+                "status": "added",
+                "diff": "@@ -0,0 +1,4 @@\n+def test_total_is_rounded(cart):\n+    cart.discount_rate = 0.333\n+    assert cart_total(cart) == 6.67\n+\n",
+                "too_large": False,
+            },
+        ],
+        "threads": [
+            {
+                "id": "t1",
+                "resolvable": True,
+                "resolved": False,
+                "resolved_by": "",
+                "path": "shop/cart.py",
+                "new_line": 17,
+                "old_line": None,
+                "url": "",
+                "notes": [
+                    note("Lena", "Can the total really go below zero? If not, an `assert` is clearer than clamping.", 7200),
+                    note("dev", "It can with a 100% coupon plus a store credit. Kept the clamp and added a test.", 3600),
+                ],
+            },
+            {
+                "id": "t2",
+                "resolvable": True,
+                "resolved": True,
+                "resolved_by": "Max",
+                "path": "shop/cart.py",
+                "new_line": 44,
+                "old_line": None,
+                "url": "",
+                "notes": [note("Max", "Please do not log totals at info level — use **debug**.", 9000), note("dev", "Done in a1b2c3d.", 8000)],
+            },
+            {
+                "id": "t3",
+                "resolvable": False,
+                "resolved": False,
+                "resolved_by": "",
+                "path": "",
+                "new_line": None,
+                "old_line": None,
+                "url": "",
+                "notes": [note("Lena", "Looks good overall, thanks!", 600)],
+            },
+        ],
+    }
 
 
 def notifications(now):

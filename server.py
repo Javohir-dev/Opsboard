@@ -20,7 +20,7 @@ import notify
 import stackprofile as profile
 from core import DATA, HERE, gitlab_url, lock, log, loop, run, setup_logging, state
 from notes import load_marks, load_notes, notes_lock, save_notes, set_mark
-from providers import github, tracker
+from providers import github, review_host, tracker
 from providers.gitlab import gitlab_get
 from providers.jira import jira_account, save_jira_account
 from runs import fix_prompt, launch_fix, stop_run
@@ -29,6 +29,24 @@ from system import collect_claude_usage, collect_docker, collect_docker_df, coll
 from tasks import collect_tasks_loop, refresh_tasks
 
 RE_TOKENS = re.compile(r"ATATT[A-Za-z0-9_\-=]{20,}|glpat-[A-Za-z0-9_\-]{16,}|gh[pousr]_[A-Za-z0-9]{30,}|sk-ant-[A-Za-z0-9_\-]{20,}")
+
+
+MR_CACHE = {}
+MR_TTL = 60
+
+
+def mr_detail(iid, fresh=False):
+    with lock:
+        mine = {m["iid"] for m in (state.get("review") or {}).get("mrs", [])}
+    if not DEMO and iid not in mine:
+        raise ValueError(f"!{iid} is not one of your merge requests")
+    hit = MR_CACHE.get(iid)
+    if hit and not fresh and time.time() - hit[0] < MR_TTL:
+        return hit[1]
+    out = demo.mr_detail(iid) if DEMO else review_host().detail(iid)
+    out["fetched"] = time.time()
+    MR_CACHE[iid] = (out["fetched"], out)
+    return out
 
 
 def redact(text):
@@ -297,6 +315,15 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/api/notes"):
             with notes_lock:
                 self.send(json.dumps(load_notes(), ensure_ascii=False), "application/json")
+        elif self.path.startswith("/api/mr?"):
+            query = dict(p.split("=", 1) for p in self.path.split("?", 1)[1].split("&") if "=" in p)
+            try:
+                out = {"ok": True, "mr": mr_detail(int(query.get("iid", "")), query.get("fresh") == "1")}
+            except (ValueError, PermissionError, KeyError) as exc:
+                out = {"ok": False, "error": str(exc)[:300]}
+            except (error.URLError, OSError) as exc:
+                out = {"ok": False, "error": f"{exc.__class__.__name__}: {str(exc)[:200]}"}
+            self.send(redact(json.dumps(out, ensure_ascii=False)), "application/json")
         elif self.path.startswith("/api/doctor"):
             self.send(redact(json.dumps(demo.DOCTOR if DEMO else detect.doctor())), "application/json")
         elif self.path.startswith("/api/state"):

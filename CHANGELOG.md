@@ -5,6 +5,7 @@ All notable changes. Versions follow [semantic versioning](https://semver.org/);
 ## Unreleased
 
 ### Added
+- **Merge / pull request page:** a title opens the request inside Opsboard — the diff file by file, and the threads on the right with their replies; resolved threads are folded. Markers link diff lines and threads both ways.
 - A short system sound with each notification (a different one when a run failed or stopped); *Settings → Claude → Sound when a fix finishes*, on by default.
 - *Settings → Claude → Claude usage in the sidebar* (on by default). Off: the sidebar shows CPU, RAM and swap, and Overview leaves out the machine tiles.
 - **Notifications:** a bell next to the logo counts finished fix runs (pushed, committed, stopped, failed); click an entry to jump to its merge request on Overview, which lights up once. Optional browser alerts, and a system notification (macOS Notification Center, `notify-send` on Linux) when no dashboard tab is showing them.

@@ -130,6 +130,10 @@ Every live Claude Code session as a card: what it is doing now, its agents, the 
 
 Your open requests also appear on Overview, under *Tasks · needs attention*. The page lists your merge / pull requests in the configured project, like the host's own list: **Open / Merged / Closed / All** tabs with counts, search, and sort by created or updated date. Each row shows the labels in the host's colours, pipeline / checks status, reviewers, **Approved**, resolved review threads (`2 of 3`), merge conflicts and the linked Jira task with its status. **⋯** on a row: colour marks, **Minimize** (one-line row, ↔ expands it) and **Run fix** for open requests.
 
+### A merge / pull request
+
+Click a title to open it here instead of on GitLab / GitHub: the changes file by file like the host's *Changes* tab (long files fold away; click a file name to fold it), and on the right every thread with its replies — unresolved ones open on top, resolved ones folded with who resolved them, plain comments in between. A marker in the diff shows where a thread sits; click it, or the `file:line` on a thread, to jump between them. **Open in GitLab** and **Run fix** are at the top; the page reloads from the host every two minutes or with ↻.
+
 ### Notes page
 
 A checklist for your own notes, saved as you type. It opens even before Settings are complete.
