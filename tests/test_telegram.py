@@ -48,7 +48,7 @@ class TelegramTest(unittest.TestCase):
     def setUp(self):
         SENT.clear()
         cfg.set_secret("telegram.token", "12345:" + "x" * 35)
-        for key in ("telegram.chat_id", "telegram.user", "telegram.allow_runs"):
+        for key in ("telegram.chat_id", "telegram.user", "telegram.claude_chat"):
             cfg.set(key, None, "user")
         telegram._pair.update(code="", until=0)
         with lock:
@@ -98,19 +98,56 @@ class TelegramTest(unittest.TestCase):
         telegram.handle_message(message("/mrs"))
         self.assertIn("!7", self.texts()[-1])
 
-    def test_fix_needs_the_switch_and_a_confirmation(self):
+    def test_sessions_show_working_ones_with_agents(self):
         self.link()
-        telegram.handle_message(message("/fix 7 push"))
-        self.assertIn("off", self.texts()[-1])
-        cfg.set("telegram.allow_runs", True, "user")
-        telegram.handle_message(message("/fix 7 push skip-tests"))
-        buttons = SENT[-1][1]["reply_markup"]["inline_keyboard"][0]
-        self.assertEqual(buttons[0]["callback_data"], "run:7:ps")
-        with mock.patch.object(telegram.runs, "launch_fix", return_value="/fix 7 push skip-tests") as launch, mock.patch.object(telegram.runs, "load_runs", return_value=[]):
-            telegram.handle_callback({"id": "q", "data": "run:7:ps", "message": {"message_id": 5, "chat": {"id": 111}}})
-            launch.assert_called_once_with({"iid": 7, "threads": True, "conflict": True, "skiptests": True, "push": True})
-            telegram.handle_callback({"id": "q", "data": "run:7:p", "message": {"message_id": 5, "chat": {"id": 999}}})
-            self.assertEqual(launch.call_count, 1)
+        with lock:
+            state["sessions"] = [
+                {
+                    "title": "Fix cart",
+                    "cwd": "/x/shop",
+                    "status": "busy",
+                    "status_since": time.time() - 90,
+                    "agents": [{"status": "running", "description": "review diff"}, {"status": "completed"}],
+                    "jobs": [],
+                    "doing": {"tool": "Bash", "what": "pytest"},
+                },
+                {"title": "Idle one", "cwd": "/x/shop", "status": "idle", "agents": [], "jobs": []},
+            ]
+        telegram.handle_message(message("/sessions"))
+        text = self.texts()[-1]
+        self.assertIn("1 working · 1 idle", text)
+        self.assertIn("1 agent running", text)
+        self.assertIn("review diff", text)
+        self.assertNotIn("Idle one", text)
+
+    def test_claude_chat(self):
+        self.link()
+        telegram.handle_message(message("what changed in !7?"))
+        self.assertIn("Claude chat is off", self.texts()[-1])
+        cfg.set("telegram.claude_chat", True, "user")
+        telegram._save_chat({})
+        calls = []
+
+        class Proc:
+            pid = 1
+            returncode = 0
+
+            def __init__(self, cmd, **kw):
+                calls.append(cmd)
+
+            def communicate(self, timeout=None):
+                return json.dumps({"result": "It **rounds** totals.", "session_id": "s1"}), ""
+
+        with mock.patch.object(telegram.subprocess, "Popen", Proc):
+            telegram._run_claude("what changed?")
+            telegram._run_claude("and why?")
+        self.assertNotIn("--resume", calls[0])
+        self.assertEqual(calls[1][calls[1].index("--resume") + 1], "s1")
+        self.assertEqual(calls[0][calls[0].index("--permission-mode") + 1], "plan")
+        self.assertIn("It <b>rounds</b> totals.", self.texts()[-1])
+        telegram.handle_message(message("/new"))
+        self.assertEqual(telegram._load_chat(), {})
+        cfg.set("telegram.claude_chat", None, "user")
 
     def test_notifications_go_to_the_linked_chat(self):
         telegram.on_notify({"kind": "thread", "iid": 7, "author": "Lena", "body": "why?", "path": "a.py", "line": 3, "mr_title": "Fix totals", "status": "thread"})
@@ -118,7 +155,10 @@ class TelegramTest(unittest.TestCase):
         self.link()
         SENT.clear()
         telegram.on_notify({"kind": "thread", "iid": 7, "author": "Lena", "body": "why?", "path": "a.py", "line": 3, "mr_title": "Fix totals", "status": "thread"})
-        self.assertIn("New thread · !7 · a.py:3", self.texts()[-1])
+        self.assertIn("New thread · !7</b> · <code>a.py:3</code>", self.texts()[-1])
+        SENT.clear()
+        telegram.on_notify({"kind": "run", "run_id": "r1", "iid": 7, "status": "done"})
+        self.assertEqual(SENT, [])
         cfg.set("telegram.notify", False, "user")
         SENT.clear()
         telegram.on_notify({"kind": "thread", "iid": 7, "author": "Lena", "body": "b", "status": "thread"})

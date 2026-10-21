@@ -202,8 +202,9 @@ function telegramSection() {
   return `<section id="sec-telegram"><h2>Telegram${tg.bot ? `<span class="count">@${esc(tg.bot)}</span>` : ""}<span class="h2-actions">${state}</span></h2><div class="panel form">
       ${secretRow("telegram", "Bot token", 'Create a bot with <a href="https://t.me/BotFather" target="_blank">@BotFather</a> (<code>/newbot</code>) and paste its token. The bot runs inside Opsboard: it starts and stops with it, and needs no public address.')}
       ${link}
-      ${tg.configured ? field("telegram.notify", "Notifications in Telegram", { type: "toggle", help: "Finished fix runs (with live progress while they run) and new review threads." }) : ""}
-      ${tg.configured ? field("telegram.allow_runs", "Allow fix runs from Telegram", { type: "toggle", help: "Lets the linked chat start and stop your fix skill with /fix and the ▶ buttons. Every start asks for confirmation." }) : ""}
+      ${tg.configured ? field("telegram.notify", "New thread notifications", { type: "toggle", help: "A message when someone opens a review thread on one of your open requests." }) : ""}
+      ${tg.configured ? field("telegram.claude_chat", "Claude chat", { type: "toggle", help: "Messages that are not commands go to Claude Code on this Mac (in your project folder) and the answer comes back to Telegram. The conversation continues until you send /new." }) : ""}
+      ${tg.configured && conf("telegram.claude_chat") ? field("telegram.chat_permission", "What Claude may do", { type: "select", options: [["plan", "Read and answer only"], ["acceptEdits", "Also edit files"], ["auto", "Edit files and run commands (auto mode)"]], help: "Claude Code's permission mode for chat messages. <i>Read and answer only</i> lets it look at your code and answer, but not change anything." }) : ""}
       ${tg.configured ? `<div class="frow"><div class="flabel"><div>Remove the bot</div><div class="fhelp">Forgets the token and the linked chat.</div></div><div class="fctl"><button class="linkbtn danger" data-tg="forget">Forget the bot</button></div></div>` : ""}
     </div></section>`;
 }

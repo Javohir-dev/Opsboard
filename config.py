@@ -45,7 +45,8 @@ DEFAULTS = {
     "telegram.chat_id": "",
     "telegram.user": "",
     "telegram.notify": True,
-    "telegram.allow_runs": False,
+    "telegram.claude_chat": False,
+    "telegram.chat_permission": "plan",
     "refresh.tasks_seconds": 300,
 }
 SECRETS = ("jira.token", "gitlab.token", "github.token", "telegram.token")

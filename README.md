@@ -203,13 +203,15 @@ opsboard review upload test-log.txt
 
 ### Telegram
 
-Opsboard can also live in a Telegram bot — it runs inside Opsboard, so it starts and stops with it and needs no public address (it asks Telegram for messages itself).
+Opsboard can also live in a Telegram bot. It runs inside Opsboard — it starts and stops with it and needs no public address (it asks Telegram for messages itself).
 
-1. Create a bot with [@BotFather](https://t.me/BotFather) (`/newbot`), paste its token in *Settings → Telegram* (kept in the Keychain / Secret Service).
+1. Create a bot with [@BotFather](https://t.me/BotFather) (`/newbot`) and paste its token in *Settings → Telegram* (kept in the Keychain / Secret Service).
 2. Press **Open @yourbot in Telegram** and **Start**: a one-time code links your Telegram account. The bot ignores everyone else and every group.
-3. You get the bell's notifications there — new review threads, and fix runs as one message that updates itself with the steps while the run goes on.
+3. **New thread notifications:** a message when someone opens a review thread on one of your open requests.
 
-Commands: `/status`, `/mrs`, `/mr 7376`, `/runs`, `/fix 7376 push skip-tests`, `/stop`. Starting and stopping fixes is off until you switch on *Allow fix runs from Telegram*, and every start asks you to confirm.
+Commands: `/mrs` (open requests), `/mr 7376`, `/sessions` (Claude sessions that are working and how many agents each runs).
+
+**Claude chat** (*Settings → Telegram → Claude chat*, off by default): any other message goes to Claude Code on your Mac, in your project folder, and the answer comes back. The conversation continues until `/new`; `/cancel` stops an answer. *What Claude may do* picks the permission mode — *Read and answer only* by default.
 
 ### Project profiles
 

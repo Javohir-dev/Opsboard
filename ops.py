@@ -7,7 +7,7 @@ import config as cfg
 import detect
 
 MARK = {True: "✓", False: "✗", None: "–"}
-USER_ONLY = {"claude.live_usage", "telegram.chat_id", "telegram.allow_runs"}
+USER_ONLY = {"claude.live_usage", "telegram.chat_id", "telegram.claude_chat", "telegram.chat_permission"}
 
 
 def parse_value(raw):

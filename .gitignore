@@ -12,6 +12,7 @@ runs.json
 notifications.json
 notifications.tmp
 threads-seen.json
+telegram-chat.json
 threads-seen.tmp
 marks.json
 notes.json
