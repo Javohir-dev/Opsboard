@@ -897,3 +897,6 @@ main:has(.mrlayout) { max-width: none; }
 .rvs { display: inline-flex; color: var(--muted); } .rvs.ok { color: var(--ok); } .rvs.bad { color: var(--warn); }
 .sparts { display: flex; flex-wrap: wrap; gap: 6px; }
 .sparts .avatar { width: 32px; height: 32px; }
+.mrtabs2 .thnav { margin: 0 0 6px 12px; }
+.mrtabs2 .thnav { margin: 0 0 6px 12px; }
+.mrtabs2 .grow { flex: 1; }

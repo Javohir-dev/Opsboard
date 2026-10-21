@@ -325,7 +325,9 @@ function pageMr(ctx, arg) {
   const created = d?.created || m?.created;
   const sub = `<div class="mrsub"><span class="mrstate s-${esc(m?.state || "opened")}">${icon(st[1], 14)}${m?.draft ? "Draft" : st[0]}</span><b>${esc(d?.author || m?.author || "")}</b><span class="muted">requested to merge</span>${chip(m?.source)}<span class="muted">into</span>${chip(m?.target)}${created ? `<span class="muted" title="${esc(fmtDateTime(created))}">${ago(created)}</span>` : ""}</div>`;
   const tabs = [["overview", "Overview", d?.notes], ["commits", "Commits", d?.commits?.length], ["pipelines", isGitHub() ? "Checks" : "Pipelines", d?.pipelines?.length], ["changes", "Changes", d?.files?.length]];
-  const tabBar = `<nav class="mrtabs2" aria-label="Request sections">${tabs.map(([k, l, n]) => `<a href="#/mr/${iid}/${k}" class="${tab === k ? "on" : ""}" ${tab === k ? 'aria-current="page"' : ""}>${l}${n != null ? `<span class="n">${n}</span>` : ""}</a>`).join("")}<span class="grow"></span>${d ? `<span class="muted fs-sm">updated ${ago(d.fetched)}</span>` : ""}</nav>`;
+  const allThreads = d ? threadOrder(d) : [], open = allThreads.filter(t => threadState(t) === "open").length;
+  const nav = d && allThreads.length ? `<div class="thnav" role="group" aria-label="Unresolved threads"><span class="thnc" title="${plural(open, "unresolved thread")}">${icon("comment", 15)}${open}</span><button class="thnb" data-thnav="-1" ${open ? "" : "disabled"} title="Previous unresolved thread" aria-label="Previous unresolved thread">${icon("chevron", 16, "up")}</button><button class="thnb" data-thnav="1" ${open ? "" : "disabled"} title="Next unresolved thread" aria-label="Next unresolved thread">${icon("chevron", 16, "down")}</button><button class="thnb" data-thmenu title="Thread options" aria-label="Thread options">${icon("more", 16, "vert")}</button></div>` : "";
+  const tabBar = `<nav class="mrtabs2" aria-label="Request sections">${tabs.map(([k, l, n]) => `<a href="#/mr/${iid}/${k}" class="${tab === k ? "on" : ""}" ${tab === k ? 'aria-current="page"' : ""}>${l}${n != null ? `<span class="n">${n}</span>` : ""}</a>`).join("")}<span class="grow"></span>${d ? `<span class="muted fs-sm">updated ${ago(d.fetched)}</span>` : ""}${nav}</nav>`;
   const head = `<div class="mrcrumb"><a href="#/mrs">${icon("chevron", 14, "flip")}${mrWord()}</a></div>
     <div class="pagehead mrpagehead"><h1 class="mrh1">${esc(title)}</h1>${actions}</div>${sub}${tabBar}`;
   if (!d) return head + (err ? `<div class="err mt-3">${esc(err)}</div>` : `<div class="skel-page mt-3" aria-busy="true"><div class="skel skel-block"></div><div class="skel skel-block"></div></div>`);
@@ -337,11 +339,9 @@ function pageMr(ctx, arg) {
   const files = treeFiles(buildTree(d.files));
   const totals = files.reduce((a, f) => [a[0] + fileStats(f).adds, a[1] + fileStats(f).dels], [0, 0]);
   const viewed = viewedSet(iid);
-  const threads = threadOrder(d);
-  const open = threads.filter(t => threadState(t) === "open").length, resolved = threads.length - open;
+  const threads = allThreads, resolved = threads.length - open;
   const treeOn = (getPrefRaw("mrTree") ?? (innerWidth > 1100 ? "1" : "0")) === "1";
   const thOn = (getPrefRaw("mrThreads") ?? (innerWidth >= 1500 ? "1" : "0")) === "1";
-  const nav = `<div class="thnav" role="group" aria-label="Unresolved threads"><span class="thnc" title="${plural(open, "unresolved thread")}">${icon("comment", 15)}${open}</span><button class="thnb" data-thnav="-1" ${open ? "" : "disabled"} title="Previous unresolved thread" aria-label="Previous unresolved thread">${icon("chevron", 16, "up")}</button><button class="thnb" data-thnav="1" ${open ? "" : "disabled"} title="Next unresolved thread" aria-label="Next unresolved thread">${icon("chevron", 16, "down")}</button><button class="thnb" data-thmenu title="Thread options" aria-label="Thread options">${icon("more", 16, "vert")}</button></div>`;
   const bar = `<div class="mrbar2">
     <button class="iconbtn ${treeOn ? "on" : ""}" data-tree-toggle title="${treeOn ? "Hide" : "Show"} file browser" aria-label="File browser" aria-pressed="${treeOn}">${svg(SVG.sidebar, 16)}</button>
     <span class="mrcmp">Compare <b translate="no">${esc(m?.target || "")}</b> and <b translate="no">${esc(m?.source || "latest version")}</b></span>
@@ -353,7 +353,7 @@ function pageMr(ctx, arg) {
   return head + bar + `<div class="mrlayout ${treeOn ? "with-tree" : ""} ${thOn ? "with-threads" : ""}">
     ${treeOn ? fileTree({ files }, viewed) : ""}
     <div class="mrdiff">${files.map((f, i) => diffFile(iid, f, i, byLine, threadsByFile, viewed, m)).join("")}</div>
-    ${thOn ? `<aside class="mrthreads"><div class="thbar"><h2>Threads<span class="count">${resolved} of ${threads.length} resolved</span></h2>${nav}</div>${threads.map(threadCard).join("") || '<div class="empty">No threads.</div>'}</aside>` : ""}
+    ${thOn ? `<aside class="mrthreads"><div class="thbar"><h2>Threads<span class="count">${resolved} of ${threads.length} resolved</span></h2></div>${threads.map(threadCard).join("") || '<div class="empty">No threads.</div>'}</aside>` : ""}
   </div>`;
 }
 
@@ -373,15 +373,16 @@ function gotoDiffLine(ln, file) {
 
 function gotoThread(tid) {
   const iid = parseInt(route().arg, 10), d = MRD.cache[iid];
-  const el = $("th-" + tid);
-  if (!el) return false;
-  const det = el.querySelector("details.threplies");
-  if (det) det.open = true;
-  el.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  blink(el);
+  const el = $("th-" + tid), onChanges = mrTab() === "changes";
+  if (el) {
+    const det = el.querySelector("details.threplies");
+    if (det) det.open = true;
+    el.scrollIntoView({ block: onChanges ? "nearest" : "center", behavior: "smooth" });
+    blink(el);
+  }
   const t = d?.threads.find(x => x.id === tid);
-  if (t && t.path) gotoDiffLine(threadKey(t) || t.path, t.path);
-  return true;
+  if (onChanges && t && t.path) gotoDiffLine(threadKey(t) || t.path, t.path);
+  return !!el || onChanges;
 }
 function stepThread(dir) {
   const iid = parseInt(route().arg, 10), d = MRD.cache[iid];
@@ -391,6 +392,7 @@ function stepThread(dir) {
   const cur = ui.thNav?.iid === iid ? ui.thNav.idx : -1;
   const idx = cur < 0 ? (dir > 0 ? 0 : open.length - 1) : (cur + dir + open.length) % open.length;
   ui.thNav = { iid, idx };
+  if (!["overview", "changes"].includes(mrTab())) { ui.mrFocus = { iid, tid: open[idx].id }; location.hash = `#/mr/${iid}/overview`; return; }
   gotoThread(open[idx].id);
 }
 function focusMrThread(iid, tid) {
