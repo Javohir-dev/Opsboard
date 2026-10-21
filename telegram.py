@@ -304,14 +304,140 @@ def cmd_usage():
     return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip(), None
 
 
+OPENED = {
+    "uz": ("{who} thread ochdi", "{who} {n} ta thread ochdi"),
+    "en": ("{who} opened a thread", "{who} opened {n} threads"),
+    "ru": ("{who} открыл тред", "{who} открыл {n} треда"),
+}
+FIX_STATE = {
+    "uz": {
+        "started": "▶ {name} ishga tushdi · {at}",
+        "done": "✅ {name} tugadi",
+        "error": "❌ {name} xato bilan tugadi",
+        "stopped": "⏹ {name} to'xtatildi",
+        "busy": "Bu MR uchun fix allaqachon ishlayapti",
+    },
+    "en": {"started": "▶ {name} started · {at}", "done": "✅ {name} finished", "error": "❌ {name} failed", "stopped": "⏹ {name} stopped", "busy": "A fix is already running for this request"},
+    "ru": {
+        "started": "▶ {name} запущен · {at}",
+        "done": "✅ {name} завершён",
+        "error": "❌ {name} завершился с ошибкой",
+        "stopped": "⏹ {name} остановлен",
+        "busy": "Для этого запроса исправление уже идёт",
+    },
+}
+_pending, _fix_msgs, _sent_texts, _pending_lock = {}, {}, {}, threading.Lock()
+THREAD_GROUP = 3
+
+
+def _bot_lang():
+    chosen = cfg.get("telegram.language") or "auto"
+    if chosen in OPENED:
+        return chosen
+    ui = (cfg.get("ui.language") or "")[:2]
+    return ui if ui in OPENED else "uz"
+
+
+def _fix_buttons(iid):
+    skill = cfg.get("claude.fix_skill") or "fix"
+    return [[{"text": f"▶ {skill}", "callback_data": f"fix:{iid}:"}, {"text": f"⚡ {skill} ultra", "callback_data": f"fix:{iid}:p"}]]
+
+
 def on_notify(item):
-    if item.get("kind") != "thread" or not chat_id() or not cfg.get("telegram.notify"):
+    if not chat_id():
         return
-    m = _mr(item.get("iid")) or {}
-    where = f" · <code>{esc(item['path'].split('/')[-1])}:{item['line']}</code>" if item.get("path") and item.get("line") else ""
-    text = f"💬 <b>New thread · {_ref(item['iid'])}</b>{where}\n{esc(item.get('mr_title') or m.get('title') or '')}\n\n<b>{esc(item.get('author') or '')}</b>: {esc(item.get('body') or '')[:1500]}"
-    link = _url_button(f"Open in {_host()}", m.get("url"))
-    send(text, [link] if link else None)
+    if item.get("kind") == "run":
+        _fix_finished(item)
+        return
+    if item.get("kind") != "thread" or not cfg.get("telegram.notify"):
+        return
+    iid = item.get("iid")
+    with _pending_lock:
+        group = _pending.setdefault(iid, {"authors": [], "n": 0, "title": item.get("mr_title") or ""})
+        group["n"] += 1
+        if item.get("author") and item["author"] not in group["authors"]:
+            group["authors"].append(item["author"])
+        first = group["n"] == 1
+    if first:
+        threading.Timer(THREAD_GROUP, _flush_threads, args=(iid,)).start()
+
+
+def _thread_text(iid, group):
+    one, many = OPENED[_bot_lang()]
+    who = ", ".join(group["authors"]) or "?"
+    line = (one if group["n"] == 1 else many).format(who=f"<b>{esc(who)}</b>", n=group["n"])
+    title = group["title"] or (_mr(iid) or {}).get("title") or ""
+    return f"💬 <b>{_ref(iid)}</b> — {line}" + (f"\n<i>{esc(title[:140])}</i>" if title else "")
+
+
+def _flush_threads(iid):
+    with _pending_lock:
+        group = _pending.pop(iid, None)
+    if group:
+        text = _thread_text(iid, group)
+        msg = send(text, _fix_buttons(iid))
+        if msg:
+            with _pending_lock:
+                _sent_texts[msg["message_id"]] = text
+                while len(_sent_texts) > 200:
+                    _sent_texts.pop(next(iter(_sent_texts)))
+
+
+def _start_fix(cq, iid, push):
+    msg = cq.get("message") or {}
+    words = FIX_STATE[_bot_lang()]
+    skill = cfg.get("claude.fix_skill") or "fix"
+    name = f"{skill} ultra" if push else skill
+    import runs
+
+    if any(r.get("iid") == iid and r["status"] == "running" for r in runs.load_runs()):
+        return words["busy"]
+    runs.launch_fix({"iid": iid, "threads": True, "conflict": True, "skiptests": False, "push": push})
+    run = next((r for r in runs.load_runs() if r.get("iid") == iid and r["status"] == "running"), None)
+    with _pending_lock:
+        base = _sent_texts.get(msg.get("message_id")) or _thread_text_from(msg)
+    status = words["started"].format(name=esc(name), at=time.strftime("%H:%M"))
+    edit(msg.get("message_id"), f"{base}\n\n{status}")
+    if run:
+        with _pending_lock:
+            _fix_msgs[run["id"]] = {"message_id": msg.get("message_id"), "base": base, "name": name}
+    return ""
+
+
+def _thread_text_from(msg):
+    text, out = msg.get("text") or "", []
+    for ent in sorted(msg.get("entities") or [], key=lambda e: e["offset"]):
+        out.append(ent)
+    if not out:
+        return esc(text)
+    units = text.encode("utf-16-le")
+    html, pos = [], 0
+    for ent in out:
+        start, end = ent["offset"] * 2, (ent["offset"] + ent["length"]) * 2
+        if start < pos:
+            continue
+        html.append(esc(units[pos:start].decode("utf-16-le")))
+        chunk = esc(units[start:end].decode("utf-16-le"))
+        tag = {"bold": "b", "italic": "i", "code": "code"}.get(ent["type"])
+        html.append(f"<{tag}>{chunk}</{tag}>" if tag else chunk)
+        pos = end
+    html.append(esc(units[pos:].decode("utf-16-le")))
+    return "".join(html)
+
+
+def _fix_finished(item):
+    with _pending_lock:
+        tracked = _fix_msgs.pop(item.get("run_id"), None)
+    if not tracked:
+        return
+    words = FIX_STATE[_bot_lang()]
+    o = item.get("outcome") or {}
+    th = o.get("threads") or {}
+    key = "error" if item.get("status") == "error" else "stopped" if o.get("status") == "stopped" else "done"
+    bits = [o.get("status") or "", str(o.get("commit") or "")[:10], f"{th.get('resolved', 0)}/{th.get('resolved', 0) + th.get('open', 0)} threads" if th else ""]
+    detail = " · ".join(b for b in bits if b)
+    status = words[key].format(name=esc(tracked["name"])) + (f" · {esc(detail)}" if detail else "")
+    edit(tracked["message_id"], f"{tracked['base']}\n\n{status}")
 
 
 def md_to_html(text):
@@ -719,10 +845,17 @@ def handle_callback(cq):
     if not chat_id() or (msg.get("chat") or {}).get("id") != chat_id():
         return
     kind, _, rest = (cq.get("data") or "").partition(":")
+    note = ""
     if kind == "mr" and rest.isdigit():
         send(*cmd_mr(int(rest)))
+    elif kind == "fix":
+        iid, _, flags = rest.partition(":")
+        try:
+            note = _start_fix(cq, int(iid), "p" in flags)
+        except (ValueError, OSError) as exc:
+            note = str(exc)[:190]
     try:
-        call("answerCallbackQuery", callback_query_id=cq["id"])
+        call("answerCallbackQuery", callback_query_id=cq["id"], text=note or None, show_alert=bool(note))
     except TelegramError:
         pass
 

@@ -43,6 +43,8 @@ def launch_fix(body):
         raise ValueError(f"!{iid} is not one of your open merge requests")
     if not cfg.get("claude.background_runs"):
         raise ValueError("background runs are turned off in Settings")
+    if any(r.get("iid") == iid and r["status"] == "running" for r in load_runs()):
+        raise ValueError(f"a fix is already running for !{iid}")
     root = project_root()
     if not root or not root.is_dir():
         raise ValueError("project folder is not set in Settings")

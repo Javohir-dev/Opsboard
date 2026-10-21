@@ -213,7 +213,7 @@ Opsboard can also live in a Telegram bot. It runs inside Opsboard — it starts 
 
 1. Create a bot with [@BotFather](https://t.me/BotFather) (`/newbot`) and paste its token in *Settings → Telegram* (kept in the Keychain / Secret Service).
 2. Press **Open @yourbot in Telegram** and **Start**: a one-time code links your Telegram account. The bot ignores everyone else and every group.
-3. **New thread notifications:** a message when someone opens a review thread on one of your open requests.
+3. **New thread notifications:** one short message per request — *!7409 — Bakhrom opened 2 threads* — with two buttons: **▶ mr-fix** (fix and commit) and **⚡ mr-fix ultra** (fix, push, reply and resolve), named after your fix skill. A tap starts it at once; the same message then shows that it started and, when the run ends, how it ended. Threads that arrive together are grouped; a second tap while a fix runs for that request is refused.
 
 Commands: `/mrs` (open requests), `/mr 7376`, `/sessions` (Claude sessions that are working and how many agents each runs), `/usage` (Claude plan limits with bars and reset times — live when *Live Claude usage* is on, otherwise Claude Code's cache with its age), `/info` (which accounts it is linked to — Telegram, GitLab / GitHub, Jira, Claude — this Mac, the Opsboard version and the bot's settings; never tokens).
 

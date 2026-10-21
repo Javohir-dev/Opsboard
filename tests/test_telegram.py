@@ -228,21 +228,36 @@ class TelegramTest(unittest.TestCase):
         telegram.CHAT.proc = None
         cfg.set("telegram.claude_chat", None, "user")
 
-    def test_notifications_go_to_the_linked_chat(self):
-        telegram.on_notify({"kind": "thread", "iid": 7, "author": "Lena", "body": "why?", "path": "a.py", "line": 3, "mr_title": "Fix totals", "status": "thread"})
+    def test_new_threads_are_grouped_with_fix_buttons(self):
+        telegram.on_notify({"kind": "thread", "iid": 7, "author": "Lena", "body": "why?", "mr_title": "Fix totals", "status": "thread"})
+        time.sleep(0.1)
         self.assertEqual(SENT, [])
         self.link()
         SENT.clear()
-        telegram.on_notify({"kind": "thread", "iid": 7, "author": "Lena", "body": "why?", "path": "a.py", "line": 3, "mr_title": "Fix totals", "status": "thread"})
-        self.assertIn("New thread · !7</b> · <code>a.py:3</code>", self.texts()[-1])
-        SENT.clear()
-        telegram.on_notify({"kind": "run", "run_id": "r1", "iid": 7, "status": "done"})
-        self.assertEqual(SENT, [])
-        cfg.set("telegram.notify", False, "user")
-        SENT.clear()
-        telegram.on_notify({"kind": "thread", "iid": 7, "author": "Lena", "body": "b", "status": "thread"})
-        self.assertEqual(SENT, [])
-        cfg.set("telegram.notify", None, "user")
+        cfg.set("claude.fix_skill", "mr-fix", "user")
+        with mock.patch.object(telegram, "THREAD_GROUP", 0.2):
+            telegram.on_notify({"kind": "thread", "iid": 7, "author": "Lena", "body": "a", "mr_title": "Fix totals", "status": "thread"})
+            telegram.on_notify({"kind": "thread", "iid": 7, "author": "Lena", "body": "b", "mr_title": "Fix totals", "status": "thread"})
+            self.assertTrue(self.wait_for("2 ta thread ochdi", method="sendMessage"))
+        sent = [b for m, b in SENT if m == "sendMessage"][-1]
+        self.assertEqual(len([b for m, b in SENT if m == "sendMessage"]), 1)
+        self.assertIn("<b>!7</b> — <b>Lena</b>", sent["text"])
+        buttons = sent["reply_markup"]["inline_keyboard"][0]
+        self.assertEqual([(b["text"], b["callback_data"]) for b in buttons], [("▶ mr-fix", "fix:7:"), ("⚡ mr-fix ultra", "fix:7:p")])
+        runs_now = [{"id": "r9", "iid": 7, "status": "running"}]
+        with mock.patch("runs.launch_fix") as launch, mock.patch("runs.load_runs", side_effect=[[], runs_now]):
+            telegram.handle_callback({"id": "q", "data": "fix:7:p", "message": {"message_id": 1, "chat": {"id": 111}, "text": "x"}})
+        launch.assert_called_once_with({"iid": 7, "threads": True, "conflict": True, "skiptests": False, "push": True})
+        self.assertIn("mr-fix ultra ishga tushdi", self.texts()[-1])
+        telegram.on_notify({"kind": "run", "run_id": "r9", "iid": 7, "status": "done", "outcome": {"status": "pushed", "commit": "abc1234", "threads": {"resolved": 2, "open": 0}}})
+        self.assertIn("mr-fix ultra tugadi · pushed · abc1234 · 2/2 threads", self.texts()[-1])
+        with mock.patch("runs.launch_fix") as launch, mock.patch("runs.load_runs", return_value=runs_now):
+            telegram.handle_callback({"id": "q", "data": "fix:7:", "message": {"message_id": 1, "chat": {"id": 111}}})
+            launch.assert_not_called()
+        with mock.patch("runs.launch_fix") as launch:
+            telegram.handle_callback({"id": "q", "data": "fix:7:", "message": {"message_id": 1, "chat": {"id": 999}}})
+            launch.assert_not_called()
+        cfg.set("claude.fix_skill", None, "user")
 
     def test_token_never_in_public_state(self):
         self.assertNotIn("x" * 35, json.dumps(telegram.public()))
