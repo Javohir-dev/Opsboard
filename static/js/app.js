@@ -60,6 +60,7 @@ function render() {
   hideEmptyColumns();
   labelDots();
   renderBell();
+  if (r.page === "mr") mrAfterRender();
 }
 
 function keepsLocalState(el) {

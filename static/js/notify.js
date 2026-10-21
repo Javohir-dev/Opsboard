@@ -5,6 +5,7 @@ const canAlert = () => "Notification" in window && Notification.permission === "
 
 function notifText(n) {
   const o = n.outcome || {}, ref = n.iid ? mrRef(n.iid) : n.name;
+  if (n.kind === "thread") return { level: "info", head: `New thread · ${ref}${n.path && n.line ? ` · ${n.path.split("/").pop()}:${n.line}` : ""}`, body: `${n.author}: ${n.body}` };
   if (n.status === "error") return { level: "bad", head: `Fix failed · ${ref}`, body: n.error || "The run ended with an error" };
   if (o.status === "stopped") return { level: "bad", head: `Fix stopped · ${ref}`, body: o.note || "It could not finish" };
   const th = o.threads ? `threads ${o.threads.resolved ?? 0} resolved · ${o.threads.open ?? 0} open` : "";
@@ -54,7 +55,7 @@ function renderNotifPanel() {
   const list = items.length ? items.map(n => {
     const x = notifText(n), mr = (data.review?.mrs || []).find(m => m.iid === n.iid);
     return `<div class="nitem ${n.read ? "" : "unread"}" data-notif-open="${esc(n.id)}" role="button" tabindex="0">
-      <span class="nic ${x.level}">${icon(x.level === "bad" ? "fail" : "ok", 16)}</span>
+      <span class="nic ${x.level}">${icon(x.level === "info" ? "comment" : x.level === "bad" ? "fail" : "ok", 16)}</span>
       <div class="grow"><div class="nhead">${esc(x.head)}</div>${n.mr_title ? `<div class="ns" translate="no">${esc(n.mr_title)}</div>` : ""}${x.body ? `<div class="ns">${esc(x.body)}</div>` : ""}<div class="nt">${ago(n.at)}</div></div>
       ${mr ? `<a class="nlink" href="${esc(mr.url)}" target="_blank" title="Open ${esc(mrRef(mr.iid))} in ${hostName()}" aria-label="Open in ${hostName()}">${icon("mrs", 14)}</a>` : ""}
     </div>`;
@@ -106,6 +107,7 @@ function openNotif(id) {
   if (!n) return;
   if (!n.read) markNotifsRead([id]);
   closeNotifPanel();
+  if (n.kind === "thread") { focusMrThread(n.iid, n.thread_id); return; }
   ui.focusRun = n.run_id;
   if (route().page !== "overview") location.hash = "#/"; else render();
   setTimeout(() => {

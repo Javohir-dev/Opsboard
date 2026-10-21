@@ -57,6 +57,26 @@ class NotifyTest(unittest.TestCase):
         notify.run_finished(run())
         self.assertEqual(self.sound.call_count, 2)
 
+    def test_new_threads_after_the_first_look(self):
+        notify.SEEN_FILE.unlink(missing_ok=True)
+        head = lambda tid, who="lena": {"id": tid, "author": who.title(), "username": who, "body": "why?", "path": "a/b.py", "line": 3}  # noqa: E731
+        mr = lambda *heads: [{"iid": 7, "title": "Fix", "state": "opened", "_threads": list(heads)}]  # noqa: E731
+        self.assertEqual(notify.new_threads(mr(head("t1")), "dev"), [])
+        self.assertEqual(notify.new_threads(mr(head("t1")), "dev"), [])
+        fresh = notify.new_threads(mr(head("t1"), head("t2"), head("t3", "dev")), "dev")
+        self.assertEqual([t["id"] for t in fresh], ["t2"])
+        item = notify.load()[0]
+        self.assertEqual((item["kind"], item["thread_id"], item["iid"]), ("thread", "t2", 7))
+        self.assertEqual(notify.text(item), ("New thread · !7 · b.py:3", "Lena: why?"))
+        self.assertEqual(notify.new_threads(mr(head("t1"), head("t2")), "dev"), [])
+
+    def test_a_new_request_is_only_remembered(self):
+        notify.SEEN_FILE.unlink(missing_ok=True)
+        notify.new_threads([], "dev")
+        rows = [{"iid": 9, "state": "opened", "_threads": [{"id": "x", "username": "lena"}]}]
+        self.assertEqual(notify.new_threads(rows, "dev"), [])
+        self.assertNotIn("_threads", rows[0])
+
     def test_mark_read_and_clear(self):
         a = notify.run_finished(run())
         notify.run_finished({**run(), "id": "r2"})

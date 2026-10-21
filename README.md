@@ -132,7 +132,7 @@ Your open requests also appear on Overview, under *Tasks · needs attention*. Th
 
 ### A merge / pull request
 
-Click a title to open it here instead of on GitLab / GitHub: the changes file by file like the host's *Changes* tab (long files fold away; click a file name to fold it), and on the right every thread with its replies — unresolved ones open on top, resolved ones folded with who resolved them, plain comments in between. A marker in the diff shows where a thread sits; click it, or the `file:line` on a thread, to jump between them. **Open in GitLab** and **Run fix** are at the top; the page reloads from the host every two minutes or with ↻.
+Click a title to open it here instead of on GitLab / GitHub: the changes file by file like the host's *Changes* tab (long files fold away; click a file name to fold it), and on the right every review thread like GitLab shows it — unresolved ones open on top, resolved ones folded into *N replies · Last reply by …* with who resolved them and when. The counter above them jumps between the unresolved threads (↑ ↓) and ⋮ expands or folds them all. A marker in the diff shows where a thread sits; click it, or the `file:line` on a thread, to jump between them. **Open in GitLab** and **Run fix** are at the top; the page reloads from the host every two minutes or with ↻.
 
 ### Notes page
 
@@ -183,7 +183,7 @@ The dialog turns into a call like `/<skill> 7264 push skip-tests`:
 
 Follow it under **Background runs** on Overview or Tasks; **Stop** kills it. Turn the action off in *Settings → Claude → Background runs*.
 
-When a run finishes, the **bell** next to the logo (top right on a phone) shows a red count and the tab title gets `(1)`. Click it to see what the run did — pushed, committed, stopped or failed, with the commit, threads and checks — and click an entry to jump to its merge / pull request on Overview, which lights up once so it is easy to spot (the run, if the request is no longer open). Runs you stop yourself are not announced. Each notification plays a short system sound (Glass, or Basso when the run failed or stopped; on Linux the freedesktop sounds through `paplay`/`pw-play`) — *Settings → Claude → Sound when a fix finishes*, with a *Play it* button to try it.
+When a run finishes, the **bell** next to the logo (top right on a phone) shows a red count and the tab title gets `(1)`. Click it to see what the run did — pushed, committed, stopped or failed, with the commit, threads and checks — and click an entry to jump to its merge / pull request on Overview, which lights up once so it is easy to spot (the run, if the request is no longer open). Runs you stop yourself are not announced. A **new review thread** on one of your open requests is announced too (not your own); opening it jumps to the thread on the request page. Each notification plays a short system sound (Glass, or Basso when the run failed or stopped; on Linux the freedesktop sounds through `paplay`/`pw-play`) — *Settings → Claude → Sound when a fix finishes*, with a *Play it* button to try it.
 
 Desktop alerts: in the bell panel press **Turn on** once and allow notifications in the browser; the alert opens the dashboard when clicked. With no dashboard tab showing alerts (closed, or alerts not allowed), Opsboard posts a system notification itself — Notification Center on macOS, `notify-send` on Linux.
 

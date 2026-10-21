@@ -11,6 +11,8 @@ runs/
 runs.json
 notifications.json
 notifications.tmp
+threads-seen.json
+threads-seen.tmp
 marks.json
 notes.json
 notes.tmp

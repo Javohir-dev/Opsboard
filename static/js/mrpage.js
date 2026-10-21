@@ -68,17 +68,35 @@ function diffFile(iid, f, i, byLine, threadsByFile) {
   return `<div class="dfile" id="df-${i}" data-file="${esc(f.path)}">${head}${body}</div>`;
 }
 
+const avatarOf = name => `<span class="avatar" title="${esc(name)}">${esc(initials(name || "?"))}</span>`;
+function noteHtml(n, withHead = true) {
+  return `<div class="thnote">${withHead ? avatarOf(n.author) : ""}<div class="grow">${withHead ? `<div class="thby"><b>${esc(n.author)}</b>${n.username ? `<span class="muted">@${esc(n.username)}</span>` : ""}<span class="muted" title="${esc(fmtDateTime(n.created))}">${ago(n.created)}</span></div>` : ""}<div class="thbody">${md(n.body)}</div></div></div>`;
+}
 function threadCard(t) {
-  const st = threadState(t), first = t.notes[0] || {};
-  const where = t.path ? `<a class="thwhere" href="#" data-goto-line="${esc(threadKey(t) || t.path)}" data-file="${esc(t.path)}" translate="no" title="Show in the diff">${esc(t.path.split("/").pop())}${t.new_line || t.old_line ? ":" + (t.new_line || t.old_line) : ""}</a>` : `<span class="thwhere muted">${st === "comment" ? "Comment" : "General thread"}</span>`;
-  const badge = st === "open" ? `<span class="thst open">${icon("pending", 14)}Unresolved</span>` : st === "resolved" ? `<span class="thst resolved">${icon("ok", 14)}Resolved${t.resolved_by ? ` by ${esc(t.resolved_by)}` : ""}</span>` : "";
-  const replies = t.notes.length - 1;
-  return `<details class="thread th-${st}" id="th-${esc(t.id)}" ${st === "resolved" ? "" : "open"}>
-    <summary><span class="thtop">${badge}${where}<span class="grow"></span>${replies ? `<span class="muted fs-sm">${plural(replies, "reply", "replies")}</span>` : ""}</span>
-      <span class="thpeek"><b>${esc(first.author)}</b> ${esc(String(first.body || "").replace(/[*`#>_]/g, "").replace(/\s+/g, " ").slice(0, 140))}</span></summary>
-    <div class="thnotes">${t.notes.map(n => `<div class="thnote"><span class="avatar" title="${esc(n.author)}">${esc(initials(n.author || "?"))}</span><div class="grow"><div class="thby"><b>${esc(n.author)}</b><span class="muted" title="${esc(fmtDateTime(n.created))}">${ago(n.created)}</span></div><div class="thbody">${md(n.body)}</div></div></div>`).join("")}
-      ${t.url ? `<a class="thlink" href="${esc(t.url)}" target="_blank">Open in ${hostName()} →</a>` : ""}</div>
-  </details>`;
+  const st = threadState(t), first = t.notes[0] || {}, rest = t.notes.slice(1), last = t.notes[t.notes.length - 1] || first;
+  const line = t.new_line || t.old_line;
+  const where = t.path ? `<a class="thwhere" href="#" data-goto-line="${esc(threadKey(t) || t.path)}" data-file="${esc(t.path)}" translate="no" title="${esc(t.path)}">${esc(t.path.split("/").pop())}${line ? ":" + line : ""}</a>` : `<span class="muted">the ${isGitHub() ? "pull" : "merge"} request</span>`;
+  const status = st === "resolved"
+    ? `<div class="thres resolved">${icon("ok", 13)}<span>Resolved${t.resolved_at ? ` ${ago(t.resolved_at)}` : ""}${t.resolved_by ? ` by <b>${esc(t.resolved_by)}</b>` : ""}</span></div>`
+    : `<div class="thres open">${icon("pending", 13)}<span>Unresolved</span></div>`;
+  const head = `<div class="thhead">${avatarOf(first.author)}<div class="grow"><div class="thwho"><b>${esc(first.author)}</b> ${first.username ? `<span class="muted">@${esc(first.username)}</span> ` : ""}<span class="muted">started a thread on</span> ${where} <span class="muted" title="${esc(fmtDateTime(first.created))}">${ago(first.created)}</span></div>${status}</div></div>`;
+  if (st === "resolved") {
+    const people = [...new Set(t.notes.map(n => n.author))].slice(0, 3);
+    const label = rest.length ? `<span class="thrn">${plural(rest.length, "reply", "replies")}</span><span class="muted">Last reply by</span><b>${esc(last.author)}</b><span class="muted" title="${esc(fmtDateTime(last.created))}">${ago(last.created)}</span>` : `<span class="thrn">Show thread</span>`;
+    return `<div class="thread th-resolved" id="th-${esc(t.id)}">${head}<details class="threplies"><summary><span class="dchev">${icon("chevron", 14)}</span><span class="avs">${people.map(avatarOf).join("")}</span>${label}</summary><div class="thnotes">${noteHtml(first)}${rest.map(n => noteHtml(n)).join("")}${t.url ? `<a class="thlink" href="${esc(t.url)}" target="_blank">Open in ${hostName()} →</a>` : ""}</div></details></div>`;
+  }
+  return `<div class="thread th-open" id="th-${esc(t.id)}">${head}<div class="thnotes">${noteHtml(first, false)}${rest.map(n => noteHtml(n)).join("")}${t.url ? `<a class="thlink" href="${esc(t.url)}" target="_blank">Open in ${hostName()} →</a>` : ""}</div></div>`;
+}
+
+function threadOrder(d) {
+  const fileIdx = Object.fromEntries(d.files.map((f, i) => [f.path, i]));
+  const pos = t => [t.path in fileIdx ? fileIdx[t.path] : 1e6, t.new_line || t.old_line || 0];
+  return d.threads.filter(t => t.resolvable).sort((a, b) => {
+    const sa = threadState(a) === "open" ? 0 : 1, sb = threadState(b) === "open" ? 0 : 1;
+    if (sa !== sb) return sa - sb;
+    const [fa, la] = pos(a), [fb, lb] = pos(b);
+    return fa - fb || la - lb;
+  });
 }
 
 function pageMr(ctx, arg) {
@@ -109,16 +127,16 @@ function pageMr(ctx, arg) {
     <div class="mrmeta">${meta}${d ? `<span class="muted fs-sm">updated ${ago(d.fetched)}</span>` : ""}</div>`;
   if (!d) return head + (err ? `<div class="err mt-3">${esc(err)}</div>` : `<div class="skel-page mt-3" aria-busy="true"><div class="skel skel-block"></div><div class="skel skel-block"></div></div>`);
   const byLine = {}, threadsByFile = {};
-  d.threads.forEach(t => { const k = threadKey(t); if (k) (byLine[k] ||= []).push(t); if (t.path) threadsByFile[t.path] = (threadsByFile[t.path] || 0) + 1; });
+  d.threads.filter(t => t.resolvable).forEach(t => { const k = threadKey(t); if (k) (byLine[k] ||= []).push(t); if (t.path) threadsByFile[t.path] = (threadsByFile[t.path] || 0) + 1; });
   const totals = d.files.reduce((a, f) => { parseDiff(f.diff).forEach(r => { if (r.kind === "add") a[0]++; else if (r.kind === "del") a[1]++; }); return a; }, [0, 0]);
-  const order = { open: 0, comment: 1, resolved: 2 };
-  const threads = [...d.threads].sort((a, b) => order[threadState(a)] - order[threadState(b)]);
-  const open = d.threads.filter(t => threadState(t) === "open").length, resolved = d.threads.filter(t => threadState(t) === "resolved").length;
+  const threads = threadOrder(d);
+  const open = threads.filter(t => threadState(t) === "open").length, resolved = threads.length - open;
+  const nav = `<div class="thnav" role="group" aria-label="Unresolved threads"><span class="thnc" title="${plural(open, "unresolved thread")}">${icon("comment", 15)}${open}</span><button class="thnb" data-thnav="-1" ${open ? "" : "disabled"} title="Previous unresolved thread" aria-label="Previous unresolved thread">${icon("chevron", 16, "up")}</button><button class="thnb" data-thnav="1" ${open ? "" : "disabled"} title="Next unresolved thread" aria-label="Next unresolved thread">${icon("chevron", 16, "down")}</button><button class="thnb" data-thmenu title="Thread options" aria-label="Thread options">${icon("more", 16, "vert")}</button></div>`;
   const fileList = `<details class="dlist" open><summary>${plural(d.files.length, "file")} changed <span class="dadd">+${totals[0]}</span> <span class="ddel">−${totals[1]}</span></summary>
     <div class="dlinks">${d.files.map((f, i) => `<a href="#" data-goto-file="${i}" translate="no"><span class="dstat ds-${f.status}">${f.status[0].toUpperCase()}</span>${esc(f.path)}</a>`).join("")}</div></details>`;
   return head + `<div class="mrgrid">
     <div class="mrdiff">${d.description ? `<details class="dlist mrdescbox"><summary>Description</summary><div class="mrdesc">${md(d.description)}</div></details>` : ""}${fileList}${d.files.map((f, i) => diffFile(iid, f, i, byLine, threadsByFile)).join("")}</div>
-    <aside class="mrthreads"><h2>Threads<span class="count">${open} unresolved · ${resolved} resolved</span></h2>${threads.map(threadCard).join("") || '<div class="empty">No threads.</div>'}</aside>
+    <aside class="mrthreads"><div class="thbar"><h2>Threads<span class="count">${resolved} of ${threads.length} resolved</span></h2>${nav}</div>${threads.map(threadCard).join("") || '<div class="empty">No threads.</div>'}</aside>
   </div>`;
 }
 
@@ -135,8 +153,56 @@ function gotoDiffLine(ln, file) {
   if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); blink(el); }
 }
 
+function gotoThread(tid) {
+  const iid = parseInt(route().arg, 10), d = MRD.cache[iid];
+  const el = $("th-" + tid);
+  if (!el) return false;
+  const det = el.querySelector("details.threplies");
+  if (det) det.open = true;
+  el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  blink(el);
+  const t = d?.threads.find(x => x.id === tid);
+  if (t && t.path) gotoDiffLine(threadKey(t) || t.path, t.path);
+  return true;
+}
+function stepThread(dir) {
+  const iid = parseInt(route().arg, 10), d = MRD.cache[iid];
+  if (!d) return;
+  const open = threadOrder(d).filter(t => threadState(t) === "open");
+  if (!open.length) return;
+  const cur = ui.thNav?.iid === iid ? ui.thNav.idx : -1;
+  const idx = cur < 0 ? (dir > 0 ? 0 : open.length - 1) : (cur + dir + open.length) % open.length;
+  ui.thNav = { iid, idx };
+  gotoThread(open[idx].id);
+}
+function focusMrThread(iid, tid) {
+  ui.mrFocus = { iid, tid };
+  delete MRD.cache[iid];
+  if (route().page === "mr" && parseInt(route().arg, 10) === iid) { loadMr(iid, true); render(); } else location.hash = `#/mr/${iid}`;
+}
+function mrAfterRender() {
+  const f = ui.mrFocus;
+  if (!f || parseInt(route().arg, 10) !== f.iid || !MRD.cache[f.iid]) return;
+  ui.mrFocus = null;
+  setTimeout(() => gotoThread(f.tid), 80);
+}
+function openThreadMenu(btn) {
+  const menu = $("menu");
+  menu.innerHTML = `<button class="mi" data-thall="1">Expand all threads</button><button class="mi" data-thall="0">Collapse resolved threads</button>`;
+  menu.dataset.key = "threads";
+  menu.hidden = false;
+  const r = btn.getBoundingClientRect(), w = menu.offsetWidth;
+  menu.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.right - w)) + "px";
+  menu.style.top = r.bottom + 4 + "px";
+}
+
 document.addEventListener("click", e => {
   if (route().page !== "mr") return;
+  const nv = e.target.closest("[data-thnav]");
+  if (nv) { stepThread(parseInt(nv.dataset.thnav, 10)); return; }
+  if (e.target.closest("[data-thmenu]")) { e.stopImmediatePropagation(); $("menu").hidden || $("menu").dataset.key !== "threads" ? openThreadMenu(e.target.closest("[data-thmenu]")) : closeMenu(); return; }
+  const all = e.target.closest("[data-thall]");
+  if (all) { document.querySelectorAll(".thread details.threplies").forEach(x => x.open = all.dataset.thall === "1"); closeMenu(); return; }
   const tg = e.target.closest("[data-dtoggle]");
   if (tg) { const k = tg.dataset.dtoggle; ui.mrClosed ||= new Set(); ui.mrClosed.has(k) ? ui.mrClosed.delete(k) : ui.mrClosed.add(k); render(); return; }
   const big = e.target.closest("[data-dbig]");
@@ -148,7 +214,7 @@ document.addEventListener("click", e => {
   const gf = e.target.closest("[data-goto-file]");
   if (gf) { e.preventDefault(); const el = $("df-" + gf.dataset.gotoFile); if (el) { el.scrollIntoView({ block: "start", behavior: "smooth" }); blink(el.querySelector(".dfh")); } return; }
   const gt = e.target.closest("[data-goto-thread]");
-  if (gt) { const el = $("th-" + gt.dataset.gotoThread); if (el) { el.open = true; el.scrollIntoView({ block: "nearest", behavior: "smooth" }); blink(el); } }
+  if (gt) { const el = $("th-" + gt.dataset.gotoThread); if (el) { const det = el.querySelector("details.threplies"); if (det) det.open = true; el.scrollIntoView({ block: "nearest", behavior: "smooth" }); blink(el); } }
 });
 document.addEventListener("keydown", e => {
   const tg = e.target.closest?.("[data-dtoggle]");

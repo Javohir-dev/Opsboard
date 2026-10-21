@@ -5,6 +5,7 @@ import time
 from urllib import error, parse
 
 import config as cfg
+import notify
 import stackprofile as profile
 from core import MODULE_CACHE, epoch, gitlab_project, gitlab_url, http_json, key_regex, lock, put, state
 
@@ -51,12 +52,24 @@ def collect():
                 module = tops.most_common(1)[0][0] if tops else ""
                 if m["state"] != "opened":
                     cache[str(m["iid"])] = module
-            threads, threads_total, pipeline, approved, approved_by = None, None, "", False, []
+            threads, threads_total, pipeline, approved, approved_by, heads = None, None, "", False, [], None
             if m["state"] == "opened":
                 disc = gitlab_get(f"projects/{pid}/merge_requests/{m['iid']}/discussions", {"per_page": 100})
                 notes = [n for d in disc for n in d.get("notes", [])[:1] if n.get("resolvable")]
                 threads = sum(1 for n in notes if not n.get("resolved"))
                 threads_total = len(notes)
+                heads = [
+                    {
+                        "id": d["id"],
+                        "author": d["notes"][0]["author"].get("name") or d["notes"][0]["author"]["username"],
+                        "username": d["notes"][0]["author"]["username"],
+                        "body": d["notes"][0].get("body") or "",
+                        "path": ((d["notes"][0].get("position") or {}).get("new_path")) or "",
+                        "line": ((d["notes"][0].get("position") or {}).get("new_line")) or ((d["notes"][0].get("position") or {}).get("old_line")),
+                    }
+                    for d in disc
+                    if d.get("notes") and d["notes"][0].get("resolvable")
+                ]
                 try:
                     detail = gitlab_get(f"projects/{pid}/merge_requests/{m['iid']}")
                     pipeline = ((detail.get("head_pipeline") or detail.get("pipeline") or {}).get("status")) or ""
@@ -91,6 +104,7 @@ def collect():
                     "author": (m.get("author") or {}).get("name", ""),
                     "reviewers": [r.get("name", "") for r in m.get("reviewers") or []],
                     "closed": epoch(m.get("closed_at") or ""),
+                    "_threads": heads,
                 }
             )
         MODULE_CACHE.write_text(json.dumps(cache))
@@ -99,6 +113,7 @@ def collect():
             prev = state.get("review") or {}
         put("review", dict(prev, host="gitlab", configured=True, error=str(exc)[:300]))
         return
+    notify.new_threads(out, user)
     put("review", {"host": "gitlab", "configured": True, "mrs": out, "fetched": time.time(), "user": user, "labels": project_labels(pid)})
 
 
@@ -285,6 +300,7 @@ def detail(iid):
                 "id": d["id"],
                 "resolvable": bool(resolvable),
                 "resolved": bool(resolvable) and all(n.get("resolved") for n in resolvable),
+                "resolved_at": max((epoch(n.get("resolved_at") or "") for n in resolvable), default=0),
                 "resolved_by": next(((n["resolved_by"].get("name") or n["resolved_by"].get("username", "")) for n in reversed(resolvable) if n.get("resolved_by")), ""),
                 "path": pos.get("new_path") or pos.get("old_path") or "",
                 "new_line": pos.get("new_line"),

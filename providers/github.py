@@ -4,6 +4,7 @@ import time
 from urllib import error, parse, request
 
 import config as cfg
+import notify
 import stackprofile as profile
 from core import epoch, key_regex, lock, put, state
 
@@ -171,6 +172,18 @@ def collect():
                 )
                 try:
                     threads = _threads_raw(it["number"])
+                    rec["_threads"] = [
+                        {
+                            "id": t["id"],
+                            "author": ((t["comments"]["nodes"][0].get("author") or {}).get("login", "")),
+                            "username": ((t["comments"]["nodes"][0].get("author") or {}).get("login", "")),
+                            "body": t["comments"]["nodes"][0].get("body", ""),
+                            "path": t.get("path") or "",
+                            "line": t.get("line") or t.get("originalLine"),
+                        }
+                        for t in threads
+                        if (t.get("comments") or {}).get("nodes")
+                    ]
                     rec["threads_total"] = len(threads)
                     rec["threads"] = sum(1 for t in threads if not t["isResolved"])
                     rec["pipeline"] = _checks(pr["head"]["sha"])
@@ -184,6 +197,7 @@ def collect():
             prev = state.get("review") or {}
         put("review", dict(prev, host="github", configured=True, error=str(exc)[:300]))
         return
+    notify.new_threads(out, me)
     put("review", {"host": "github", "configured": True, "mrs": out, "fetched": time.time(), "user": me, "labels": labels})
 
 
@@ -317,6 +331,7 @@ def detail(number):
                     "id": t["id"],
                     "resolvable": True,
                     "resolved": t["isResolved"],
+                    "resolved_at": 0,
                     "resolved_by": (t.get("resolvedBy") or {}).get("login", ""),
                     "path": t.get("path") or "",
                     "new_line": None if left else line,

@@ -452,6 +452,7 @@ def mr_detail(iid):
                 "id": "t2",
                 "resolvable": True,
                 "resolved": True,
+                "resolved_at": now - 7000,
                 "resolved_by": "Max",
                 "path": "shop/cart.py",
                 "new_line": 44,

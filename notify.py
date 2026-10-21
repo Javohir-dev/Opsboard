@@ -11,6 +11,7 @@ import config as cfg
 from core import DATA, log
 
 FILE = DATA / "notifications.json"
+SEEN_FILE = DATA / "threads-seen.json"
 KEEP = 100
 PAGE_GONE = 75
 _lock = threading.Lock()
@@ -51,19 +52,70 @@ def run_finished(r, mr_title=""):
         "at": time.time(),
         "read": False,
     }
+    return _publish(item, "run_id", item["status"] == "error" or (item.get("outcome") or {}).get("status") == "stopped")
+
+
+def _publish(item, same, bad=False):
     with _lock:
-        items = [x for x in load() if x.get("run_id") != r["id"]]
+        items = [x for x in load() if not (x.get("kind") == item["kind"] and x.get(same) == item[same])]
         _save([item] + items)
     if time.time() - _last_alerting_page > PAGE_GONE:
         os_notify(*text(item))
     if cfg.get("notify.sound"):
-        play_sound(item["status"] == "error" or (item.get("outcome") or {}).get("status") == "stopped")
+        play_sound(bad)
     return item
+
+
+def new_threads(mrs, me):
+    """Announce review threads opened on your requests since the last look; the first look at a request only remembers them."""
+    try:
+        seen = json.loads(SEEN_FILE.read_text())
+    except (OSError, ValueError):
+        seen = None
+    first_run = seen is None
+    seen = seen or {}
+    fresh = []
+    for m in mrs:
+        heads = m.pop("_threads", None)
+        if heads is None or m.get("state") != "opened":
+            continue
+        key = str(m["iid"])
+        known = set(seen.get(key, []))
+        if not first_run and key in seen:
+            fresh += [(m, t) for t in heads if t["id"] not in known and t.get("username") != me]
+        seen[key] = sorted(known | {t["id"] for t in heads})
+    opened = {str(m["iid"]) for m in mrs if m.get("state") == "opened"}
+    seen = {k: v for k, v in seen.items() if k in opened}
+    tmp = SEEN_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(seen))
+    os.replace(tmp, SEEN_FILE)
+    for m, t in fresh:
+        _publish(
+            {
+                "id": uuid.uuid4().hex[:12],
+                "kind": "thread",
+                "thread_id": t["id"],
+                "iid": m["iid"],
+                "mr_title": m.get("title", ""),
+                "author": t.get("author", ""),
+                "body": " ".join(str(t.get("body") or "").split())[:300],
+                "path": t.get("path") or "",
+                "line": t.get("line"),
+                "status": "thread",
+                "at": time.time(),
+                "read": False,
+            },
+            "thread_id",
+        )
+    return [t for _, t in fresh]
 
 
 def text(item):
     o = item.get("outcome") or {}
     ref = f"!{item['iid']}" if item.get("iid") else item.get("name", "")
+    if item.get("kind") == "thread":
+        where = f" · {item['path'].split('/')[-1]}:{item['line']}" if item.get("path") and item.get("line") else ""
+        return f"New thread · {ref}{where}", f"{item.get('author', '')}: {item.get('body', '')}"
     if item["status"] == "error":
         head, body = f"Fix failed · {ref}", item.get("error") or "the run ended with an error"
     elif o.get("status") == "stopped":
