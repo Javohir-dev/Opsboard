@@ -134,7 +134,7 @@ function runsSection(limit = 8) {
     const key = "run:" + r.id;
     const result = r.result ? `<div class="s clickable pre-wrap ${expanded.has(key) ? "" : "clamp"}" data-expand="${esc(key)}" title="click to expand">${esc(r.result)}</div>` : "";
     return `<div class="item titem" data-run="${esc(r.id)}"><span class="dot ${dot}"></span><div class="grow">
-      <div class="t">${ses ? `<a href="#/s/${esc(ses.id)}">${esc(r.name)}</a>` : esc(r.name)}</div>
+      <div class="t">${r.iid ? `<a href="#/mr/${r.iid}/fix" data-open-run="${esc(r.id)}">${esc(r.name)}</a>` : ses ? `<a href="#/s/${esc(ses.id)}">${esc(r.name)}</a> ` : esc(r.name)}${ses && r.iid ? ` <a class="muted fs-sm" href="#/s/${esc(ses.id)}">session</a>` : ""}</div>
       ${mr ? `<div class="mrline"><a href="${esc(mr.url)}" target="_blank"><span class="iid">${mrRef(mr.iid)}</span> ${esc(mr.title)}</a></div>` : ""}
       ${doing ? `<div class="s">${esc(doing)}</div>` : ""}${outcomeLine(r.outcome)}${result}</div>
       <div class="r"><span class="muted">${label} · ${r.status === "running" ? dur(now() - r.started) : dur((r.ended || r.started) - r.started) + " · " + ago(r.ended)}</span>${r.status === "running" ? `<button class="fixbtn" data-stop="${esc(r.id)}">Stop</button>` : ""}</div></div>`;

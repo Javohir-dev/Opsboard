@@ -246,7 +246,7 @@ function threadOrder(d) {
   });
 }
 
-const MR_TABS = ["overview", "commits", "pipelines", "changes"];
+const MR_TABS = ["overview", "commits", "pipelines", "changes", "fix"];
 function mrTab() { const t = location.hash.split("/")[3]; return MR_TABS.includes(t) ? t : "overview"; }
 const projectUrl = url => (url || "").split(isGitHub() ? "/pull/" : "/-/merge_requests")[0];
 const REVIEW_STATE = {
@@ -325,15 +325,19 @@ function pageMr(ctx, arg) {
   const created = d?.created || m?.created;
   const sub = `<div class="mrhdr"><span class="mrstate s-${esc(m?.state || "opened")}">${icon(st[1], 14)}${m?.draft ? "Draft" : st[0]}</span><b>${esc(d?.author || m?.author || "")}</b><span class="muted">requested to merge</span>${chip(m?.source)}<span class="muted">into</span>${chip(m?.target)}${created ? `<span class="muted" title="${esc(fmtDateTime(created))}">${ago(created)}</span>` : ""}</div>`;
   const tabs = [["overview", "Overview", d?.notes], ["commits", "Commits", d?.commits?.length], ["pipelines", isGitHub() ? "Checks" : "Pipelines", d?.pipelines?.length], ["changes", "Changes", d?.files?.length]];
+  const fixRuns = runsFor(iid);
+  if (fixRuns.length) tabs.push(["fix", fixRuns.some(r => r.status === "running") ? `<span class="dot busy"></span>${esc(conf("claude.fix_skill") || "Fix")}` : esc(conf("claude.fix_skill") || "Fix"), fixRuns.length]);
   const allThreads = d ? threadOrder(d) : [], open = allThreads.filter(t => threadState(t) === "open").length;
   const nav = d && allThreads.length ? `<div class="thnav" role="group" aria-label="Unresolved threads"><span class="thnc" title="${plural(open, "unresolved thread")}">${icon("comment", 15)}${open}</span><button class="thnb" data-thnav="-1" ${open ? "" : "disabled"} title="Previous unresolved thread" aria-label="Previous unresolved thread">${icon("chevron", 16, "up")}</button><button class="thnb" data-thnav="1" ${open ? "" : "disabled"} title="Next unresolved thread" aria-label="Next unresolved thread">${icon("chevron", 16, "down")}</button><button class="thnb" data-thmenu title="Thread options" aria-label="Thread options">${icon("more", 16, "vert")}</button></div>` : "";
   const tabBar = `<nav class="mrtabs2" aria-label="Request sections">${tabs.map(([k, l, n]) => `<a href="#/mr/${iid}/${k}" class="${tab === k ? "on" : ""}" ${tab === k ? 'aria-current="page"' : ""}>${l}${n != null ? `<span class="n">${n}</span>` : ""}</a>`).join("")}<span class="grow"></span>${d ? `<span class="muted fs-sm">updated ${ago(d.fetched)}</span>` : ""}${nav}</nav>`;
   const head = `<div class="mrcrumb"><a href="#/mrs">${icon("chevron", 14, "flip")}${mrWord()}</a></div>
     <div class="pagehead mrpagehead"><h1 class="mrh1">${esc(title)}</h1>${actions}</div>${sub}${tabBar}`;
+  if (!d && tab === "fix") return head + fixTab(iid, null);
   if (!d) return head + (err ? `<div class="err mt-3">${esc(err)}</div>` : `<div class="skel-page mt-3" aria-busy="true"><div class="skel skel-block"></div><div class="skel skel-block"></div></div>`);
   if (tab === "overview") return head + overviewTab(d, m);
   if (tab === "commits") return head + `<div class="mrcommits">${commitsTab(d)}</div>`;
   if (tab === "pipelines") return head + pipelinesTab(d);
+  if (tab === "fix") return head + fixTab(iid, d);
   const byLine = {}, threadsByFile = {};
   d.threads.filter(t => t.resolvable).forEach(t => { const k = threadKey(t); if (k) (byLine[k] ||= []).push(t); if (t.path) threadsByFile[t.path] = (threadsByFile[t.path] || 0) + 1; });
   const files = treeFiles(buildTree(d.files));

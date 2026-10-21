@@ -9,7 +9,7 @@ from pathlib import Path
 
 import config as cfg
 import notify
-from core import RUNS_DIR, RUNS_FILE, alive, claude_bin, lock, popen, project_root, runs_lock, state
+from core import RUNS_DIR, RUNS_FILE, alive, claude_bin, epoch, lock, popen, project_root, runs_lock, state
 
 RE_RESULT = re.compile(r"^OPS_RESULT\s+(\{.*\})\s*$", re.M)
 
@@ -181,3 +181,126 @@ def stop_run(rid):
         os.killpg(r["pid"], signal.SIGTERM)
     except (ProcessLookupError, PermissionError):
         pass
+
+
+PHASES = [
+    ("merge", "Merge target"),
+    ("threads", "Threads"),
+    ("fix", "Fix"),
+    ("checks", "Checks"),
+    ("commit", "Commit"),
+    ("push", "Push & reply"),
+]
+RE_STEP = re.compile(r"^OPS_STEP\s+(\{.*\})\s*$", re.M)
+PHASE_RULES = [
+    ("push", re.compile(r"\bgit push\b|/discussions/[^/\s]+/notes|resolved=true|opsboard review (reply|describe)|\bglab mr (note|update)|mr_threads\.py[\s\S]*\b(reply|resolve|describe)\b")),
+    ("commit", re.compile(r"\bgit (-c \S+ )*commit\b")),
+    ("fix", re.compile(r"\bsed -i\b|\bperl -0?pi\b|\.write_text\(|open\([^)]*,\s*['\"]w|\.write\(s\)|\bpatch -p\d|\bgit apply\b")),
+    (
+        "checks",
+        re.compile(r"\binvoke (test|lint)|test-warm|test-changed|\bpytest\b|\bruff\b|\bmsgfmt\b|node --check|python3? -m (py_compile|unittest)|--test-enable|static_gate|\bnpm (test|run lint)"),
+    ),
+    ("merge", re.compile(r"\bgit (-c \S+ )*(fetch|merge|pull|rebase)\b|merge-tree")),
+    ("threads", re.compile(r"/discussions|opsboard review (threads|info)|\bglab mr view|mr_threads\.py[\s\S]*\b(info|list)\b")),
+]
+
+
+def _phases_of(cmd):
+    return [name for name, rx in PHASE_RULES if rx.search(cmd)]
+
+
+RE_REPLIED = re.compile(r"/discussions/([0-9a-f]{8,})|\b(?:reply|resolve) \d+ ([0-9a-f]{8,})")
+
+
+def run_timeline(rid):
+    """Phases, a live feed and reply activity of one fix run, read from its stream-json log."""
+    run = next((r for r in load_runs() if r["id"] == rid), None)
+    if not run:
+        raise ValueError("unknown run")
+    try:
+        lines = Path(run["log"]).read_text(errors="replace").splitlines()
+    except OSError:
+        lines = []
+    events, pending, touched, steps = [], {}, {}, {}
+    replied = set()
+
+    def mark(phase, at):
+        first, _ = touched.get(phase, (at, at))
+        touched[phase] = (first, at)
+
+    for line in lines:
+        try:
+            ev = json.loads(line)
+        except ValueError:
+            continue
+        at = epoch(ev.get("timestamp") or "") or None
+        kind = ev.get("type")
+        if kind == "assistant" and not ev.get("parent_tool_use_id"):
+            for b in ev["message"].get("content", []):
+                if b.get("type") == "text" and b.get("text", "").strip():
+                    for m in RE_STEP.finditer(b["text"]):
+                        try:
+                            step = json.loads(m.group(1))
+                        except ValueError:
+                            continue
+                        if step.get("step") in dict(PHASES):
+                            steps[step["step"]] = step
+                            mark(step["step"], at)
+                    text = RE_RESULT.sub("", RE_STEP.sub("", b["text"])).strip()
+                    if text:
+                        events.append({"kind": "say", "text": text[:1500], "at": at})
+                elif b.get("type") == "tool_use":
+                    name, inp = b.get("name", ""), b.get("input") or {}
+                    item = {"kind": "tool", "tool": name, "at": at, "id": b.get("id"), "status": "running"}
+                    if name == "Bash":
+                        cmd = str(inp.get("command") or "")
+                        item.update(text=inp.get("description") or cmd.splitlines()[0][:200] if cmd else "", cmd=cmd[:2000], bg=bool(inp.get("run_in_background")))
+                        found = _phases_of(cmd)
+                        for phase in found:
+                            mark(phase, at)
+                        if found:
+                            item["phase"] = found[0]
+                        if "push" in found:
+                            replied.update(x for pair in RE_REPLIED.findall(cmd) for x in pair if x)
+                    elif name in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
+                        item.update(text=str(inp.get("file_path") or ""), phase="fix")
+                        mark("fix", at)
+                    elif name in ("Read", "Grep", "Glob"):
+                        item.update(text=str(inp.get("file_path") or inp.get("pattern") or ""))
+                    elif name in ("Agent", "Task"):
+                        item.update(text=str(inp.get("description") or ""))
+                    else:
+                        item.update(text=name)
+                    events.append(item)
+                    pending[b.get("id")] = item
+        elif kind == "user":
+            for b in (ev.get("message") or {}).get("content") or []:
+                if isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id") in pending:
+                    item = pending.pop(b["tool_use_id"])
+                    item["status"] = "failed" if b.get("is_error") else ("background" if item.get("bg") else "done")
+        elif kind == "system" and ev.get("subtype") == "task_notification":
+            events.append({"kind": "note", "text": str(ev.get("summary") or ev.get("status") or "background job finished")[:300], "at": at})
+        elif kind == "result":
+            events.append({"kind": "result", "text": "", "at": at, "error": bool(ev.get("is_error"))})
+    finished = run["status"] != "running"
+    order = [p for p, _ in PHASES]
+    reached = max((order.index(p) for p in touched), default=-1)
+    phases = []
+    for i, (key, label) in enumerate(PHASES):
+        first, last = touched.get(key, (None, None))
+        if key in touched and (finished or i < reached):
+            st = "done"
+        elif key in touched:
+            st = "running"
+        elif i < reached:
+            st = "skipped"
+        else:
+            st = "skipped" if finished else "pending"
+        if finished and run["status"] in ("error", "stopped") and i == reached:
+            st = "failed" if run["status"] == "error" else "stopped"
+        explicit = steps.get(key) or {}
+        if explicit.get("status") in ("done", "running", "skipped", "failed"):
+            st = explicit["status"]
+        phases.append({"key": key, "label": label, "status": st, "start": first, "end": last, "note": str(explicit.get("note") or "")[:200]})
+    public = {k: v for k, v in run.items() if k not in ("log", "pid")}
+    return {"run": public, "phases": phases, "events": events[-400:], "replied": sorted(replied)}

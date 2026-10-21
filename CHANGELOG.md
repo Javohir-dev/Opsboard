@@ -5,6 +5,7 @@ All notable changes. Versions follow [semantic versioning](https://semver.org/);
 ## Unreleased
 
 ### Added
+- **Fix run progress:** a fix tab on the request page with the steps of the run, the threads it handled and a live feed of Claude's messages, commands and edits; earlier runs can be picked. Background runs, the running badge and run notifications open it. Skills can name their steps with optional `OPS_STEP` lines (`docs/fix-skill.md`).
 - Request *Overview* sidebar like GitLab's: assignees, reviewers with their review state, labels, milestone, tasks, time tracking and participants, with avatars.
 - Request page header and tabs like GitLab: *Overview* (description rendered with marked + DOMPurify, Mermaid diagrams, pipeline, approvals, threads, reviewers, labels), *Commits*, *Pipelines* / *Checks* and *Changes*. The libraries are vendored; Mermaid loads only when a description has a diagram.
 - Request page changes look like GitLab's: a file tree with search and list / tree views, syntax colouring (highlight.js, vendored), *Viewed* per file, copy path, file mode changes, expand / collapse all, and a toggle for the threads column.

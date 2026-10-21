@@ -23,7 +23,7 @@ from notes import load_marks, load_notes, notes_lock, save_notes, set_mark
 from providers import github, review_host, tracker
 from providers.gitlab import gitlab_get
 from providers.jira import jira_account, save_jira_account
-from runs import fix_prompt, launch_fix, stop_run
+from runs import fix_prompt, launch_fix, run_timeline, stop_run
 from sessions import collect_sessions
 from system import collect_claude_usage, collect_docker, collect_docker_df, collect_docker_stats, collect_mac, collect_mac_slow, collect_pg, collect_pg_sizes, collect_version, collect_worktrees
 from tasks import collect_tasks_loop, refresh_tasks
@@ -324,6 +324,13 @@ class Handler(BaseHTTPRequestHandler):
             except (error.URLError, OSError) as exc:
                 out = {"ok": False, "error": f"{exc.__class__.__name__}: {str(exc)[:200]}"}
             self.send(redact(json.dumps(out, ensure_ascii=False)), "application/json")
+        elif self.path.startswith("/api/run?"):
+            query = dict(p.split("=", 1) for p in self.path.split("?", 1)[1].split("&") if "=" in p)
+            try:
+                out = {"ok": True, **(demo.run_timeline(query.get("id", "")) if DEMO else run_timeline(query.get("id", "")))}
+            except ValueError as exc:
+                out = {"ok": False, "error": str(exc)}
+            self.send(redact(json.dumps(out, ensure_ascii=False, default=str)), "application/json")
         elif self.path.startswith("/api/doctor"):
             self.send(redact(json.dumps(demo.DOCTOR if DEMO else detect.doctor())), "application/json")
         elif self.path.startswith("/api/state"):

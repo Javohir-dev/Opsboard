@@ -181,7 +181,7 @@ The dialog turns into a call like `/<skill> 7264 push skip-tests`:
 | Skip tests | `skip-tests` |
 | Push, reply and resolve | `push` |
 
-Follow it under **Background runs** on Overview or Tasks; **Stop** kills it. Turn the action off in *Settings → Claude → Background runs*.
+Follow it under **Background runs** on Overview or Tasks, or on the request page's fix tab: the steps (*Merge target → Threads → Fix → Checks → Commit → Push & reply*) with how long each took, which threads were replied to or resolved during the run, and a live feed of what Claude says, runs and edits (click a command to see it in full). **Stop** kills it. Turn the action off in *Settings → Claude → Background runs*.
 
 When a run finishes, the **bell** next to the logo (top right on a phone) shows a red count and the tab title gets `(1)`. Click it to see what the run did — pushed, committed, stopped or failed, with the commit, threads and checks — and click an entry to jump to its merge / pull request on Overview, which lights up once so it is easy to spot (the run, if the request is no longer open). Runs you stop yourself are not announced. A **new review thread** on one of your open requests is announced too (not your own); opening it jumps to the thread on the request page. Each notification plays a short system sound (Glass, or Basso when the run failed or stopped; on Linux the freedesktop sounds through `paplay`/`pw-play`) — *Settings → Claude → Sound when a fix finishes*, with a *Play it* button to try it.
 

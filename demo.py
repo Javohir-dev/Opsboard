@@ -491,6 +491,38 @@ def mr_detail(iid):
     }
 
 
+def run_timeline(rid):
+    now = time.time()
+    t0 = now - 4 * 3600 - 900
+    ph = lambda k, label, a, b, st="done": {"key": k, "label": label, "status": st, "start": t0 + a, "end": t0 + b, "note": ""}  # noqa: E731
+    say = lambda a, text: {"kind": "say", "text": text, "at": t0 + a}  # noqa: E731
+    cmd = lambda a, text, c, phase=None, st="done": {"kind": "tool", "tool": "Bash", "text": text, "cmd": c, "phase": phase, "status": st, "at": t0 + a}  # noqa: E731
+    return {
+        "run": {"id": rid},
+        "phases": [
+            ph("merge", "Merge target", 20, 60),
+            ph("threads", "Threads", 5, 90),
+            ph("fix", "Fix", 120, 420),
+            ph("checks", "Checks", 430, 700),
+            ph("commit", "Commit", 710, 720),
+            ph("push", "Push & reply", 730, 800),
+        ],
+        "events": [
+            cmd(5, "Fetch the request and its open threads", "opsboard review threads 409", "threads"),
+            cmd(20, "Merge the target branch", "git fetch origin && git merge --no-edit origin/main", "merge"),
+            say(70, "Merge went through cleanly. 3 threads, all valid — starting with cart.py:17."),
+            {"kind": "tool", "tool": "Edit", "text": "shop/cart.py", "phase": "fix", "status": "done", "at": t0 + 150},
+            {"kind": "tool", "tool": "Write", "text": "shop/tests/test_cart.py", "phase": "fix", "status": "done", "at": t0 + 400},
+            cmd(430, "Run the cart tests", "pytest shop/tests -q", "checks"),
+            say(700, "Tests pass (128/128). Committing."),
+            cmd(710, "Commit the fixes", "git commit -m 'Round cart totals to cents'", "commit"),
+            cmd(730, "Push and reply to the threads", "git push && opsboard review reply 409 t1 r1.md --resolve", "push"),
+            {"kind": "result", "text": "", "at": t0 + 805, "error": False},
+        ],
+        "replied": ["t1"],
+    }
+
+
 def notifications(now):
     return [
         {

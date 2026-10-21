@@ -109,6 +109,7 @@ function openNotif(id) {
   if (!n.read) markNotifsRead([id]);
   closeNotifPanel();
   if (n.kind === "thread") { focusMrThread(n.iid, n.thread_id); return; }
+  if (n.kind === "run" && n.iid) { ui.mrRun = n.run_id; location.hash = `#/mr/${n.iid}/fix`; return; }
   ui.focusRun = n.run_id;
   if (route().page !== "overview") location.hash = "#/"; else render();
   setTimeout(() => {

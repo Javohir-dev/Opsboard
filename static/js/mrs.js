@@ -25,7 +25,7 @@ function mrRow(m) {
           <span class="slot sr">${m.reviewers.map(r => `<span class="avatar" title="Reviewer: ${esc(r)}">${esc(initials(r))}</span>`).join("")}</span>
           <span class="slot sa">${m.approved ? `<span class="mrpill okp" title="Approved by ${esc(m.approved_by.join(", "))}">${icon("check", 14)}Approved</span>` : ""}</span>
           <span class="slot st">${thr}</span>
-          <span class="slot sk">${run ? `<span class="cnt running"><span class="dot busy"></span>${esc(conf("claude.fix_skill") || "fix")} ${dur(now() - run.started)}</span>` : `<button class="kebab" data-menu="!${m.iid}" data-minimizable="1" title="Mark, minimize, mr-fix" aria-label="Actions for !${m.iid}">${icon("more", 16)}</button>`}</span>
+          <span class="slot sk">${run ? `<a class="cnt running" href="#/mr/${m.iid}/fix" data-open-run="${esc(run.id)}" title="Show progress"><span class="dot busy"></span>${esc(conf("claude.fix_skill") || "fix")} ${dur(now() - run.started)}</a>` : `<button class="kebab" data-menu="!${m.iid}" data-minimizable="1" title="Mark, minimize, mr-fix" aria-label="Actions for !${m.iid}">${icon("more", 16)}</button>`}</span>
         </div>
         <div class="muted mrwhen" title="${esc(fmtDateTime(m.state === "merged" ? m.merged : m.state === "closed" ? (m.closed || m.updated) : m.updated))}">${when}</div>
       </div>

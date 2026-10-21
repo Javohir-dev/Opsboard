@@ -122,6 +122,17 @@ OPS_RESULT {"status":"pushed","commit":"a1b2c3d","threads":{"resolved":3,"open":
 
 The **Background runs** card shows this line; without it, the card shows the last lines of the report.
 
+### Progress (optional)
+
+The request page's fix tab shows six steps — *Merge target, Threads, Fix, Checks, Commit, Push & reply* — guessed from the commands the skill runs (`git merge`, test commands, file edits, `git commit`, `git push`, replies). To name them exactly, print a line on its own when a step starts or ends:
+
+```
+OPS_STEP {"step":"checks","status":"running","note":"tests 12/40"}
+OPS_STEP {"step":"checks","status":"done","note":"tests 40/40"}
+```
+
+`step` is one of `merge`, `threads`, `fix`, `checks`, `commit`, `push`; `status` is `running`, `done`, `skipped` or `failed`; `note` is shown under the step. These lines are hidden from the live feed.
+
 ## 8. Replies on threads
 
 Short, in `OPS_REPLY_LANGUAGE`: what changed, the commit, how it was checked. No apologies or filler. When you disagree with a reviewer, say why with evidence (file and line, a test, a measurement) and still resolve the thread if your process allows it.
