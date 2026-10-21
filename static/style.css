@@ -831,13 +831,13 @@ main:has(.mrlayout) { max-width: none; }
 @media (max-width: 760px) { .mrbar2 { top: 52px; margin: 0 -16px 14px; padding: 8px 16px; } .mrstat { display: none; } .dviewed { display: none; } }
 
 /* merge request page: GitLab header, tabs, overview */
-.mrsub { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: -6px 0 18px; font-size: var(--fs-base); }
+.mrhdr { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: -6px 0 18px; font-size: var(--fs-base); }
 .mrstate { display: inline-flex; align-items: center; gap: 5px; padding: 2px 10px; border-radius: var(--r-full); font-size: var(--fs-md); font-weight: 600; }
 .mrstate.s-opened { background: color-mix(in srgb, var(--ok) 22%, transparent); color: var(--ok); }
 .mrstate.s-merged { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); }
 .mrstate.s-closed { background: color-mix(in srgb, var(--bad) 22%, transparent); color: var(--bad); }
 .brchip { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: var(--fs-sm); padding: 2px 8px; border-radius: var(--r-xs); background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); }
-.mrsub .dicon { width: 26px; height: 26px; margin-left: -4px; }
+.mrhdr .dicon { width: 26px; height: 26px; margin-left: -4px; }
 .mrtabs2 { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
 .mrtabs2 a { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; color: var(--muted); font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .mrtabs2 a:hover { color: var(--text); text-decoration: none; }
