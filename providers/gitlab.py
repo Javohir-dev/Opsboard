@@ -286,7 +286,7 @@ def detail(iid):
         if exc.code != 404:
             raise
         raw = gitlab_get(f"{base}/changes").get("changes", [])
-    files = [{"path": f["new_path"], "old_path": f["old_path"], "status": _file_status(f), "diff": f.get("diff") or "", "too_large": bool(f.get("too_large") or f.get("collapsed"))} for f in raw]
+    files = [{"path": f["new_path"], "old_path": f["old_path"], "status": _file_status(f), "diff": f.get("diff") or "", "too_large": bool(f.get("too_large") or f.get("collapsed")), "a_mode": f.get("a_mode") or "", "b_mode": f.get("b_mode") or ""} for f in raw]
     threads = []
     for d in _paged(f"{base}/discussions"):
         notes = [n for n in d.get("notes", []) if not n.get("system")]

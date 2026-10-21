@@ -5,6 +5,7 @@ All notable changes. Versions follow [semantic versioning](https://semver.org/);
 ## Unreleased
 
 ### Added
+- Request page changes look like GitLab's: a file tree with search and list / tree views, syntax colouring (highlight.js, vendored), *Viewed* per file, copy path, file mode changes, expand / collapse all, and a toggle for the threads column.
 - A notification for every new review thread on your open requests; it opens the request page at that thread.
 - Request page threads look like GitLab's: who started it on which line and when, resolved ones folded into *N replies · Last reply by …*; a counter with ↑ ↓ steps through the unresolved ones. Plain comments are left out.
 - **Merge / pull request page:** a title opens the request inside Opsboard — the diff file by file, and the threads on the right with their replies; resolved threads are folded. Markers link diff lines and threads both ways.

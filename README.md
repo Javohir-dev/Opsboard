@@ -132,7 +132,7 @@ Your open requests also appear on Overview, under *Tasks · needs attention*. Th
 
 ### A merge / pull request
 
-Click a title to open it here instead of on GitLab / GitHub: the changes file by file like the host's *Changes* tab (long files fold away; click a file name to fold it), and on the right every review thread like GitLab shows it — unresolved ones open on top, resolved ones folded into *N replies · Last reply by …* with who resolved them and when. The counter above them jumps between the unresolved threads (↑ ↓) and ⋮ expands or folds them all. A marker in the diff shows where a thread sits; click it, or the `file:line` on a thread, to jump between them. **Open in GitLab** and **Run fix** are at the top; the page reloads from the host every two minutes or with ↻.
+Click a title to open it here instead of on GitLab / GitHub: the changes like the host's *Changes* tab — a file tree with search on the left, syntax-coloured diffs, *Viewed* per file (remembered in your browser), copy path, expand / collapse all — and on the right every review thread like GitLab shows it — unresolved ones open on top, resolved ones folded into *N replies · Last reply by …* with who resolved them and when. The counter above them jumps between the unresolved threads (↑ ↓) and ⋮ expands or folds them all. A marker in the diff shows where a thread sits; click it, or the `file:line` on a thread, to jump between them. **Open in GitLab** and **Run fix** are at the top; the page reloads from the host every two minutes or with ↻.
 
 ### Notes page
 
