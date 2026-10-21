@@ -6,7 +6,17 @@ import server
 from core import lock, state
 from providers import gitlab
 
-MR = {"iid": 7, "title": "Fix totals", "web_url": "https://gl/x/-/merge_requests/7", "author": {"name": "Dev"}, "description": "d"}
+MR = {
+    "iid": 7,
+    "title": "Fix totals",
+    "web_url": "https://gl/x/-/merge_requests/7",
+    "author": {"name": "Dev"},
+    "description": "d",
+    "assignees": [{"name": "Dev", "username": "dev"}],
+    "reviewers": [{"name": "Lena", "username": "lena"}, {"name": "Max", "username": "max"}],
+    "milestone": {"title": "Q4"},
+    "time_stats": {"human_time_estimate": "2h", "human_total_time_spent": "30m"},
+}
 DIFFS = [
     {"new_path": "a.py", "old_path": "a.py", "diff": "@@ -1 +1 @@\n-x\n+y\n"},
     {"new_path": "b.py", "old_path": "old_b.py", "renamed_file": True, "diff": ""},
@@ -37,6 +47,12 @@ def fake_get(path, params=None, **kw):
             if (params or {}).get("page", 1) == 1
             else []
         )
+    if path.endswith("/reviewers"):
+        return [{"user": {"username": "max"}, "state": "requested_changes"}, {"user": {"username": "lena"}, "state": "unreviewed"}]
+    if path.endswith("/approvals"):
+        return {"approved_by": [{"user": {"username": "lena"}}]}
+    if path.endswith("/participants"):
+        return [{"name": "Dev", "username": "dev", "avatar_url": "a"}, {"name": "Lena", "username": "lena"}]
     if path.endswith("/pipelines"):
         return [{"id": 5, "status": "success", "ref": "feat", "sha": "abcdef1234", "created_at": "2026-10-20T09:05:00Z", "web_url": "p"}]
     return MR
@@ -59,6 +75,10 @@ class GitLabDetailTest(unittest.TestCase):
         self.assertEqual([(c["short"], c["title"]) for c in d["commits"]], [("abcdef12", "Round totals")])
         self.assertEqual([(x["id"], x["status"], x["sha"]) for x in d["pipelines"]], [(5, "success", "abcdef12")])
         self.assertEqual(d["notes"], 4)
+        sb = d["sidebar"]
+        self.assertEqual([(r["username"], r["state"]) for r in sb["reviewers"]], [("lena", "approved"), ("max", "requested_changes")])
+        self.assertEqual((sb["milestone"], sb["estimate"], sb["spent"], [a["username"] for a in sb["assignees"]]), ("Q4", "2h", "30m", ["dev"]))
+        self.assertEqual([p["username"] for p in sb["participants"]], ["dev", "lena"])
 
     def test_old_gitlab_without_diffs_endpoint(self):
         def old_get(path, params=None, **kw):

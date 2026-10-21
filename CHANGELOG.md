@@ -5,6 +5,7 @@ All notable changes. Versions follow [semantic versioning](https://semver.org/);
 ## Unreleased
 
 ### Added
+- Request *Overview* sidebar like GitLab's: assignees, reviewers with their review state, labels, milestone, tasks, time tracking and participants, with avatars.
 - Request page header and tabs like GitLab: *Overview* (description rendered with marked + DOMPurify, Mermaid diagrams, pipeline, approvals, threads, reviewers, labels), *Commits*, *Pipelines* / *Checks* and *Changes*. The libraries are vendored; Mermaid loads only when a description has a diagram.
 - Request page changes look like GitLab's: a file tree with search and list / tree views, syntax colouring (highlight.js, vendored), *Viewed* per file, copy path, file mode changes, expand / collapse all, and a toggle for the threads column.
 - A notification for every new review thread on your open requests; it opens the request page at that thread.

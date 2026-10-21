@@ -351,7 +351,30 @@ def detail(iid):
     except error.HTTPError:
         pipelines = []
     author = m.get("author") or {}
+    person = lambda u: {"name": u.get("name") or u.get("username", ""), "username": u.get("username", ""), "avatar": u.get("avatar_url") or ""}  # noqa: E731
+    try:
+        review_state = {r["user"]["username"]: r.get("state") or "" for r in gitlab_get(f"{base}/reviewers") if r.get("user")}
+    except (error.HTTPError, KeyError, TypeError):
+        review_state = {}
+    try:
+        approved = {a["user"]["username"] for a in gitlab_get(f"{base}/approvals").get("approved_by") or [] if a.get("user")}
+    except (error.HTTPError, KeyError, TypeError, AttributeError):
+        approved = set()
+    try:
+        participants = [person(u) for u in gitlab_get(f"{base}/participants")]
+    except error.HTTPError:
+        participants = []
+    ts = m.get("time_stats") or {}
+    sidebar = {
+        "assignees": [person(u) for u in m.get("assignees") or []],
+        "reviewers": [dict(person(u), state="approved" if u.get("username") in approved else review_state.get(u.get("username"), "")) for u in m.get("reviewers") or []],
+        "milestone": (m.get("milestone") or {}).get("title") or "",
+        "estimate": ts.get("human_time_estimate") or "",
+        "spent": ts.get("human_total_time_spent") or "",
+        "participants": participants,
+    }
     return {
+        "sidebar": sidebar,
         "number": m["iid"],
         "title": m["title"],
         "url": m["web_url"],

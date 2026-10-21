@@ -890,3 +890,10 @@ main:has(.mrlayout) { max-width: none; }
 .mdmermaid { margin: 8px 0 14px; overflow-x: auto; }
 .mdmermaid svg { max-width: 100%; height: auto; }
 @media (max-width: 1100px) { .mrov { grid-template-columns: 1fr; } .mrside2 { position: static; } }
+.avatar.avimg { position: relative; overflow: hidden; }
+.avatar.avimg img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.mrside2 .avatar { width: 28px; height: 28px; flex: none; }
+.sperson { min-height: 30px; }
+.rvs { display: inline-flex; color: var(--muted); } .rvs.ok { color: var(--ok); } .rvs.bad { color: var(--warn); }
+.sparts { display: flex; flex-wrap: wrap; gap: 6px; }
+.sparts .avatar { width: 32px; height: 32px; }

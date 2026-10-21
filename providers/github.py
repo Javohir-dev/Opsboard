@@ -392,7 +392,30 @@ def detail(number):
         }
         for r in runs
     ]
+    person = lambda u: {"name": u.get("login", ""), "username": u.get("login", ""), "avatar": u.get("avatar_url") or ""}  # noqa: E731
+    reviews = get(f"repos/{repo()}/pulls/{int(number)}/reviews", {"per_page": 100})
+    verdict = {}
+    for r in reviews:
+        who = (r.get("user") or {}).get("login")
+        if who and r.get("state") in ("APPROVED", "CHANGES_REQUESTED", "COMMENTED"):
+            verdict[who] = {"APPROVED": "approved", "CHANGES_REQUESTED": "requested_changes", "COMMENTED": "reviewed"}[r["state"]]
+    reviewers = {u["login"]: person(u) for u in pr.get("requested_reviewers") or []}
+    reviewers.update({(r.get("user") or {}).get("login"): person(r["user"]) for r in reviews if r.get("user")})
+    seen, participants = set(), []
+    for u in [pr.get("user") or {}] + [r.get("user") or {} for r in reviews]:
+        if u.get("login") and u["login"] not in seen:
+            seen.add(u["login"])
+            participants.append(person(u))
+    sidebar = {
+        "assignees": [person(u) for u in pr.get("assignees") or []],
+        "reviewers": [dict(p, state=verdict.get(k, "")) for k, p in reviewers.items() if k],
+        "milestone": (pr.get("milestone") or {}).get("title") or "",
+        "estimate": "",
+        "spent": "",
+        "participants": participants,
+    }
     return {
+        "sidebar": sidebar,
         "author_username": (pr.get("user") or {}).get("login", ""),
         "created": epoch(pr.get("created_at") or ""),
         "commits": commits,

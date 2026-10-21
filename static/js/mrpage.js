@@ -249,6 +249,11 @@ function threadOrder(d) {
 const MR_TABS = ["overview", "commits", "pipelines", "changes"];
 function mrTab() { const t = location.hash.split("/")[3]; return MR_TABS.includes(t) ? t : "overview"; }
 const projectUrl = url => (url || "").split(isGitHub() ? "/pull/" : "/-/merge_requests")[0];
+const REVIEW_STATE = {
+  approved: `<span class="rvs ok" title="Approved">${icon("ok", 16)}</span>`,
+  requested_changes: `<span class="rvs bad" title="Requested changes">${icon("warning", 16)}</span>`,
+  reviewed: `<span class="rvs" title="Reviewed">${icon("comment", 15)}</span>`,
+};
 const STATE_LABEL = { opened: ["Open", "mrs"], merged: ["Merged", "mrs"], closed: ["Closed", "x"] };
 
 function commitsTab(d) {
@@ -279,11 +284,20 @@ function overviewTab(d, m) {
     threads.length ? `<div class="wrow"><span class="wic ${open ? "warn" : "ok"}">${icon(open ? "comment" : "ok", 18)}</span><span>${open ? `<b>${plural(open, "unresolved thread")}</b>` : "All threads resolved"} <span class="muted">· ${threads.length - open} of ${threads.length} resolved</span></span></div>` : "",
     m?.conflicts ? `<div class="wrow"><span class="wic bad">${icon("warning", 18)}</span><span><b>Merge conflicts</b> <span class="muted">with ${esc(m.target)}</span></span></div>` : "",
   ].filter(Boolean).join("");
-  const side = m ? `<aside class="mrside2">
-      <div class="sblock"><div class="sh">Reviewers</div>${m.reviewers.length ? m.reviewers.map(r => `<div class="sperson">${avatarOf(r)}<span>${esc(r)}</span>${m.approved_by.includes(r) ? `<span class="okp">${icon("check", 13)}</span>` : ""}</div>`).join("") : '<span class="muted">None</span>'}</div>
-      <div class="sblock"><div class="sh">Labels</div>${m.labels.length ? `<div class="slabels">${m.labels.map(mrLabel).join("")}</div>` : '<span class="muted">None</span>'}</div>
-      ${m.keys?.length ? `<div class="sblock"><div class="sh">Tasks</div>${m.keys.map(k => `<span class="mono">${esc(k)}</span>`).join(" ")}</div>` : ""}
-    </aside>` : "";
+  const sb = d.sidebar || {};
+  const face = u => u.avatar ? `<span class="avatar avimg" title="${esc(u.name)}"><img src="${esc(u.avatar)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"><span>${esc(initials(u.name || "?"))}</span></span>` : avatarOf(u.name);
+  const people = list => list?.length ? list.map(u => `<div class="sperson">${face(u)}<span class="grow">${esc(u.name)}</span>${REVIEW_STATE[u.state] || ""}</div>`).join("") : '<span class="muted">None</span>';
+  const reviewers = sb.reviewers || (m?.reviewers || []).map(r => ({ name: r, state: m.approved_by.includes(r) ? "approved" : "" }));
+  const time = sb.estimate || sb.spent ? [sb.spent ? `Spent <b>${esc(sb.spent)}</b>` : "", sb.estimate ? `Estimate <b>${esc(sb.estimate)}</b>` : ""].filter(Boolean).join(" · ") : '<span class="muted">No estimate or time spent</span>';
+  const side = `<aside class="mrside2">
+      <div class="sblock"><div class="sh">${(sb.assignees || []).length > 1 ? "Assignees" : "Assignee"}</div>${people(sb.assignees || (m ? [{ name: m.author }] : []))}</div>
+      <div class="sblock"><div class="sh">${reviewers.length > 1 ? "Reviewers" : "Reviewer"}</div>${people(reviewers)}</div>
+      <div class="sblock"><div class="sh">Labels</div>${m?.labels.length ? `<div class="slabels">${m.labels.map(mrLabel).join("")}</div>` : '<span class="muted">None</span>'}</div>
+      <div class="sblock"><div class="sh">Milestone</div>${sb.milestone ? esc(sb.milestone) : '<span class="muted">None</span>'}</div>
+      ${m?.keys?.length ? `<div class="sblock"><div class="sh">Tasks</div><div>${m.keys.map(k => `<span class="mono">${esc(k)}</span>`).join(" ")}</div></div>` : ""}
+      ${isGitHub() ? "" : `<div class="sblock"><div class="sh">Time tracking</div><div>${time}</div></div>`}
+      ${sb.participants?.length ? `<div class="sblock"><div class="sh">${plural(sb.participants.length, "Participant")}</div><div class="sparts">${sb.participants.map(face).join("")}</div></div>` : ""}
+    </aside>`;
   return `<div class="mrov"><div class="mrovmain">
       ${d.description ? `<div class="panel md mrdesc">${md(d.description, projectUrl(d.url))}</div>` : '<div class="empty">No description.</div>'}
       ${widget ? `<div class="panel mrwidget">${widget}</div>` : ""}
