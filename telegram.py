@@ -24,7 +24,6 @@ PIPE_ICON = {"success": "🟢", "failed": "🔴", "running": "🔵", "pending": 
 
 _status = {"bot": "", "error": "", "running": False}
 _pair = {"code": "", "until": 0.0}
-_chat = {"proc": None, "busy": False}
 _boot = time.time()
 esc = html.escape
 
@@ -79,7 +78,7 @@ def public():
         "error": _status["error"],
         "linked": bool(chat_id()),
         "user": cfg.get("telegram.user") or "",
-        "chat_busy": _chat["busy"],
+        "chat_busy": CHAT.busy,
     }
     if configured and not out["linked"] and _status["bot"]:
         out["code"] = pair_code()
@@ -505,102 +504,161 @@ def _save_chat(data):
     CHAT_FILE.write_text(json.dumps(data))
 
 
-def ask_claude(text, message_id=None):
-    if _chat["busy"]:
-        send("Still answering the previous message — /cancel stops it.")
-        return
-    _chat["busy"] = True
-    if message_id:
-        react(message_id)
-    threading.Thread(target=_run_claude, args=(text,), daemon=True).start()
+IDLE_CLOSE = 3 * 3600
+EXTRA = {"en": "🔔 Claude came back:", "uz": "🔔 Claude qaytib keldi:", "ru": "🔔 Claude вернулся:"}
+QUEUED = {"en": "⏳ Queued — after the current answer", "uz": "⏳ Navbatda — joriy javobdan keyin", "ru": "⏳ В очереди — после текущего ответа"}
 
 
-def _kill(proc):
-    try:
-        os.killpg(proc.pid, signal.SIGTERM)
-    except (ProcessLookupError, PermissionError):
-        pass
+class ClaudeChat:
+    """One long-lived Claude Code process per linked chat: messages queue into it, and it stays alive between turns
+    so it can come back on its own (a background job finished, another session answered)."""
 
+    def __init__(self):
+        self.proc = None
+        self.mode = ""
+        self.turns = []
+        self.doing = ""
+        self.lang = "uz"
+        self.last = time.time()
+        self.lock = threading.Lock()
 
-def _waiting_text(lang, phrase, started, doing):
-    return f"{esc(phrase)}\n\n<i>⏱ {_dur(time.time() - started)}{' · ' + esc(doing) if doing else ''}</i>"
+    @property
+    def busy(self):
+        return bool(self.turns)
 
+    def _start(self):
+        mode = cfg.get("telegram.chat_permission") or "plan"
+        root = project_root()
+        sid = _load_chat().get("session_id")
+        cmd = [claude_bin(), "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--permission-mode", mode] + (["--resume", sid] if sid else [])
+        self.proc = subprocess.Popen(
+            cmd,
+            cwd=str(root) if root and root.is_dir() else str(Path.home()),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+            start_new_session=True,
+        )
+        self.mode = mode
+        threading.Thread(target=self._read, args=(self.proc,), daemon=True).start()
+        threading.Thread(target=self._tick, args=(self.proc,), daemon=True).start()
 
-def _run_claude(text):
-    lang = lang_of(text)
-    mode = cfg.get("telegram.chat_permission") or "plan"
-    root = project_root()
-    cwd = str(root) if root and root.is_dir() else str(Path.home())
-    sid = _load_chat().get("session_id")
-    cmd = [claude_bin(), "-p", text, "--output-format", "stream-json", "--verbose", "--permission-mode", mode] + (["--resume", sid] if sid else [])
-    try:
-        proc = subprocess.Popen(cmd, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
-    except OSError as exc:
-        _chat["busy"] = False
-        send(f"Could not start Claude: {esc(str(exc))}")
-        return
-    _chat["proc"] = proc
-    live = {"doing": "", "result": None, "session": ""}
+    def alive(self):
+        return self.proc is not None and self.proc.poll() is None
 
-    def read():
+    def ask(self, text, message_id=None):
+        lang = lang_of(text)
+        if message_id:
+            react(message_id)
+        with self.lock:
+            if self.alive() and self.mode != (cfg.get("telegram.chat_permission") or "plan") and not self.turns:
+                self.close()
+            if not self.alive():
+                try:
+                    self._start()
+                except OSError as exc:
+                    send(f"Could not start Claude: {esc(str(exc))}")
+                    return
+            queued = bool(self.turns)
+            msg = send(_waiting_text(QUEUED[lang] if queued else random.choice(WAIT[lang]), time.time(), ""))
+            self.turns.append({"placeholder": (msg or {}).get("message_id"), "started": time.time(), "lang": lang, "phrases": random.sample(WAIT[lang], len(WAIT[lang]))})
+            self.lang, self.last = lang, time.time()
+            try:
+                self.proc.stdin.write(json.dumps({"type": "user", "message": {"role": "user", "content": text}}) + "\n")
+                self.proc.stdin.flush()
+            except (OSError, ValueError):
+                self.turns.pop()
+                send("Claude is not running — send the message again.")
+
+    def _read(self, proc):
         for line in proc.stdout:
             try:
                 ev = json.loads(line)
             except ValueError:
                 continue
-            if ev.get("session_id"):
-                live["session"] = ev["session_id"]
+            if ev.get("session_id") and ev.get("type") in ("system", "result") and _load_chat().get("session_id") != ev["session_id"]:
+                _save_chat({"session_id": ev["session_id"], "at": time.time()})
             if ev.get("type") == "assistant" and not ev.get("parent_tool_use_id"):
                 for b in (ev.get("message") or {}).get("content") or []:
                     if b.get("type") == "tool_use":
-                        live["doing"] = _doing(b, lang)
+                        self.doing = _doing(b, self.lang)
                     elif b.get("type") == "thinking":
-                        live["doing"] = DOING[lang]["think"]
+                        self.doing = DOING[self.lang]["think"]
             elif ev.get("type") == "result":
-                live["result"] = ev
+                with self.lock:
+                    turn = self.turns.pop(0) if self.turns else None
+                    self.doing, self.last = "", time.time()
+                answer = str(ev.get("result") or "").strip()
+                if ev.get("is_error") or not answer:
+                    note = "⚠️ " + esc((answer or "Claude did not answer").strip()[-800:])
+                    if not (turn and turn["placeholder"] and edit(turn["placeholder"], note)):
+                        send(note)
+                elif turn:
+                    deliver(answer, turn["placeholder"])
+                else:
+                    send(f"<i>{esc(EXTRA[self.lang])}</i>")
+                    deliver(answer)
+        err = (proc.stderr.read() or "").strip() if proc.stderr else ""
+        with self.lock:
+            left, self.turns = self.turns, []
+            if self.proc is proc:
+                self.proc = None
+        for turn in left:
+            text = CANCELLED[turn["lang"]] if proc.returncode and proc.returncode < 0 else "⚠️ " + esc((err or "Claude stopped")[-500:])
+            if not (turn["placeholder"] and edit(turn["placeholder"], text)):
+                send(text)
 
-    reader = threading.Thread(target=read, daemon=True)
-    reader.start()
-    started, phrases, last = time.time(), list(WAIT[lang]), ""
-    random.shuffle(phrases)
-    msg = send(_waiting_text(lang, phrases[0], started, ""))
-    placeholder = msg.get("message_id") if msg else None
-    tick = 0
-    while proc.poll() is None:
+    def _tick(self, proc):
+        n = 0
+        while proc.poll() is None:
+            time.sleep(1)
+            n += 1
+            with self.lock:
+                turn = self.turns[0] if self.turns else None
+                idle = not self.turns and time.time() - self.last > IDLE_CLOSE
+            if idle:
+                self.close()
+                return
+            if not turn:
+                continue
+            try:
+                call("sendChatAction", chat_id=chat_id(), action="typing")
+            except TelegramError:
+                pass
+            if n % 5 == 0 and turn["placeholder"]:
+                phrase = turn["phrases"][(n // 5) % len(turn["phrases"])]
+                edit(turn["placeholder"], _waiting_text(phrase, turn["started"], self.doing))
+
+    def close(self):
+        proc = self.proc
+        if proc and proc.poll() is None:
+            try:
+                proc.stdin.close()
+            except OSError:
+                pass
+
+    def cancel(self):
+        proc = self.proc
+        if not proc or proc.poll() is not None:
+            return False
         try:
-            call("sendChatAction", chat_id=chat_id(), action="typing")
-        except TelegramError:
+            os.killpg(proc.pid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
             pass
-        time.sleep(1)
-        tick += 1
-        if tick % 5 == 0 and placeholder:
-            body = _waiting_text(lang, phrases[(tick // 5) % len(phrases)], started, live["doing"])
-            if body != last:
-                edit(placeholder, body)
-                last = body
-        if time.time() - started > CHAT_TIMEOUT:
-            _kill(proc)
-    reader.join(timeout=5)
-    err = proc.stderr.read() if proc.stderr else ""
-    _chat.update(proc=None, busy=False)
-    if proc.returncode and proc.returncode < 0 and not live["result"]:
-        if placeholder:
-            edit(placeholder, CANCELLED[lang])
-        else:
-            send(CANCELLED[lang])
-        return
-    res = live["result"] or {}
-    if res.get("session_id") or live["session"]:
-        _save_chat({"session_id": res.get("session_id") or live["session"], "at": time.time()})
-    answer = str(res.get("result") or "").strip()
-    if res.get("is_error") or not answer:
-        if sid and not res:
-            _save_chat({})
-        note = "⚠️ " + esc((answer or err or "Claude did not answer").strip()[-800:])
-        if not (placeholder and edit(placeholder, note)):
-            send(note)
-        return
-    deliver(answer, placeholder)
+        return True
+
+    def reset(self):
+        self.cancel()
+        _save_chat({})
+
+
+CHAT = ClaudeChat()
+
+
+def _waiting_text(phrase, started, doing):
+    return f"{esc(phrase)}\n\n<i>⏱ {_dur(time.time() - started)}{' · ' + esc(doing) if doing else ''}</i>"
 
 
 def reply_for(text, message_id=None):
@@ -620,18 +678,15 @@ def reply_for(text, message_id=None):
     if cmd == "/usage":
         return cmd_usage()
     if cmd == "/new":
-        _save_chat({})
+        CHAT.reset()
         return "🆕 New conversation with Claude.", None
     if cmd == "/cancel":
-        if not _chat["proc"]:
-            return "Nothing to cancel.", None
-        _kill(_chat["proc"])
-        return None, None
+        return (None, None) if CHAT.cancel() else ("Nothing to cancel.", None)
     if cmd:
         return "Unknown command.\n\n" + help_text(), None
     if not cfg.get("telegram.claude_chat"):
         return "Claude chat is off — Opsboard → Settings → Telegram → <i>Claude chat</i>.\n\n" + help_text(), None
-    ask_claude(text.strip(), message_id)
+    threading.Thread(target=CHAT.ask, args=(text.strip(), message_id), daemon=True).start()
     return None, None
 
 

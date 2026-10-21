@@ -1,5 +1,6 @@
 import io
 import json
+import queue
 import threading
 import time
 import unittest
@@ -27,6 +28,35 @@ class FakeTelegram(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.end_headers()
         self.wfile.write(raw)
+
+
+class FakeClaude:
+    instances = []
+
+    def __init__(self, cmd, **kw):
+        self.cmd, self.q, self.returncode, self.pid = cmd, queue.Queue(), None, 999999
+        FakeClaude.instances.append(self)
+        outer = self
+
+        class In:
+            def write(self, line):
+                text = json.loads(line)["message"]["content"]
+                outer.q.put(json.dumps({"type": "system", "subtype": "init", "session_id": "s1"}))
+                outer.q.put(json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Read", "input": {"file_path": "/x/cart.py"}}]}}))
+                outer.q.put(json.dumps({"type": "result", "result": f"echo **{text}**", "session_id": "s1"}))
+
+            def flush(self):
+                pass
+
+            def close(self):
+                outer.returncode = 0
+                outer.q.put(None)
+
+        self.stdin, self.stderr = In(), io.StringIO("")
+        self.stdout = iter(self.q.get, None)
+
+    def poll(self):
+        return self.returncode
 
 
 def message(text, chat=111, kind="private"):
@@ -162,17 +192,13 @@ class TelegramTest(unittest.TestCase):
         self.assertEqual(telegram.lang_of("что изменилось?"), "ru")
         self.assertEqual(telegram.lang_of("what changed?"), "en")
 
-    def test_message_gets_eyes_reaction(self):
-        self.link()
-        cfg.set("telegram.claude_chat", True, "user")
-        with mock.patch.object(telegram, "_run_claude", lambda text: telegram._chat.update(busy=False)):
-            telegram.handle_message(dict(message("hi"), message_id=42))
-            time.sleep(0.2)
-        react = [b for m, b in SENT if m == "setMessageReaction"]
-        self.assertEqual(react[-1]["message_id"], 42)
-        self.assertEqual(react[-1]["reaction"], [{"type": "emoji", "emoji": "👀"}])
-        telegram._chat["busy"] = False
-        cfg.set("telegram.claude_chat", None, "user")
+    def wait_for(self, needle, method="editMessageText", seconds=3):
+        end = time.time() + seconds
+        while time.time() < end:
+            if any(m == method and needle in b.get("text", "") for m, b in list(SENT)):
+                return True
+            time.sleep(0.05)
+        return False
 
     def test_claude_chat(self):
         self.link()
@@ -180,36 +206,26 @@ class TelegramTest(unittest.TestCase):
         self.assertIn("Claude chat is off", self.texts()[-1])
         cfg.set("telegram.claude_chat", True, "user")
         telegram._save_chat({})
-        calls = []
-
-        class Proc:
-            pid = 1
-            returncode = 0
-
-            def __init__(self, cmd, **kw):
-                calls.append(cmd)
-                events = [
-                    {"type": "system", "subtype": "init", "session_id": "s1"},
-                    {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Read", "input": {"file_path": "/x/cart.py"}}]}},
-                    {"type": "result", "result": "It **rounds** totals.", "session_id": "s1", "is_error": False},
-                ]
-                self.stdout = io.StringIO("\n".join(json.dumps(e) for e in events) + "\n")
-                self.stderr = io.StringIO("")
-
-            def poll(self):
-                return 0
-
-        with mock.patch.object(telegram.subprocess, "Popen", Proc):
-            telegram._run_claude("what changed?")
-            telegram._run_claude("and why?")
-        self.assertNotIn("--resume", calls[0])
-        self.assertEqual(calls[1][calls[1].index("--resume") + 1], "s1")
-        self.assertEqual(calls[0][calls[0].index("--permission-mode") + 1], "plan")
-        self.assertIn("It <b>rounds</b> totals.", self.texts()[-1])
-        self.assertEqual(SENT[-1][0], "editMessageText")
-        self.assertIn("stream-json", calls[0])
-        telegram.handle_message(message("/new"))
-        self.assertEqual(telegram._load_chat(), {})
+        with mock.patch.object(telegram.subprocess, "Popen", FakeClaude), mock.patch.object(telegram.os, "killpg"):
+            telegram.handle_message(dict(message("what changed?"), message_id=42))
+            self.assertTrue(self.wait_for("echo <b>what changed?</b>"))
+            react = [b for m, b in SENT if m == "setMessageReaction"]
+            self.assertEqual((react[-1]["message_id"], react[-1]["reaction"]), (42, [{"type": "emoji", "emoji": "👀"}]))
+            telegram.handle_message(message("and why?"))
+            self.assertTrue(self.wait_for("echo <b>and why?</b>"))
+            self.assertEqual(len(FakeClaude.instances), 1)
+            cmd = FakeClaude.instances[0].cmd
+            self.assertIn("--input-format", cmd)
+            self.assertEqual(cmd[cmd.index("--permission-mode") + 1], "plan")
+            self.assertEqual(telegram._load_chat()["session_id"], "s1")
+            FakeClaude.instances[0].q.put(json.dumps({"type": "result", "result": "The other session answered.", "session_id": "s1"}))
+            self.assertTrue(self.wait_for("Claude", method="sendMessage"))
+            self.assertTrue(self.wait_for("The other session answered.", method="sendMessage"))
+            telegram.handle_message(message("/new"))
+            self.assertEqual(telegram._load_chat(), {})
+        FakeClaude.instances[0].stdin.close()
+        FakeClaude.instances.clear()
+        telegram.CHAT.proc = None
         cfg.set("telegram.claude_chat", None, "user")
 
     def test_notifications_go_to_the_linked_chat(self):

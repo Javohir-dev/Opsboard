@@ -211,7 +211,7 @@ Opsboard can also live in a Telegram bot. It runs inside Opsboard — it starts 
 
 Commands: `/mrs` (open requests), `/mr 7376`, `/sessions` (Claude sessions that are working and how many agents each runs), `/usage` (Claude plan limits with bars and reset times — live when *Live Claude usage* is on, otherwise Claude Code's cache with its age), `/info` (which accounts it is linked to — Telegram, GitLab / GitHub, Jira, Claude — this Mac, the Opsboard version and the bot's settings; never tokens).
 
-**Claude chat** (*Settings → Telegram → Claude chat*, off by default): any other message goes to Claude Code on your Mac, in your project folder, and the answer comes back. The conversation continues until `/new`; `/cancel` stops an answer. *What Claude may do* picks the permission mode — *Read and answer only* by default.
+**Claude chat** (*Settings → Telegram → Claude chat*, off by default): any other message goes to Claude Code on your Mac, in your project folder, and the answer comes back. It is one Claude Code session that stays open between messages (closed after 3 idle hours or when Opsboard stops): messages you send while it works queue up, and when it comes back on its own — a background job finished, another session answered — that arrives as a new message. `/new` starts a fresh conversation; `/cancel` stops the current answer. *What Claude may do* picks the permission mode — *Read and answer only* by default.
 
 ### Project profiles
 
