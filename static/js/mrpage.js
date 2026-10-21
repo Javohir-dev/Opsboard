@@ -421,8 +421,7 @@ function stepThread(dir) {
 function focusMrThread(iid, tid) {
   ui.mrFocus = { iid, tid };
   delete MRD.cache[iid];
-  setPref("mrThreads", true);
-  if (route().page === "mr" && parseInt(route().arg, 10) === iid && mrTab() === "changes") { loadMr(iid, true); render(); } else location.hash = `#/mr/${iid}/changes`;
+  if (route().page === "mr" && parseInt(route().arg, 10) === iid && mrTab() === "overview") { loadMr(iid, true); render(); } else location.hash = `#/mr/${iid}/overview`;
 }
 function mrAfterRender() {
   const pend = ui.mrPending;
