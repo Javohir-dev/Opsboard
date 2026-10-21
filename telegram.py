@@ -2,6 +2,7 @@ import html
 import json
 import os
 import platform
+import random
 import re
 import secrets
 import signal
@@ -329,18 +330,156 @@ def md_to_html(text):
     return "".join(out).strip()
 
 
-def send_long(text):
-    formatted = md_to_html(text)
-    if len(formatted) <= 4000 and send(formatted):
-        return
-    chunk = ""
+def edit(message_id, text, plain=False, chat=None):
+    params = {"chat_id": chat or chat_id(), "message_id": message_id, "text": text[:4096], "disable_web_page_preview": True}
+    if not plain:
+        params["parse_mode"] = "HTML"
+    try:
+        return call("editMessageText", **params)
+    except TelegramError as exc:
+        if "not modified" in str(exc):
+            return True
+        log.warning("telegram edit failed: %s", exc)
+        return None
+
+
+def react(message_id, emoji="👀"):
+    try:
+        call("setMessageReaction", chat_id=chat_id(), message_id=message_id, reaction=[{"type": "emoji", "emoji": emoji}])
+    except TelegramError:
+        pass
+
+
+def _chunks(text, size=3800):
+    out, chunk = [], ""
     for line in (text or "").splitlines(keepends=True):
-        if len(chunk) + len(line) > 3800:
-            send(chunk, plain=True)
+        while len(line) > size:
+            out.append(line[:size])
+            line = line[size:]
+        if len(chunk) + len(line) > size:
+            out.append(chunk)
             chunk = ""
         chunk += line
     if chunk.strip():
-        send(chunk, plain=True)
+        out.append(chunk)
+    return out
+
+
+def deliver(text, placeholder=None):
+    """Turn the placeholder into the answer; send the rest as new messages only when it is too long for one."""
+    formatted = md_to_html(text)
+    if len(formatted) <= 4000:
+        if placeholder and edit(placeholder, formatted):
+            return
+        if not placeholder and send(formatted):
+            return
+    parts = _chunks(text)
+    first, rest = (parts[0], parts[1:]) if parts else ("", [])
+    if not (placeholder and edit(placeholder, first, plain=True)):
+        send(first, plain=True)
+    for part in rest:
+        send(part, plain=True)
+
+
+WAIT = {
+    "en": [
+        "🤔 Thinking it over…",
+        "🧠 Putting the pieces together…",
+        "☕ One sip of coffee and I'm on it…",
+        "🔎 Digging through the code…",
+        "🧩 Almost have the shape of it…",
+        "📚 Reading up so you don't have to…",
+        "🛠 Turning a few screws…",
+        "🐢 Slow and careful — nearly there…",
+        "✨ Polishing the answer…",
+        "🧭 Finding the right path…",
+    ],
+    "uz": [
+        "🤔 Kutib turing, o'ylab olay…",
+        "🧠 Bo'laklarni bir-biriga ulayapman…",
+        "☕ Bir qultum choy — va davom etaman…",
+        "🔎 Kod ichini titkilayapman…",
+        "🧩 Rasm aniqlashib qoldi…",
+        "📚 Siz uchun o'qib chiqyapman…",
+        "🛠 Bir-ikki murvatni buray-chi…",
+        "🐢 Shoshmasdan, puxta — oz qoldi…",
+        "✨ Javobni sayqallayapman…",
+        "🧭 To'g'ri yo'lni qidiryapman…",
+    ],
+    "ru": [
+        "🤔 Секунду, подумаю…",
+        "🧠 Складываю кусочки вместе…",
+        "☕ Глоток кофе — и продолжаю…",
+        "🔎 Копаюсь в коде…",
+        "🧩 Картина уже складывается…",
+        "📚 Читаю, чтобы вам не пришлось…",
+        "🛠 Подкручиваю пару винтиков…",
+        "🐢 Медленно, но верно — почти готово…",
+        "✨ Шлифую ответ…",
+        "🧭 Ищу правильный путь…",
+    ],
+}
+DOING = {
+    "en": {
+        "read": "📖 reading {x}",
+        "search": "🔍 searching the code",
+        "run": "⚙️ running: {x}",
+        "edit": "✍️ editing {x}",
+        "web": "🌐 looking it up online",
+        "agent": "🤖 asking a helper agent",
+        "tool": "🛠 using {x}",
+        "think": "💭 thinking",
+    },
+    "uz": {
+        "read": "📖 {x} ni o'qiyapman",
+        "search": "🔍 kod ichidan qidiryapman",
+        "run": "⚙️ ishga tushiryapman: {x}",
+        "edit": "✍️ {x} ni tahrirlayapman",
+        "web": "🌐 internetdan qarayapman",
+        "agent": "🤖 yordamchi agentdan so'rayapman",
+        "tool": "🛠 {x} dan foydalanyapman",
+        "think": "💭 o'ylayapman",
+    },
+    "ru": {
+        "read": "📖 читаю {x}",
+        "search": "🔍 ищу по коду",
+        "run": "⚙️ запускаю: {x}",
+        "edit": "✍️ правлю {x}",
+        "web": "🌐 смотрю в интернете",
+        "agent": "🤖 спрашиваю агента-помощника",
+        "tool": "🛠 использую {x}",
+        "think": "💭 думаю",
+    },
+}
+CANCELLED = {"en": "⏹ Cancelled.", "uz": "⏹ To'xtatildi.", "ru": "⏹ Отменено."}
+RE_UZ = re.compile(r"\b(nima|qanday|qanaqa|qayer|qachon|nega|bormi|kerak|qil|ber|ko'r|o'z|bo'l|emas|uchun|bilan|shu|menga|mening|qaysi|yoz)\w*|[og]['ʻ’]", re.I)
+
+
+def lang_of(text):
+    if re.search(r"[А-Яа-яЁё]", text or ""):
+        return "ru"
+    if RE_UZ.search(text or ""):
+        return "uz"
+    return "en"
+
+
+def _doing(block, lang):
+    name, inp = block.get("name", ""), block.get("input") or {}
+    words = DOING[lang]
+    path = Path(str(inp.get("file_path") or inp.get("notebook_path") or "")).name
+    if name == "Read":
+        return words["read"].format(x=path or "a file")
+    if name in ("Grep", "Glob"):
+        return words["search"]
+    if name == "Bash":
+        return words["run"].format(x=str(inp.get("description") or str(inp.get("command") or "").split("\n")[0])[:80])
+    if name in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
+        return words["edit"].format(x=path or "a file")
+    if name in ("WebFetch", "WebSearch"):
+        return words["web"]
+    if name in ("Agent", "Task"):
+        return words["agent"]
+    return words["tool"].format(x=name)
 
 
 def _load_chat():
@@ -354,11 +493,13 @@ def _save_chat(data):
     CHAT_FILE.write_text(json.dumps(data))
 
 
-def ask_claude(text):
+def ask_claude(text, message_id=None):
     if _chat["busy"]:
         send("Still answering the previous message — /cancel stops it.")
         return
     _chat["busy"] = True
+    if message_id:
+        react(message_id)
     threading.Thread(target=_run_claude, args=(text,), daemon=True).start()
 
 
@@ -369,12 +510,17 @@ def _kill(proc):
         pass
 
 
+def _waiting_text(lang, phrase, started, doing):
+    return f"{esc(phrase)}\n\n<i>⏱ {_dur(time.time() - started)}{' · ' + esc(doing) if doing else ''}</i>"
+
+
 def _run_claude(text):
+    lang = lang_of(text)
     mode = cfg.get("telegram.chat_permission") or "plan"
     root = project_root()
     cwd = str(root) if root and root.is_dir() else str(Path.home())
     sid = _load_chat().get("session_id")
-    cmd = [claude_bin(), "-p", text, "--output-format", "json", "--permission-mode", mode] + (["--resume", sid] if sid else [])
+    cmd = [claude_bin(), "-p", text, "--output-format", "stream-json", "--verbose", "--permission-mode", mode] + (["--resume", sid] if sid else [])
     try:
         proc = subprocess.Popen(cmd, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
     except OSError as exc:
@@ -382,39 +528,70 @@ def _run_claude(text):
         send(f"Could not start Claude: {esc(str(exc))}")
         return
     _chat["proc"] = proc
-    out, err, started = "", "", time.time()
-    while True:
+    live = {"doing": "", "result": None, "session": ""}
+
+    def read():
+        for line in proc.stdout:
+            try:
+                ev = json.loads(line)
+            except ValueError:
+                continue
+            if ev.get("session_id"):
+                live["session"] = ev["session_id"]
+            if ev.get("type") == "assistant" and not ev.get("parent_tool_use_id"):
+                for b in (ev.get("message") or {}).get("content") or []:
+                    if b.get("type") == "tool_use":
+                        live["doing"] = _doing(b, lang)
+                    elif b.get("type") == "thinking":
+                        live["doing"] = DOING[lang]["think"]
+            elif ev.get("type") == "result":
+                live["result"] = ev
+
+    reader = threading.Thread(target=read, daemon=True)
+    reader.start()
+    started, phrases, last = time.time(), list(WAIT[lang]), ""
+    random.shuffle(phrases)
+    msg = send(_waiting_text(lang, phrases[0], started, ""))
+    placeholder = msg.get("message_id") if msg else None
+    tick = 0
+    while proc.poll() is None:
         try:
             call("sendChatAction", chat_id=chat_id(), action="typing")
         except TelegramError:
             pass
-        try:
-            out, err = proc.communicate(timeout=4.5)
-            break
-        except subprocess.TimeoutExpired:
-            if time.time() - started > CHAT_TIMEOUT:
-                _kill(proc)
-                send(f"Stopped: no answer after {CHAT_TIMEOUT // 60} minutes.")
+        time.sleep(1)
+        tick += 1
+        if tick % 5 == 0 and placeholder:
+            body = _waiting_text(lang, phrases[(tick // 5) % len(phrases)], started, live["doing"])
+            if body != last:
+                edit(placeholder, body)
+                last = body
+        if time.time() - started > CHAT_TIMEOUT:
+            _kill(proc)
+    reader.join(timeout=5)
+    err = proc.stderr.read() if proc.stderr else ""
     _chat.update(proc=None, busy=False)
-    if proc.returncode and proc.returncode < 0:
-        send("Cancelled.")
+    if proc.returncode and proc.returncode < 0 and not live["result"]:
+        if placeholder:
+            edit(placeholder, CANCELLED[lang])
+        else:
+            send(CANCELLED[lang])
         return
-    try:
-        res = json.loads(out.strip().splitlines()[-1]) if out.strip() else {}
-    except ValueError:
-        res = {}
-    if res.get("session_id"):
-        _save_chat({"session_id": res["session_id"], "at": time.time()})
+    res = live["result"] or {}
+    if res.get("session_id") or live["session"]:
+        _save_chat({"session_id": res.get("session_id") or live["session"], "at": time.time()})
     answer = str(res.get("result") or "").strip()
     if res.get("is_error") or not answer:
         if sid and not res:
             _save_chat({})
-        send("⚠️ " + esc((answer or err or "Claude did not answer").strip()[-800:]))
+        note = "⚠️ " + esc((answer or err or "Claude did not answer").strip()[-800:])
+        if not (placeholder and edit(placeholder, note)):
+            send(note)
         return
-    send_long(answer)
+    deliver(answer, placeholder)
 
 
-def reply_for(text):
+def reply_for(text, message_id=None):
     words = text.strip().split()
     cmd = words[0].split("@")[0].lower() if words and words[0].startswith("/") else ""
     num = next((int(a.lstrip("!#")) for a in words[1:] if a.lstrip("!#").isdigit()), None)
@@ -442,7 +619,7 @@ def reply_for(text):
         return "Unknown command.\n\n" + help_text(), None
     if not cfg.get("telegram.claude_chat"):
         return "Claude chat is off — Opsboard → Settings → Telegram → <i>Claude chat</i>.\n\n" + help_text(), None
-    ask_claude(text.strip())
+    ask_claude(text.strip(), message_id)
     return None, None
 
 
@@ -465,7 +642,7 @@ def handle_message(msg):
         return
     if chat["id"] != linked or not text.strip():
         return
-    text_out, buttons = reply_for(text)
+    text_out, buttons = reply_for(text, msg.get("message_id"))
     if text_out:
         send(text_out, buttons)
 
