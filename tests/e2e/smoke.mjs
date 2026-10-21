@@ -54,10 +54,10 @@ try {
   check((await page.locator("#npanel .nhead").first().textContent()) === "Fix pushed · !7", "a finished fix is listed");
   await page.locator("#npanel [data-notif-open]").first().click();
   await page.waitForTimeout(600);
-  check(await page.evaluate(() => document.querySelector('#view [data-run="r1"]')?.getAnimations().length === 1), "the opened run blinks once");
+  check(new URL(page.url()).hash === "#/mr/7/fix", "a run notification opens the request's fix tab");
   check(await page.locator("#npanel").isHidden(), "opening a notification closes the panel");
   check(await bell.locator(".bcount").isHidden(), "opening a notification marks it read");
-  check((await page.locator('#view [data-run="r1"]').count()) === 1, "the finished run is shown on Overview");
+  check((await page.locator("#view .runhead .runname").textContent()) === "/fix 7", "the fix tab shows the run");
   check(JSON.parse(readFileSync(join(data, "notifications.json"), "utf8"))[0].read === true, "read state is saved on the server");
   await page.goto(`${base}/#/mr/7`);
   await page.waitForTimeout(1500);
