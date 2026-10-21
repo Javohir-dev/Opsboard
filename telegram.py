@@ -1,9 +1,11 @@
 import html
 import json
 import os
+import platform
 import re
 import secrets
 import signal
+import socket
 import subprocess
 import threading
 import time
@@ -127,7 +129,7 @@ def _dur(s):
 
 def help_text():
     chat = "\n\nAny other message goes to Claude on your Mac. /new starts a fresh conversation, /cancel stops the current answer." if cfg.get("telegram.claude_chat") else ""
-    return f"<b>Opsboard</b>\n/mrs — your open requests\n/mr 7376 — one request\n/sessions — Claude sessions that are working, with their agents{chat}"
+    return f"<b>Opsboard</b>\n/mrs — your open requests\n/mr 7376 — one request\n/sessions — Claude sessions that are working, with their agents\n/info — linked accounts, this Mac and the bot's settings{chat}"
 
 
 def cmd_mrs():
@@ -187,6 +189,74 @@ def cmd_sessions():
     if not busy:
         lines.append("Nothing is working right now.")
     return "\n\n".join(lines), None
+
+
+def _claude_account():
+    import system
+
+    try:
+        acct = json.loads(system.CLAUDE_STATE.read_text()).get("oauthAccount") or {}
+    except (OSError, ValueError):
+        return {}
+    return {"email": acct.get("emailAddress") or "", "org": acct.get("organizationName") or "", "plan": str(acct.get("organizationType") or "").replace("_", " ").title()}
+
+
+def cmd_info():
+    with lock:
+        mac = dict(state.get("mac") or {})
+        version = dict(state.get("version") or {})
+        review = dict(state.get("review") or {})
+        jira = dict((state.get("jira") or {}).get("account") or {})
+        tracker_err = (state.get("jira") or {}).get("error")
+        usage = list((state.get("claude_usage") or {}).get("limits") or [])
+    gh = cfg.get("review.host") == "github"
+    host_url = (cfg.get("github.url") if gh else cfg.get("gitlab.url")) or ""
+    project = (cfg.get("github.repo") if gh else cfg.get("gitlab.project")) or ""
+    host_user = review.get("user") or cfg.get("github.username" if gh else "gitlab.username") or ""
+    acct = _claude_account()
+    chat = _load_chat()
+    root = project_root()
+    lines = [
+        "<b>Opsboard</b>",
+        f"🖥 {esc(socket.gethostname().removesuffix('.local'))} · {esc(mac.get('chip') or platform.machine())} · {esc(mac.get('os') or platform.system())}",
+        f"📦 v{esc(version.get('current') or '?')}{' · ⬆️ ' + esc(version['latest']) + ' available' if version.get('update') else ''} · up {_dur(time.time() - _boot)}",
+        "",
+        "<b>Telegram</b>",
+        f"👤 linked to @{esc(cfg.get('telegram.user') or '?')} (chat {chat_id()})",
+        f"🤖 bot @{esc(_status['bot'])}",
+        f"🔔 new thread notifications {'on' if cfg.get('telegram.notify') else 'off'}",
+        f"💬 Claude chat {'on — ' + esc(PERMISSIONS.get(cfg.get('telegram.chat_permission') or 'plan', '')) if cfg.get('telegram.claude_chat') else 'off'}"
+        + (f" · conversation since {time.strftime('%d %b %H:%M', time.localtime(chat['at']))}" if cfg.get("telegram.claude_chat") and chat.get("session_id") and chat.get("at") else ""),
+        "",
+        f"<b>{'GitHub' if gh else 'GitLab'}</b>",
+        f"🌐 {esc(host_url.removeprefix('https://'))} · <code>{esc(project)}</code>" if host_url or project else "🌐 not set up",
+        f"👤 {esc(host_user)}" + (f" · ⚠️ {esc(review['error'][:120])}" if review.get("error") else "") if host_user or review.get("error") else "",
+        f"🔀 {sum(1 for m in review.get('mrs') or [] if m.get('state') == 'opened')} open request(s)" if review.get("mrs") is not None else "",
+    ]
+    if cfg.get("jira.site"):
+        lines += [
+            "",
+            "<b>Jira</b>",
+            f"🌐 {esc(cfg.get('jira.site').removeprefix('https://'))}",
+            f"👤 {esc(jira.get('name') or cfg.get('jira.name') or '')} · {esc(jira.get('email') or cfg.get('jira.email') or '')}" + (f" · ⚠️ {esc(tracker_err[:120])}" if tracker_err else ""),
+        ]
+    lines += ["", "<b>Claude</b>"]
+    if acct.get("email"):
+        lines.append(f"👤 {esc(acct['email'])}" + (f" · {esc(acct['org'])}" if acct.get("org") else "") + (f" · {esc(acct['plan'])}" if acct.get("plan") else ""))
+    lines.append(f"🧰 Claude Code {esc(cfg.get('claude.version') or '?')}" + (f" · fix skill <code>{esc(cfg.get('claude.fix_skill'))}</code>" if cfg.get("claude.fix_skill") else ""))
+    for lim in usage:
+        if not lim.get("resets_at") or lim["resets_at"] > time.time():
+            lines.append(f"📊 {esc(lim['label'])}: {lim['percent']}%")
+    lines += [
+        "",
+        "<b>Project</b>",
+        f"📁 <code>{esc(str(root).replace(str(Path.home()), '~', 1) if root else 'not set')}</code>" + (f" · profile {esc(cfg.get('project.profile'))}" if cfg.get("project.profile") else ""),
+    ]
+    text = "\n".join(lines)
+    return re.sub(r"\n{3,}", "\n\n", text).strip(), None
+
+
+PERMISSIONS = {"plan": "read and answer only", "acceptEdits": "may edit files", "auto": "may edit files and run commands"}
 
 
 def on_notify(item):
@@ -311,6 +381,8 @@ def reply_for(text):
         return cmd_mr(num) if num else ("Usage: /mr 7376", None)
     if cmd == "/sessions":
         return cmd_sessions()
+    if cmd == "/info":
+        return cmd_info()
     if cmd == "/new":
         _save_chat({})
         return "🆕 New conversation with Claude.", None
@@ -368,6 +440,7 @@ COMMANDS = [
     {"command": "mrs", "description": "Your open requests"},
     {"command": "mr", "description": "One request: /mr 7376"},
     {"command": "sessions", "description": "Working Claude sessions and their agents"},
+    {"command": "info", "description": "Linked accounts, this Mac and the bot's settings"},
     {"command": "new", "description": "New conversation with Claude"},
     {"command": "cancel", "description": "Stop Claude's current answer"},
 ]

@@ -120,6 +120,18 @@ class TelegramTest(unittest.TestCase):
         self.assertIn("review diff", text)
         self.assertNotIn("Idle one", text)
 
+    def test_info_shows_accounts_but_no_secrets(self):
+        self.link()
+        cfg.set("gitlab.url", "https://gitlab.example", "user")
+        cfg.set("gitlab.project", "team/app", "user")
+        telegram.handle_message(message("/info"))
+        text = self.texts()[-1]
+        self.assertIn("linked to @javohir", text)
+        self.assertIn("gitlab.example", text)
+        self.assertIn("team/app", text)
+        self.assertNotIn("x" * 35, text)
+        self.assertNotIn("\n\n\n", text)
+
     def test_claude_chat(self):
         self.link()
         telegram.handle_message(message("what changed in !7?"))

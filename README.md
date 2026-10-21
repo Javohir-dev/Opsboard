@@ -209,7 +209,7 @@ Opsboard can also live in a Telegram bot. It runs inside Opsboard — it starts 
 2. Press **Open @yourbot in Telegram** and **Start**: a one-time code links your Telegram account. The bot ignores everyone else and every group.
 3. **New thread notifications:** a message when someone opens a review thread on one of your open requests.
 
-Commands: `/mrs` (open requests), `/mr 7376`, `/sessions` (Claude sessions that are working and how many agents each runs).
+Commands: `/mrs` (open requests), `/mr 7376`, `/sessions` (Claude sessions that are working and how many agents each runs), `/info` (which accounts it is linked to — Telegram, GitLab / GitHub, Jira, Claude — this Mac, the Opsboard version and the bot's settings; never tokens).
 
 **Claude chat** (*Settings → Telegram → Claude chat*, off by default): any other message goes to Claude Code on your Mac, in your project folder, and the answer comes back. The conversation continues until `/new`; `/cancel` stops an answer. *What Claude may do* picks the permission mode — *Read and answer only* by default.
 
