@@ -219,7 +219,25 @@ const avatarOf = name => `<span class="avatar" title="${esc(name)}">${esc(initia
 function noteHtml(n, withHead = true) {
   return `<div class="thnote">${withHead ? avatarOf(n.author) : ""}<div class="grow">${withHead ? `<div class="thby"><b>${esc(n.author)}</b>${n.username ? `<span class="muted">@${esc(n.username)}</span>` : ""}<span class="muted" title="${esc(fmtDateTime(n.created))}">${ago(n.created)}</span></div>` : ""}<div class="thbody md">${md(n.body, ui.mrBase || "")}</div></div></div>`;
 }
-function threadCard(t) {
+function diffSnippet(t, before = 10) {
+  const iid = parseInt(route().arg, 10), d = MRD.cache[iid];
+  const f = d?.files.find(x => x.path === t.path);
+  if (!f) return "";
+  const rows = fileStats(f).rows, code = highlighted(f);
+  const at = rows.findIndex(r => t.new_line ? r.n === t.new_line && r.kind !== "del" : r.o === t.old_line && r.kind !== "add");
+  if (at < 0) return "";
+  let from = at;
+  while (from > 0 && at - from < before && rows[from - 1].kind !== "hunk") from--;
+  const body = rows.slice(from, at + 1).map((r, k) => `<tr class="dl d-${r.kind}${from + k === at ? " dat" : ""}"><td class="dn">${r.o ?? ""}</td><td class="dn">${r.n ?? ""}</td><td class="dc hljs"><span class="dsg">${r.kind === "add" ? "+" : r.kind === "del" ? "-" : " "}</span>${code[from + k]}</td></tr>`).join("");
+  return `<div class="thsnip"><div class="thsniph"><a href="#" data-goto-line="${esc(threadKey(t) || t.path)}" data-file="${esc(t.path)}" translate="no">${esc(t.path)}</a><button class="dicon" data-copy="${esc(t.path)}" title="Copy file path" aria-label="Copy file path">${svg(SVG.copy, 14)}</button></div><table class="dtable"><colgroup><col class="cn"><col class="cn"><col></colgroup><tbody>${body}</tbody></table></div>`;
+}
+function replyBox(t) {
+  const iid = parseInt(route().arg, 10), m = (data.review?.mrs || []).find(x => x.iid === iid);
+  if (!m || m.state !== "opened" || !t.resolvable) return "";
+  return `<div class="threply"><textarea data-reply-box="${esc(t.id)}" rows="1" placeholder="Reply…"></textarea><div class="threplybtns"><span class="fmsg" id="rmsg-${esc(t.id)}"></span><button class="fixbtn" data-reply="${esc(t.id)}">Reply</button>${t.resolved ? "" : `<button class="fixbtn" data-resolve="${esc(t.id)}">Resolve thread</button>`}</div></div>`;
+}
+
+function threadCard(t, opts = {}) {
   const st = threadState(t), first = t.notes[0] || {}, rest = t.notes.slice(1), last = t.notes[t.notes.length - 1] || first;
   const line = t.new_line || t.old_line;
   const where = t.path ? `<a class="thwhere" href="#" data-goto-line="${esc(threadKey(t) || t.path)}" data-file="${esc(t.path)}" translate="no" title="${esc(t.path)}">${esc(t.path.split("/").pop())}${line ? ":" + line : ""}</a>` : `<span class="muted">the ${isGitHub() ? "pull" : "merge"} request</span>`;
@@ -230,9 +248,9 @@ function threadCard(t) {
   if (st === "resolved") {
     const people = [...new Set(t.notes.map(n => n.author))].slice(0, 3);
     const label = rest.length ? `<span class="thrn">${plural(rest.length, "reply", "replies")}</span><span class="muted">Last reply by</span><b>${esc(last.author)}</b><span class="muted" title="${esc(fmtDateTime(last.created))}">${ago(last.created)}</span>` : `<span class="thrn">Show thread</span>`;
-    return `<div class="thread th-resolved" id="th-${esc(t.id)}">${head}<details class="threplies"><summary><span class="dchev">${icon("chevron", 14)}</span><span class="avs">${people.map(avatarOf).join("")}</span>${label}</summary><div class="thnotes">${noteHtml(first)}${rest.map(n => noteHtml(n)).join("")}${t.url ? `<a class="thlink" href="${esc(t.url)}" target="_blank">Open in ${hostName()} →</a>` : ""}</div></details></div>`;
+    return `<div class="thread th-resolved" id="th-${esc(t.id)}">${head}<details class="threplies"><summary><span class="dchev">${icon("chevron", 14)}</span><span class="avs">${people.map(avatarOf).join("")}</span>${label}</summary>${opts.snippet ? diffSnippet(t) : ""}<div class="thnotes">${noteHtml(first)}${rest.map(n => noteHtml(n)).join("")}${t.url ? `<a class="thlink" href="${esc(t.url)}" target="_blank">Open in ${hostName()} →</a>` : ""}</div>${replyBox(t)}</details></div>`;
   }
-  return `<div class="thread th-open" id="th-${esc(t.id)}">${head}<div class="thnotes">${noteHtml(first, false)}${rest.map(n => noteHtml(n)).join("")}${t.url ? `<a class="thlink" href="${esc(t.url)}" target="_blank">Open in ${hostName()} →</a>` : ""}</div></div>`;
+  return `<div class="thread th-open" id="th-${esc(t.id)}">${head}${opts.snippet ? diffSnippet(t) : ""}<div class="thnotes">${noteHtml(first, !!opts.snippet)}${rest.map(n => noteHtml(n)).join("")}${t.url ? `<a class="thlink" href="${esc(t.url)}" target="_blank">Open in ${hostName()} →</a>` : ""}</div>${replyBox(t)}</div>`;
 }
 
 function threadOrder(d) {
@@ -301,7 +319,7 @@ function overviewTab(d, m) {
   return `<div class="mrov"><div class="mrovmain">
       ${d.description ? `<div class="panel md mrdesc">${md(d.description, projectUrl(d.url))}</div>` : '<div class="empty">No description.</div>'}
       ${widget ? `<div class="panel mrwidget">${widget}</div>` : ""}
-      ${threads.length ? `<h2 class="mt-3">Threads<span class="count">${threads.length - open} of ${threads.length} resolved</span></h2><div class="ovthreads">${threads.map(threadCard).join("")}</div>` : ""}
+      ${threads.length ? `<h2 class="mt-3">Threads<span class="count">${threads.length - open} of ${threads.length} resolved</span></h2><div class="ovthreads">${threads.map(t => threadCard(t, { snippet: true })).join("")}</div>` : ""}
     </div>${side}</div>`;
 }
 
@@ -358,7 +376,7 @@ function pageMr(ctx, arg) {
   return head + bar + `<div class="mrlayout ${treeOn ? "with-tree" : ""} ${thOn ? "with-threads" : ""}">
     ${treeOn ? fileTree({ files }, viewed) : ""}
     <div class="mrdiff">${files.map((f, i) => diffFile(iid, f, i, byLine, threadsByFile, viewed, m)).join("")}</div>
-    ${thOn ? `<aside class="mrthreads"><div class="thbar"><h2>Threads<span class="count">${resolved} of ${threads.length} resolved</span></h2></div>${threads.map(threadCard).join("") || '<div class="empty">No threads.</div>'}</aside>` : ""}
+    ${thOn ? `<aside class="mrthreads"><div class="thbar"><h2>Threads<span class="count">${resolved} of ${threads.length} resolved</span></h2></div>${threads.map(t => threadCard(t)).join("") || '<div class="empty">No threads.</div>'}</aside>` : ""}
   </div>`;
 }
 
@@ -529,3 +547,25 @@ function syncMrSticky() {
 addEventListener("scroll", () => { if (route().page === "mr") syncMrSticky(); }, { passive: true });
 addEventListener("resize", () => { if (route().page === "mr") syncMrSticky(); });
 addEventListener("hashchange", () => { ui.mrStuck = false; });
+
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-reply], [data-resolve]");
+  if (!b || route().page !== "mr") return;
+  const tid = b.dataset.reply || b.dataset.resolve, iid = parseInt(route().arg, 10);
+  const box = document.querySelector(`[data-reply-box="${CSS.escape(tid)}"]`), msg = $("rmsg-" + tid);
+  const text = (box?.value || "").trim(), resolve = !!b.dataset.resolve;
+  if (!text && !resolve) { box?.focus(); return; }
+  b.disabled = true;
+  if (msg) { msg.className = "fmsg muted"; msg.textContent = t(resolve ? "Resolving…" : "Sending…"); }
+  try {
+    const r = await (await fetch("/api/mr-reply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ iid, thread: tid, body: text, resolve }) })).json();
+    if (!r.ok) { if (msg) { msg.className = "fmsg err"; msg.textContent = r.error; } return; }
+    if (box) { box.value = ""; box.defaultValue = ""; }
+    if (msg) { msg.className = "fmsg okmsg"; msg.textContent = t(resolve ? "Resolved" : "Sent"); }
+    loadMr(iid, true);
+  } finally { b.disabled = false; }
+});
+document.addEventListener("keydown", e => {
+  const box = e.target.closest?.("[data-reply-box]");
+  if (box && e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); document.querySelector(`[data-reply="${CSS.escape(box.dataset.replyBox)}"]`)?.click(); }
+});

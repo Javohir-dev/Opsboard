@@ -67,6 +67,7 @@ function render() {
 function keepsLocalState(el) {
   if (ui.forcePatch) return false;
   if (el === document.activeElement && (el.isContentEditable || /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName))) return true;
+  if (el.tagName === "TEXTAREA" && el.value !== el.defaultValue) return true;
   return el.tagName === "INPUT" && /^(text|password|email|number|search|date)$/.test(el.type) && el.value !== el.defaultValue;
 }
 function patch(el, html) {

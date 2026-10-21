@@ -1003,3 +1003,18 @@ a.cnt:hover { filter: brightness(1.15); }
 .wtnote.ok { animation: wtfade 3s ease forwards; }
 @keyframes wtfade { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .wtnote.ok { animation: none; } }
+
+/* thread diff snippet and reply box (overview) */
+.thsnip { margin: 0 0 4px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.thsniph { display: flex; align-items: center; gap: 6px; padding: 8px 12px; font-family: var(--mono); font-size: var(--fs-sm); font-weight: 600; }
+.thsniph a { color: var(--text); overflow-wrap: anywhere; }
+.thsnip .dtable { font-size: 12px; }
+.thsnip .dtable tr.dat { box-shadow: inset 3px 0 0 var(--accent); }
+.ovthreads .th-open > .thnotes { padding-left: 12px; }
+.ovthreads .thread { overflow: hidden; }
+.threply { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--panel2) 50%, transparent); }
+.threply textarea { flex: 1; min-width: 0; resize: vertical; min-height: 34px; max-height: 300px; padding: 7px 10px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; font-size: var(--fs-md); }
+.threply textarea:focus { min-height: 80px; border-color: var(--accent); outline: none; }
+.threplybtns { display: flex; align-items: center; gap: 6px; flex: none; }
+.mrthreads .threply { flex-direction: column; align-items: stretch; }
+.mrthreads .threplybtns { justify-content: flex-end; }

@@ -5,6 +5,7 @@ All notable changes. Versions follow [semantic versioning](https://semver.org/);
 ## Unreleased
 
 ### Added
+- Request threads like GitLab's: on *Overview* each thread shows the lines it was left on, and every open thread has a reply box and *Resolve thread* (⌘↵ sends). Replying needs a token with the `api` scope.
 - **Worktrees → Clean up:** removes a worktree with its branch, server container and databases after showing what goes and warning about uncommitted changes, unpushed commits, an open merge request or a session still working there; a forced clean-up when you confirm anyway.
 - **Telegram bot** (*Settings → Telegram*): runs inside Opsboard and links to one Telegram account with a one-time code. Notifies you of new review threads; `/mrs`, `/mr` and `/sessions` (working sessions with their agents); optional **Claude chat** that sends your messages to Claude Code on your Mac (read-only by default).
 - **Fix run progress:** a fix tab on the request page with the steps of the run, the threads it handled and a live feed of Claude's messages, commands and edits; earlier runs can be picked. Background runs, the running badge and run notifications open it. Skills can name their steps with optional `OPS_STEP` lines (`docs/fix-skill.md`).

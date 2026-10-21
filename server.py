@@ -171,6 +171,34 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as exc:
                 out = {"ok": False, "error": str(exc)}
             self.send(json.dumps(out), "application/json")
+        elif self.path.startswith("/api/mr-reply"):
+            try:
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+                if DEMO:
+                    raise ValueError("demo mode — nothing is sent")
+                iid, thread, text = int(body.get("iid")), str(body.get("thread", "")), str(body.get("body") or "").strip()
+                if not re.fullmatch(r"[A-Za-z0-9_=+/-]{4,120}", thread):
+                    raise ValueError("not a thread id")
+                if len(text) > 20000:
+                    raise ValueError("the reply is too long")
+                with lock:
+                    mine = {m["iid"] for m in (state.get("review") or {}).get("mrs", [])}
+                if iid not in mine:
+                    raise ValueError(f"!{iid} is not one of your merge requests")
+                host = review_host()
+                if text:
+                    host.reply(iid, thread, text, bool(body.get("resolve")))
+                elif body.get("resolve"):
+                    host.resolve_thread(iid, thread)
+                else:
+                    raise ValueError("write a reply first")
+                MR_CACHE.pop(iid, None)
+                out = {"ok": True}
+            except error.HTTPError as exc:
+                out = {"ok": False, "error": f"{'GitHub' if cfg.get('review.host') == 'github' else 'GitLab'} refused it ({exc.code}){' — the token needs the api scope to reply' if exc.code in (401, 403) else ''}"}
+            except (ValueError, TypeError, PermissionError, error.URLError, OSError) as exc:
+                out = {"ok": False, "error": str(exc)[:300]}
+            self.send(json.dumps(out), "application/json")
         elif self.path.startswith("/api/worktree-remove"):
             try:
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
