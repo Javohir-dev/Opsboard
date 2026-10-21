@@ -298,7 +298,8 @@ class Handler(BaseHTTPRequestHandler):
                     cfg.set("telegram.chat_id", None, "user")
                     cfg.set("telegram.user", None, "user")
                 cfg.set_secret("telegram.token", token)
-                out = {"ok": True, "name": "@" + bot}
+                telegram.connected(bot)
+                out = {"ok": True, "name": "@" + bot, "telegram": telegram.public()}
             except telegram.TelegramError as exc:
                 out = {"ok": False, "error": f"Telegram rejected this token: {exc}"}
             except ValueError as exc:

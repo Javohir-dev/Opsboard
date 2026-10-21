@@ -193,21 +193,37 @@ function applyTheme() {
 
 function telegramSection() {
   const tg = data.telegram || {};
+  const masked = data.config?._secrets?.["telegram.token"] || "";
   const state = !tg.configured ? "" : tg.error ? `<span class="badge bad" title="${esc(tg.error)}">${esc(tg.error.slice(0, 60))}</span>` : tg.running ? '<span class="badge ok">connected</span>' : '<span class="badge muted">connecting…</span>';
-  const link = !tg.configured ? "" : tg.linked
+  const editing = !tg.configured || ui.tgEdit;
+  const tokenRow = editing
+    ? `<div class="frow"><div class="flabel"><div>Bot token</div><div class="fhelp">Create a bot with <a href="https://t.me/BotFather" target="_blank">@BotFather</a> (<code>/newbot</code>) and paste the token it gives you. It is kept in ${esc(data.config?._secret_store || "config.json")}; the bot runs inside Opsboard and needs no public address.</div></div>
+        <div class="fctl tgtoken"><input id="tok-telegram" type="password" autocomplete="off" spellcheck="false" placeholder="123456789:AA…">
+          <div class="fmeta"><button class="btn-primary" data-save-token="telegram">Save</button>${tg.configured ? '<button class="linkbtn" data-tg-edit="0">Cancel</button>' : ""}<span class="fmsg" id="msg-tok-telegram"></span></div></div></div>`
+    : `<div class="frow"><div class="flabel"><div>Bot</div><div class="fhelp">The token is saved and hidden.</div></div>
+        <div class="fctl"><div class="tgbot"><b>@${esc(tg.bot || "…")}</b><span class="muted mono">${esc(masked)}</span></div>
+          <div class="fmeta"><button class="fixbtn" data-tg-edit="1">Change token</button><button class="linkbtn danger" data-tg="forget">Forget the bot</button><span class="fmsg" id="msg-tok-telegram"></span></div></div></div>`;
+  const link = !tg.configured || editing ? "" : tg.linked
     ? `<div class="frow"><div class="flabel"><div>Linked chat</div><div class="fhelp">Only this Telegram account can use the bot; everyone else is ignored.</div></div><div class="fctl"><div class="ro">${tg.user ? "@" + esc(tg.user) : "linked"}</div><div class="fmeta"><button class="fixbtn" data-tg="test">Send a test message</button><button class="linkbtn" data-tg="unlink">Unlink</button><span class="fmsg" id="msg-tg"></span></div></div></div>`
-    : tg.link
-      ? `<div class="frow"><div class="flabel"><div>Link your chat</div><div class="fhelp">Open the bot and press <b>Start</b> — that sends a one-time code (valid 15 minutes) and links this Telegram account to your Opsboard.</div></div><div class="fctl"><div class="fmeta"><a class="btn-primary tglink" href="${esc(tg.link)}" target="_blank">Open @${esc(tg.bot)} in Telegram</a><span class="muted fs-sm">or send <code>/start ${esc(tg.code)}</code></span></div></div></div>`
-      : `<div class="frow"><div class="flabel"><div>Link your chat</div></div><div class="fctl"><div class="ro muted">waiting for the bot to connect…</div></div></div>`;
-  return `<section id="sec-telegram"><h2>Telegram${tg.bot ? `<span class="count">@${esc(tg.bot)}</span>` : ""}<span class="h2-actions">${state}</span></h2><div class="panel form">
-      ${secretRow("telegram", "Bot token", 'Create a bot with <a href="https://t.me/BotFather" target="_blank">@BotFather</a> (<code>/newbot</code>) and paste its token. The bot runs inside Opsboard: it starts and stops with it, and needs no public address.')}
+    : `<div class="frow tgstart"><div class="flabel"><div>Start the bot</div><div class="fhelp">Open the bot in Telegram and press <b>Start</b>. That sends a one-time code (valid 15 minutes) and links your Telegram account to this Opsboard.</div></div>
+        <div class="fctl">${tg.link ? `<a class="btn-primary tglink" href="${esc(tg.link)}" target="_blank">${icon("play", 16)}Start @${esc(tg.bot)} in Telegram</a><div class="fmeta"><span class="muted fs-sm">or send <code>/start ${esc(tg.code)}</code> to @${esc(tg.bot)}</span></div>` : '<div class="ro muted">waiting for the bot to connect…</div>'}</div></div>`;
+  const linked = tg.configured && !editing;
+  return `<section id="sec-telegram"><h2>Telegram<span class="h2-actions">${state}</span></h2><div class="panel form">
+      ${tokenRow}
       ${link}
-      ${tg.configured ? field("telegram.notify", "New thread notifications", { type: "toggle", help: "A message when someone opens a review thread on one of your open requests." }) : ""}
-      ${tg.configured ? field("telegram.claude_chat", "Claude chat", { type: "toggle", help: "Messages that are not commands go to Claude Code on this Mac (in your project folder) and the answer comes back to Telegram. The conversation continues until you send /new." }) : ""}
-      ${tg.configured && conf("telegram.claude_chat") ? field("telegram.chat_permission", "What Claude may do", { type: "select", options: [["plan", "Read and answer only"], ["acceptEdits", "Also edit files"], ["auto", "Edit files and run commands (auto mode)"]], help: "Claude Code's permission mode for chat messages. <i>Read and answer only</i> lets it look at your code and answer, but not change anything." }) : ""}
-      ${tg.configured ? `<div class="frow"><div class="flabel"><div>Remove the bot</div><div class="fhelp">Forgets the token and the linked chat.</div></div><div class="fctl"><button class="linkbtn danger" data-tg="forget">Forget the bot</button></div></div>` : ""}
+      ${linked ? field("telegram.notify", "New thread notifications", { type: "toggle", help: "A message when someone opens a review thread on one of your open requests." }) : ""}
+      ${linked ? field("telegram.claude_chat", "Claude chat", { type: "toggle", help: "Messages that are not commands go to Claude Code on this Mac (in your project folder) and the answer comes back to Telegram. The conversation continues until you send /new." }) : ""}
+      ${linked && conf("telegram.claude_chat") ? field("telegram.chat_permission", "What Claude may do", { type: "select", options: [["plan", "Read and answer only"], ["acceptEdits", "Also edit files"], ["auto", "Edit files and run commands (auto mode)"]], help: "Claude Code's permission mode for chat messages. <i>Read and answer only</i> lets it look at your code and answer, but not change anything." }) : ""}
     </div></section>`;
 }
+document.addEventListener("click", e => {
+  const ed = e.target.closest("[data-tg-edit]");
+  if (!ed) return;
+  ui.tgEdit = ed.dataset.tgEdit === "1";
+  ui.forcePatch = true;
+  rerenderSettings();
+  if (ui.tgEdit) setTimeout(() => $("tok-telegram")?.focus(), 30);
+});
 document.addEventListener("click", async e => {
   const b = e.target.closest("[data-tg]");
   if (!b) return;

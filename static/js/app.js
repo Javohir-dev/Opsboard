@@ -275,6 +275,7 @@ document.addEventListener("click", async e => {
     st.disabled = false;
     if (!r.ok) { msg.className = "fmsg err"; msg.textContent = r.error; return; }
     msg.className = "fmsg okmsg"; msg.textContent = `Connected as ${r.name}`;
+    if (kind === "telegram") { ui.tgEdit = false; data = await (await fetch("/api/state")).json(); ui.forcePatch = true; rerenderSettings(); return; }
     setTimeout(async () => { data = await (await fetch("/api/state")).json(); rerenderSettings(); loadDoctor(); }, 1200);
     return;
   }

@@ -971,3 +971,8 @@ a.cnt:hover { filter: brightness(1.15); }
 @media (max-width: 1100px) { .mrsticky { margin: 0 -24px; padding: 0 24px; } .mrmini .brchip, .mrmini .dicon, .mrmini .muted { display: none; } }
 @media (max-width: 760px) { .mrsticky { top: 52px; margin: 0 -16px; padding: 0 16px; } .mrbar2 { top: calc(var(--mrstick, 0px) + 52px); } .mrtabs2 { overflow-x: auto; } }
 .linkbtn.danger { color: var(--bad); } .tglink { display: inline-flex; align-items: center; text-decoration: none !important; } .badge.muted { color: var(--muted); background: var(--chip); }
+.tgtoken input { width: 100%; }
+.tgbot { display: flex; align-items: baseline; gap: 10px; font-size: var(--fs-base); }
+.tglink { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; font-size: var(--fs-base); }
+.tgstart .fctl { gap: 8px; }
+.tglink { align-self: flex-start; width: auto; }

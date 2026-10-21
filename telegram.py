@@ -51,6 +51,11 @@ def call(method, token=None, http_timeout=15, **params):
     return out["result"]
 
 
+def connected(bot):
+    _status.update(bot=bot, running=True, error="")
+    _pair.update(code="", until=0)
+
+
 def chat_id():
     value = cfg.get("telegram.chat_id")
     return int(value) if str(value or "").lstrip("-").isdigit() else None
