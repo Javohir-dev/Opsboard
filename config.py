@@ -47,6 +47,7 @@ DEFAULTS = {
     "telegram.notify": True,
     "telegram.claude_chat": False,
     "telegram.chat_permission": "plan",
+    "telegram.language": "auto",
     "refresh.tasks_seconds": 300,
 }
 SECRETS = ("jira.token", "gitlab.token", "github.token", "telegram.token")

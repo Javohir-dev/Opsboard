@@ -155,6 +155,10 @@ class TelegramTest(unittest.TestCase):
 
     def test_language_of_the_question(self):
         self.assertEqual(telegram.lang_of("nima o'zgardi?"), "uz")
+        self.assertEqual(telegram.lang_of("MR larni tekshir"), "uz")
+        cfg.set("telegram.language", "uz", "user")
+        self.assertEqual(telegram.lang_of("what changed?"), "uz")
+        cfg.set("telegram.language", None, "user")
         self.assertEqual(telegram.lang_of("что изменилось?"), "ru")
         self.assertEqual(telegram.lang_of("what changed?"), "en")
 

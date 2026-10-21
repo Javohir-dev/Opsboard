@@ -452,15 +452,27 @@ DOING = {
     },
 }
 CANCELLED = {"en": "⏹ Cancelled.", "uz": "⏹ To'xtatildi.", "ru": "⏹ Отменено."}
-RE_UZ = re.compile(r"\b(nima|qanday|qanaqa|qayer|qachon|nega|bormi|kerak|qil|ber|ko'r|o'z|bo'l|emas|uchun|bilan|shu|menga|mening|qaysi|yoz)\w*|[og]['ʻ’]", re.I)
+RE_UZ = re.compile(
+    r"\b(nima|qanday|qanaqa|qayer|qachon|nega|nechta|bormi|yo'q|ha|kerak|qil|ber|ko'r|o'z|bo'l|emas|uchun|bilan|shu|bu|menga|mening|qaysi|yoz|qara|ayt|tushuntir|salom|rahmat|iltimos|ishla|tekshir|qanaqa|ekan|edi|kim|endi|hozir|keyin|yana)\w*|[og]['ʻ’]|\w(lar|ni|ga|da|dan|ning|mi)\b",
+    re.I,
+)
+RE_EN = re.compile(r"\b(the|what|how|why|is|are|can|please|show|tell|does|which|where|when)\b", re.I)
 
 
 def lang_of(text):
-    if re.search(r"[А-Яа-яЁё]", text or ""):
+    chosen = cfg.get("telegram.language") or "auto"
+    if chosen in WAIT:
+        return chosen
+    text = text or ""
+    if re.search(r"[А-Яа-яЁё]", text):
         return "ru"
-    if RE_UZ.search(text or ""):
+    uz, en = len(RE_UZ.findall(text)), len(RE_EN.findall(text))
+    if uz > en:
         return "uz"
-    return "en"
+    if en:
+        return "en"
+    ui = (cfg.get("ui.language") or "")[:2]
+    return ui if ui in WAIT else "uz"
 
 
 def _doing(block, lang):

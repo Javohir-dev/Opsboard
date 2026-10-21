@@ -213,6 +213,7 @@ function telegramSection() {
       ${link}
       ${linked ? field("telegram.notify", "New thread notifications", { type: "toggle", help: "A message when someone opens a review thread on one of your open requests." }) : ""}
       ${linked ? field("telegram.claude_chat", "Claude chat", { type: "toggle", help: "Messages that are not commands go to Claude Code on this Mac (in your project folder) and the answer comes back to Telegram. The conversation continues until you send /new." }) : ""}
+      ${linked && conf("telegram.claude_chat") ? field("telegram.language", "Bot language", { type: "select", options: [["auto", "Auto — the language of your message"], ["uz", "O'zbekcha"], ["ru", "Русский"], ["en", "English"]], help: "The language of the waiting messages while Claude works on an answer." }) : ""}
       ${linked && conf("telegram.claude_chat") ? field("telegram.chat_permission", "What Claude may do", { type: "select", options: [["plan", "Read and answer only"], ["acceptEdits", "Also edit files"], ["auto", "Edit files and run commands (auto mode)"]], help: "Claude Code's permission mode for chat messages. <i>Read and answer only</i> lets it look at your code and answer, but not change anything." }) : ""}
     </div></section>`;
 }
