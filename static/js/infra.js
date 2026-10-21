@@ -65,10 +65,12 @@ function pageWorktrees(ctx) {
       <td><div class="clamp">${esc(w.last_commit)}</div><div class="subt" title="${esc(fmtDateTime(w.last_commit_ts))}">${ago(w.last_commit_ts)}</div></td>
       <td class="nowrap">${c ? `<span class="status"><span class="dot ${c.state === "running" ? "ok" : "bad"}"></span>${c.state === "running" ? "Running" : esc(c.state)}</span>${web && c.state === "running" ? ` <a href="http://127.0.0.1:${web.host}/web/login" target="_blank">:${web.host} ↗</a>` : ""}` : '<span class="muted">—</span>'}</td>
       <td>${dbs.map(d => `<div class="mono subt">${esc(d)} · ${bytes(ctx.sizes[d])}</div>`).join("") || '<span class="muted">—</span>'}</td>
-      <td>${(ctx.wtUsers[w.name] || []).map(sessTag).join("<br>")}</td></tr>`;
+      <td>${(ctx.wtUsers[w.name] || []).map(sessTag).join("<br>")}</td>
+      <td class="nowrap">${wtCleanCell(w)}</td></tr>`;
   });
   return `<div class="pagehead"><h1>Worktrees</h1><span class="sub">${ws.length} · ${ws.filter(w => w.dirty).length} with uncommitted changes</span></div>
-    ${table(["Worktree", ["Uncommitted", "num"], "Last commit", "Server", "Databases", "Used by"], rows)}`;
+    ${wtJobNotes()}
+    ${table(["Worktree", ["Uncommitted", "num"], "Last commit", "Server", "Databases", "Used by", ""], rows)}`;
 }
 
 function pageProcesses() {
@@ -83,3 +85,62 @@ function pageProcesses() {
     </div></section>
     <div class="cols"><section><h2>Top by CPU</h2>${t(p.cpu)}</section><section><h2>Top by memory</h2>${t(p.mem)}</section></div>`;
 }
+
+function wtCleanCell(w) {
+  const job = data.wt_jobs?.[w.name];
+  if (job?.status === "running") return `<span class="cnt running"><span class="dot busy"></span>Cleaning up…</span>`;
+  return `<button class="fixbtn danger-soft" data-wt-clean="${esc(w.name)}" title="Delete this worktree with its branch, server container and databases">${icon("trash", 14)}Clean up</button>`;
+}
+function wtJobNotes() {
+  const jobs = Object.entries(data.wt_jobs || {}).filter(([, j]) => j.status !== "running");
+  return jobs.map(([name, j]) => j.status === "done"
+    ? `<div class="wtnote ok">${icon("ok", 16)}<span class="grow"><b translate="no">${esc(name)}</b> was cleaned up${j.force ? " (forced)" : ""}.</span><button class="linkbtn" data-wt-dismiss="${esc(name)}">Dismiss</button></div>`
+    : `<div class="wtnote bad">${icon("fail", 16)}<div class="grow"><b translate="no">${esc(name)}</b> was not fully cleaned up.<details><summary>Output</summary><pre>${esc(j.tail || "")}</pre></details></div><button class="linkbtn" data-wt-dismiss="${esc(name)}">Dismiss</button></div>`).join("");
+}
+function wtDialog() {
+  let d = $("wtclean");
+  if (!d) { d = document.createElement("dialog"); d.id = "wtclean"; d.className = "acct wtdialog"; document.body.appendChild(d); }
+  return d;
+}
+function renderWtPlan(p) {
+  const risky = p.warnings.length > 0;
+  const what = [
+    `<li>${icon("worktrees", 15)}<span>the worktree folder <code>${esc(p.path)}</code></span></li>`,
+    p.branch ? `<li>${icon("mrs", 15)}<span>the local branch <code>${esc(p.branch)}</code></span></li>` : "",
+    ...p.containers.map(c => `<li>${icon("docker", 15)}<span>the server container <code>${esc(c)}</code></span></li>`),
+    ...p.databases.map(db => `<li>${icon("postgres", 15)}<span>the database <code>${esc(db)}</code> and its files</span></li>`),
+  ].join("");
+  const warns = p.warnings.map(w => `<div class="wtwarn">${icon("warning", 16)}<div class="grow"><b>${esc(w.text)}</b>${w.items?.length ? `<ul>${w.items.map(i => `<li translate="no">${esc(i)}</li>`).join("")}</ul>` : ""}${w.url ? `<a href="${esc(w.url)}" target="_blank">Open the merge request →</a>` : ""}</div></div>`).join("");
+  wtDialog().innerHTML = `<h3>Clean up <span translate="no">${esc(p.name)}</span>?</h3>
+    <div class="muted fs-md">This deletes:</div><ul class="wtwhat">${what}</ul>
+    <div class="muted fs-sm">Nothing else is touched — other worktrees, the main checkout and its database stay as they are.${p.command ? ` Runs <code>${esc(p.command)}${risky ? " --force" : ""}</code> in your project folder.` : ""}</div>
+    ${risky ? `<div class="wtwarns"><div class="wtwarnhead">Careful — this will be lost:</div>${warns}</div>` : ""}
+    <div class="row"><span class="msg" id="wtMsg"></span><button type="button" data-wt-cancel>Cancel</button><button type="button" class="${risky ? "btn-danger" : "btn-primary"}" data-wt-go="${esc(p.name)}" data-force="${risky ? 1 : 0}">${risky ? "Yes, clean up anyway" : "Clean up"}</button></div>`;
+  translateTree(wtDialog());
+}
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-wt-clean]");
+  if (b) {
+    b.disabled = true;
+    try {
+      const r = await (await fetch(`/api/worktree-plan?name=${encodeURIComponent(b.dataset.wtClean)}`, { cache: "no-store" })).json();
+      if (!r.ok) { alert(r.error); return; }
+      renderWtPlan(r.plan);
+      wtDialog().showModal();
+    } finally { b.disabled = false; }
+    return;
+  }
+  if (e.target.closest("[data-wt-cancel]")) { wtDialog().close(); return; }
+  const go = e.target.closest("[data-wt-go]");
+  if (go) {
+    go.disabled = true;
+    const r = await (await fetch("/api/worktree-remove", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: go.dataset.wtGo, force: go.dataset.force === "1" }) })).json();
+    if (!r.ok) { $("wtMsg").className = "msg err"; $("wtMsg").textContent = r.error; go.disabled = false; return; }
+    wtDialog().close();
+    data.wt_jobs = { ...(data.wt_jobs || {}), [go.dataset.wtGo]: { status: "running" } };
+    render();
+    return;
+  }
+  const dm = e.target.closest("[data-wt-dismiss]");
+  if (dm) { delete data.wt_jobs[dm.dataset.wtDismiss]; render(); fetch("/api/worktree-remove", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: dm.dataset.wtDismiss, dismiss: true }) }); }
+});

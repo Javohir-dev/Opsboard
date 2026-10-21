@@ -1,6 +1,6 @@
 {
   "name": "Odoo docker-env (camptocamp layout)",
-  "worktrees": { "repo": "src/local" },
+  "worktrees": { "repo": "src/local", "remove": "invoke remove-worktree -n {name}", "force_flag": "--force" },
   "containers": { "per_worktree": "{project}-qa-{slug}", "leftover": "^{project}-odoo-run-", "web_port": "8069" },
   "databases": { "per_worktree": ["wt_{slug}_qa", "wt_{slug}_test"] },
   "defaults": { "db.user": "odoo" },

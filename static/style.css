@@ -976,3 +976,27 @@ a.cnt:hover { filter: brightness(1.15); }
 .tglink { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; font-size: var(--fs-base); }
 .tgstart .fctl { gap: 8px; }
 .tglink { align-self: flex-start; width: auto; }
+
+/* worktree clean-up */
+.danger-soft { display: inline-flex; align-items: center; gap: 6px; }
+.danger-soft:hover { color: var(--bad) !important; border-color: var(--bad) !important; }
+.btn-danger { background: var(--bad); color: #fff; border: 1px solid var(--bad); border-radius: var(--r-sm); padding: 6px 14px; font-weight: 600; cursor: pointer; }
+.btn-danger:hover { filter: brightness(1.1); }
+.wtdialog { width: min(600px, calc(100vw - 32px)); }
+.wtdialog h3 { margin: 0 0 10px; }
+.wtwhat { list-style: none; margin: 8px 0 12px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.wtwhat li { display: flex; align-items: center; gap: 8px; font-size: var(--fs-md); }
+.wtwhat .ic { color: var(--muted); flex: none; }
+.wtwhat code, .wtdialog code { font-family: var(--mono); font-size: var(--fs-sm); background: var(--chip); padding: 1px 5px; border-radius: var(--r-xs); overflow-wrap: anywhere; }
+.wtwarns { margin-top: 14px; border: 1px solid color-mix(in srgb, var(--warn) 50%, var(--line)); background: color-mix(in srgb, var(--warn) 9%, transparent); border-radius: var(--r-md); padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
+.wtwarnhead { font-weight: 700; color: var(--warn); }
+.wtwarn { display: flex; gap: 8px; font-size: var(--fs-md); }
+.wtwarn .ic { color: var(--warn); flex: none; margin-top: 2px; }
+.wtwarn ul { margin: 4px 0 0; padding-left: 18px; font-family: var(--mono); font-size: var(--fs-sm); color: var(--muted); max-height: 140px; overflow: auto; }
+.wtnote { display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--panel); margin-bottom: 12px; font-size: var(--fs-md); }
+.wtnote.ok .ic { color: var(--ok); } .wtnote.bad .ic { color: var(--bad); }
+.wtnote pre { max-height: 240px; overflow: auto; font-size: 12px; background: var(--panel2); padding: 8px; border-radius: var(--r-sm); white-space: pre-wrap; }
+.wtnote summary { text-transform: none; letter-spacing: 0; font-size: var(--fs-sm); color: var(--muted); margin: 4px 0; }
+.wtdialog { max-height: calc(100vh - 48px); overflow-y: auto; }
+.wtwarn ul li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wtwarn .grow { min-width: 0; }

@@ -10,7 +10,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib import error
+from urllib import error, parse
 
 import config as cfg
 import demo
@@ -19,6 +19,7 @@ import machine
 import notify
 import stackprofile as profile
 import telegram
+import worktrees
 from core import DATA, HERE, gitlab_url, lock, log, loop, run, setup_logging, state
 from notes import load_marks, load_notes, notes_lock, save_notes, set_mark
 from providers import github, review_host, tracker
@@ -73,6 +74,7 @@ def snapshot():
         data["paths"] = {k: str(v).replace(home, "~", 1) for k, v in (("config", cfg.CONFIG_FILE), ("home", HERE))}
         data["profiles"] = profile.names()
         data["notifications"] = notify.load()
+        data["wt_jobs"] = {} if DEMO else worktrees.jobs()
         data["telegram"] = {"configured": False} if DEMO else telegram.public()
         return redact(json.dumps(data, default=str))
 
@@ -168,6 +170,19 @@ class Handler(BaseHTTPRequestHandler):
                 out = {"ok": True}
             except ValueError as exc:
                 out = {"ok": False, "error": str(exc)}
+            self.send(json.dumps(out), "application/json")
+        elif self.path.startswith("/api/worktree-remove"):
+            try:
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+                if DEMO:
+                    raise ValueError("demo mode — nothing is removed")
+                if body.get("dismiss"):
+                    worktrees.forget(str(body.get("name", "")))
+                else:
+                    worktrees.remove(str(body.get("name", "")), bool(body.get("force")))
+                out = {"ok": True}
+            except ValueError as exc:
+                out = {"ok": False, "error": str(exc)[:300]}
             self.send(json.dumps(out), "application/json")
         elif self.path.startswith("/api/run-stop"):
             try:
@@ -371,6 +386,15 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as exc:
                 out = {"ok": False, "error": str(exc)}
             self.send(redact(json.dumps(out, ensure_ascii=False, default=str)), "application/json")
+        elif self.path.startswith("/api/worktree-plan?"):
+            query = dict(p.split("=", 1) for p in self.path.split("?", 1)[1].split("&") if "=" in p)
+            try:
+                if DEMO:
+                    raise ValueError("demo mode — nothing is removed")
+                out = {"ok": True, "plan": worktrees.plan(parse.unquote(query.get("name", "")))}
+            except ValueError as exc:
+                out = {"ok": False, "error": str(exc)[:300]}
+            self.send(json.dumps(out, ensure_ascii=False), "application/json")
         elif self.path.startswith("/api/doctor"):
             self.send(redact(json.dumps(demo.DOCTOR if DEMO else detect.doctor())), "application/json")
         elif self.path.startswith("/api/state"):

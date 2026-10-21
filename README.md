@@ -166,6 +166,12 @@ Connections per database and which container they come from, queries running now
 
 ![Postgres](docs/screenshots/postgres.png)
 
+### Worktrees page
+
+Every worktree with its uncommitted files, last commit, server container, databases and the Claude sessions using it. **Clean up** deletes one worktree and everything that belongs to it — the folder, its local branch, its server container and its databases (with their files). It first shows exactly what will go, and warns about anything you would lose: uncommitted changes, commits that are not pushed anywhere, a merge request that is still open, a Claude session still working there. With a warning the button reads **Yes, clean up anyway** and forces it.
+
+Only worktrees in the list can be removed — never the main checkout — and only the containers and databases whose names the profile derives from that worktree (`{project}-qa-{slug}`, `wt_{slug}_qa`…). A profile can name its own command for this (`worktrees.remove`); `odoo-docker-env` uses `invoke remove-worktree -n {name}` (with `--force` when forced), which also removes Odoo filestores.
+
 ### Fix skill: fixing review threads in the background
 
 ![Run fix](docs/screenshots/fix.png)
