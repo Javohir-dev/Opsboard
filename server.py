@@ -18,6 +18,7 @@ import detect
 import machine
 import notify
 import stackprofile as profile
+import telegram
 from core import DATA, HERE, gitlab_url, lock, log, loop, run, setup_logging, state
 from notes import load_marks, load_notes, notes_lock, save_notes, set_mark
 from providers import github, review_host, tracker
@@ -72,6 +73,7 @@ def snapshot():
         data["paths"] = {k: str(v).replace(home, "~", 1) for k, v in (("config", cfg.CONFIG_FILE), ("home", HERE))}
         data["profiles"] = profile.names()
         data["notifications"] = notify.load()
+        data["telegram"] = {"configured": False} if DEMO else telegram.public()
         return redact(json.dumps(data, default=str))
 
 
@@ -285,6 +287,43 @@ class Handler(BaseHTTPRequestHandler):
             except (error.URLError, ValueError, KeyError, OSError) as exc:
                 out = {"ok": False, "error": str(exc)[:200]}
             self.send(json.dumps(out), "application/json")
+        elif self.path.startswith("/api/telegram-account"):
+            try:
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+                token = str(body.get("token", "")).strip()
+                if not re.fullmatch(r"\d{5,}:[A-Za-z0-9_-]{30,}", token):
+                    raise ValueError("this does not look like a bot token from @BotFather")
+                bot = telegram.call("getMe", token=token)["username"]
+                if token != cfg.secret("telegram.token"):
+                    cfg.set("telegram.chat_id", None, "user")
+                    cfg.set("telegram.user", None, "user")
+                cfg.set_secret("telegram.token", token)
+                out = {"ok": True, "name": "@" + bot}
+            except telegram.TelegramError as exc:
+                out = {"ok": False, "error": f"Telegram rejected this token: {exc}"}
+            except ValueError as exc:
+                out = {"ok": False, "error": str(exc)[:200]}
+            self.send(json.dumps(out), "application/json")
+        elif self.path.startswith("/api/telegram"):
+            try:
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+                action = body.get("action")
+                if action == "unlink":
+                    cfg.set("telegram.chat_id", None, "user")
+                    cfg.set("telegram.user", None, "user")
+                elif action == "forget":
+                    cfg.set_secret("telegram.token", "")
+                    cfg.set("telegram.chat_id", None, "user")
+                    cfg.set("telegram.user", None, "user")
+                elif action == "test":
+                    if not telegram.send("👋 Opsboard is connected. Send /help to see what I can do."):
+                        raise ValueError("could not send — is the chat linked?")
+                else:
+                    raise ValueError("unknown action")
+                out = {"ok": True}
+            except ValueError as exc:
+                out = {"ok": False, "error": str(exc)[:200]}
+            self.send(json.dumps(out), "application/json")
         elif self.path.startswith("/api/jira-account"):
             try:
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
@@ -416,6 +455,8 @@ def main():
         loop(interval, fn)
     threading.Thread(target=lambda: detect.apply(detect.detect_all()[0]), daemon=True).start()
     threading.Thread(target=collect_tasks_loop, daemon=True).start()
+    notify.HOOKS.append(telegram.on_notify)
+    telegram.start()
     ALLOWED_HOSTS.update({f"127.0.0.1:{args.port}", f"localhost:{args.port}"})
     page_token()
     server = Server(("127.0.0.1", args.port), Handler)

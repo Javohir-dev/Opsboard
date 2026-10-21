@@ -7,7 +7,7 @@ import config as cfg
 import detect
 
 MARK = {True: "✓", False: "✗", None: "–"}
-USER_ONLY = {"claude.live_usage"}
+USER_ONLY = {"claude.live_usage", "telegram.chat_id", "telegram.allow_runs"}
 
 
 def parse_value(raw):
@@ -46,7 +46,7 @@ def cmd_config(args):
         return 2
     try:
         if args.key in USER_ONLY and args.source != "user":
-            raise ValueError(f"{args.key} reads Claude Code's own sign-in — only you can switch it, in Settings → Claude")
+            raise ValueError(f"{args.key} can only be changed by you, in Settings")
         if args.action == "set":
             cfg.set(args.key, parse_value(args.value), args.source, args.origin or f"set by {args.source}")
         else:

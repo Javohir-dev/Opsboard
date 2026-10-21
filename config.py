@@ -42,9 +42,13 @@ DEFAULTS = {
     "claude.fix_skill": "",
     "claude.live_usage": True,
     "notify.sound": True,
+    "telegram.chat_id": "",
+    "telegram.user": "",
+    "telegram.notify": True,
+    "telegram.allow_runs": False,
     "refresh.tasks_seconds": 300,
 }
-SECRETS = ("jira.token", "gitlab.token", "github.token")
+SECRETS = ("jira.token", "gitlab.token", "github.token", "telegram.token")
 ENV = {
     "project.root": "OPS_HIS_ROOT",
     "db.container": "OPS_DB_CONTAINER",

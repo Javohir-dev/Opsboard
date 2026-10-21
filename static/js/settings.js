@@ -20,7 +20,7 @@ const REJECTED = /\b(401|403)\b/;
 function requiredState(key) {
   if (key.endsWith(".token")) {
     if (!data.config?._secrets?.[key]) return "missing";
-    const err = key === "jira.token" ? data.jira?.error : data.review?.error;
+    const err = key === "jira.token" ? data.jira?.error : key === "telegram.token" ? data.telegram?.error : data.review?.error;
     return err && REJECTED.test(err) ? "rejected" : "ok";
   }
   return conf(key) ? "ok" : "missing";
@@ -112,7 +112,7 @@ function pageSettings() {
         return `<div class="check ${c.ok === true ? "ok" : c.ok === false ? "bad" : "skip"}" title="${esc(c.detail)}" data-goto="${a.section}" ${a.focus ? `data-focus="${a.focus}"` : ""} role="button" tabindex="0"><span class="dot ${c.ok === true ? "ok" : c.ok === false ? "bad" : ""}"></span><b>${CHECK_LABEL[c.id] || c.id}</b><button class="checkact ${c.ok === false ? "bad" : ""}" ${a.attr}>${a.label}</button><span class="muted">${esc(c.detail)}</span></div>`;
       }).join("") : '<div class="muted">Checking…</div>'}</div>
       <div class="fmsg mt-2" id="msg-detect"></div>${setupMissing().length ? "" : setupBox(false)}</section>
-    <div class="setgrid"><nav class="setnav" aria-label="Settings sections">${[["sec-you", "You"], ["sec-gitlab", "Code host"], ["sec-jira", "Tasks"], ["sec-workspace", "Workspace"], ["sec-claude", "Claude"], ["sec-keys", "Keyboard shortcuts"], ["sec-adv", "Advanced"]].map(([id, l]) => `<a href="#/settings" data-goto-btn="${id}">${l}</a>`).join("")}</nav><div class="setbody">
+    <div class="setgrid"><nav class="setnav" aria-label="Settings sections">${[["sec-you", "You"], ["sec-gitlab", "Code host"], ["sec-jira", "Tasks"], ["sec-workspace", "Workspace"], ["sec-claude", "Claude"], ["sec-telegram", "Telegram"], ["sec-keys", "Keyboard shortcuts"], ["sec-adv", "Advanced"]].map(([id, l]) => `<a href="#/settings" data-goto-btn="${id}">${l}</a>`).join("")}</nav><div class="setbody">
     <section id="sec-you"><h2>You</h2><div class="panel form">
       ${field("project.root", "Project folder", { type: "folder", placeholder: "Click to choose your project folder", help: "The checkout you work in. Everything else is detected from here." })}
       ${field("ui.theme", "Theme", { type: "select", options: [["system", "System"], ["light", "Light"], ["dark", "Dark"]] })}
@@ -158,6 +158,7 @@ function pageSettings() {
       ${field("claude.reply_language", "Reply language", { type: "select", options: [["thread", "Same as the review thread"], ["uz", "Uzbek"], ["ru", "Russian"], ["en", "English"]], help: "Passed to the fix skill as <code>OPS_REPLY_LANGUAGE</code> for its thread replies." })}
       ${field("claude.live_usage", "Live Claude usage", { type: "toggle", help: "Your plan limits in the sidebar, asked from Anthropic every minute with Claude Code's own sign-in. Off: no limits at all — the sidebar shows CPU, RAM and swap instead, and Overview leaves out the machine tiles. The token is read from the Keychain (macOS asks once — choose <i>Always Allow</i>), kept in memory only and never renewed here." })}
     </div></section>
+    ${telegramSection()}
     <section id="sec-keys"><h2>Keyboard shortcuts<span class="h2-actions"><span class="fmsg" id="msg-hk"></span><button class="linkbtn" data-hk-reset="1">Reset to defaults</button></span></h2><div class="panel form">
       <div class="frow"><div class="flabel"><div>How it works</div><div class="fhelp">Click a field and press the keys. A sequence like <code>g t</code> means: press <kbd>g</kbd>, then <kbd>t</kbd>. Backspace clears. Plain keys are ignored while you type in a field; shortcuts with <code>alt</code>/<code>ctrl</code>/<code>cmd</code> work everywhere. Press <kbd>?</kbd> to see them all.</div></div><div class="fctl"></div></div>
       ${hotkeys().map(h => `<div class="frow"><div class="flabel"><div>${esc(h.label)}</div></div><div class="fctl"><input type="text" class="hkinput" readonly data-hk-record="${h.page}" value="${esc(h.combo)}" placeholder="not set"><div class="fmeta"><span class="muted">default: ${esc(h.def)}</span></div></div></div>`).join("")}
@@ -189,3 +190,32 @@ function applyTheme() {
   if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
   else if (t === "system") delete document.documentElement.dataset.theme;
 }
+
+function telegramSection() {
+  const tg = data.telegram || {};
+  const state = !tg.configured ? "" : tg.error ? `<span class="badge bad" title="${esc(tg.error)}">${esc(tg.error.slice(0, 60))}</span>` : tg.running ? '<span class="badge ok">connected</span>' : '<span class="badge muted">connecting…</span>';
+  const link = !tg.configured ? "" : tg.linked
+    ? `<div class="frow"><div class="flabel"><div>Linked chat</div><div class="fhelp">Only this Telegram account can use the bot; everyone else is ignored.</div></div><div class="fctl"><div class="ro">${tg.user ? "@" + esc(tg.user) : "linked"}</div><div class="fmeta"><button class="fixbtn" data-tg="test">Send a test message</button><button class="linkbtn" data-tg="unlink">Unlink</button><span class="fmsg" id="msg-tg"></span></div></div></div>`
+    : tg.link
+      ? `<div class="frow"><div class="flabel"><div>Link your chat</div><div class="fhelp">Open the bot and press <b>Start</b> — that sends a one-time code (valid 15 minutes) and links this Telegram account to your Opsboard.</div></div><div class="fctl"><div class="fmeta"><a class="btn-primary tglink" href="${esc(tg.link)}" target="_blank">Open @${esc(tg.bot)} in Telegram</a><span class="muted fs-sm">or send <code>/start ${esc(tg.code)}</code></span></div></div></div>`
+      : `<div class="frow"><div class="flabel"><div>Link your chat</div></div><div class="fctl"><div class="ro muted">waiting for the bot to connect…</div></div></div>`;
+  return `<section id="sec-telegram"><h2>Telegram${tg.bot ? `<span class="count">@${esc(tg.bot)}</span>` : ""}<span class="h2-actions">${state}</span></h2><div class="panel form">
+      ${secretRow("telegram", "Bot token", 'Create a bot with <a href="https://t.me/BotFather" target="_blank">@BotFather</a> (<code>/newbot</code>) and paste its token. The bot runs inside Opsboard: it starts and stops with it, and needs no public address.')}
+      ${link}
+      ${tg.configured ? field("telegram.notify", "Notifications in Telegram", { type: "toggle", help: "Finished fix runs (with live progress while they run) and new review threads." }) : ""}
+      ${tg.configured ? field("telegram.allow_runs", "Allow fix runs from Telegram", { type: "toggle", help: "Lets the linked chat start and stop your fix skill with /fix and the ▶ buttons. Every start asks for confirmation." }) : ""}
+      ${tg.configured ? `<div class="frow"><div class="flabel"><div>Remove the bot</div><div class="fhelp">Forgets the token and the linked chat.</div></div><div class="fctl"><button class="linkbtn danger" data-tg="forget">Forget the bot</button></div></div>` : ""}
+    </div></section>`;
+}
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-tg]");
+  if (!b) return;
+  const action = b.dataset.tg, msg = $("msg-tg");
+  if (action === "forget" && !confirm(t("Forget the Telegram bot and the linked chat?"))) return;
+  b.disabled = true;
+  try {
+    const r = await (await fetch("/api/telegram", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) })).json();
+    if (msg) { msg.className = r.ok ? "fmsg okmsg" : "fmsg err"; msg.textContent = r.ok ? (action === "test" ? t("Sent — check Telegram") : t("Done")) : r.error; }
+    data = await (await fetch("/api/state")).json(); rerenderSettings();
+  } finally { b.disabled = false; }
+});

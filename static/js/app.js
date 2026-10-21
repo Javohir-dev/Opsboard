@@ -269,7 +269,7 @@ document.addEventListener("click", async e => {
   const st = e.target.closest("[data-save-token]");
   if (st) {
     const kind = st.dataset.saveToken, msg = $("msg-tok-" + kind), tok = $("tok-" + kind).value.trim();
-    const body = kind === "gitlab" ? { token: tok, url: $("f-gitlab-url").value.trim() } : kind === "github" ? { token: tok, url: $("f-github-url").value.trim() } : { token: tok, email: $("f-jira-email").value.trim(), site: $("f-jira-site").value.trim() };
+    const body = kind === "telegram" ? { token: tok } : kind === "gitlab" ? { token: tok, url: $("f-gitlab-url").value.trim() } : kind === "github" ? { token: tok, url: $("f-github-url").value.trim() } : { token: tok, email: $("f-jira-email").value.trim(), site: $("f-jira-site").value.trim() };
     st.disabled = true; msg.className = "fmsg muted"; msg.textContent = "Checking…";
     const r = await (await fetch(`/api/${kind}-account`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
     st.disabled = false;

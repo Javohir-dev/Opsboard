@@ -5,6 +5,7 @@ All notable changes. Versions follow [semantic versioning](https://semver.org/);
 ## Unreleased
 
 ### Added
+- **Telegram bot** (*Settings → Telegram*): runs inside Opsboard, links to one Telegram account with a one-time code, sends notifications and a live-updating message per fix run, and answers `/status`, `/mrs`, `/mr`, `/runs`, `/fix`, `/stop`. Starting fixes from Telegram is off by default and always asks for confirmation.
 - **Fix run progress:** a fix tab on the request page with the steps of the run, the threads it handled and a live feed of Claude's messages, commands and edits; earlier runs can be picked. Background runs, the running badge and run notifications open it. Skills can name their steps with optional `OPS_STEP` lines (`docs/fix-skill.md`).
 - Request *Overview* sidebar like GitLab's: assignees, reviewers with their review state, labels, milestone, tasks, time tracking and participants, with avatars.
 - Request page header and tabs like GitLab: *Overview* (description rendered with marked + DOMPurify, Mermaid diagrams, pipeline, approvals, threads, reviewers, labels), *Commits*, *Pipelines* / *Checks* and *Changes*. The libraries are vendored; Mermaid loads only when a description has a diagram.

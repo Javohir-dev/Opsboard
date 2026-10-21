@@ -201,6 +201,16 @@ opsboard review upload test-log.txt
 
 `opsboard skill check <name>` checks a skill against the contract.
 
+### Telegram
+
+Opsboard can also live in a Telegram bot — it runs inside Opsboard, so it starts and stops with it and needs no public address (it asks Telegram for messages itself).
+
+1. Create a bot with [@BotFather](https://t.me/BotFather) (`/newbot`), paste its token in *Settings → Telegram* (kept in the Keychain / Secret Service).
+2. Press **Open @yourbot in Telegram** and **Start**: a one-time code links your Telegram account. The bot ignores everyone else and every group.
+3. You get the bell's notifications there — new review threads, and fix runs as one message that updates itself with the steps while the run goes on.
+
+Commands: `/status`, `/mrs`, `/mr 7376`, `/runs`, `/fix 7376 push skip-tests`, `/stop`. Starting and stopping fixes is off until you switch on *Allow fix runs from Telegram*, and every start asks you to confirm.
+
 ### Project profiles
 
 Everything specific to how a project is laid out lives in a profile, chosen in *Settings → Workspace → Project profile* (detected automatically):
@@ -225,6 +235,7 @@ Everything lives in the checkout folder (`opsboard home` prints it; `~/.opsboard
 | `notes.json`, `notes-history/` | your notes and their last 50 versions (`chmod 600`) |
 | `runs/`, `runs.json` | background fix runs and their logs |
 | `notifications.json` | the bell's notifications (last 100) |
+| `threads-seen.json` | review threads already announced |
 | `mr-modules.json`, `key-aliases.json` | caches |
 | `server.log`, `opsboard.log` | start-up output; server log (rotated at 1 MB, 3 kept) |
 

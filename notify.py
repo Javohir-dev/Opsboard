@@ -16,6 +16,7 @@ KEEP = 100
 PAGE_GONE = 75
 _lock = threading.Lock()
 _last_alerting_page = 0.0
+HOOKS = []
 
 
 def load():
@@ -63,6 +64,8 @@ def _publish(item, same, bad=False):
         os_notify(*text(item))
     if cfg.get("notify.sound"):
         play_sound(bad)
+    for hook in HOOKS:
+        threading.Thread(target=hook, args=(item,), daemon=True).start()
     return item
 
 
