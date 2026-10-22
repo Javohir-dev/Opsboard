@@ -77,6 +77,18 @@ class NotifyTest(unittest.TestCase):
         self.assertEqual(notify.new_threads(rows, "dev"), [])
         self.assertNotIn("_threads", rows[0])
 
+    def test_merged_after_open(self):
+        notify.STATES_FILE.unlink(missing_ok=True)
+        mr = lambda state: [{"iid": 7, "title": "Fix", "state": state, "merged_by": "Max", "source": "f", "target": "main", "url": "https://gl/7"}]  # noqa: E731
+        self.assertEqual(notify.merged(mr("merged")), [])
+        notify.STATES_FILE.unlink()
+        notify.merged(mr("opened"))
+        self.assertEqual([m["iid"] for m in notify.merged(mr("merged"))], [7])
+        item = notify.load()[0]
+        self.assertEqual((item["kind"], item["merged_by"]), ("merged", "Max"))
+        self.assertEqual(notify.text(item), ("Merged · !7", "Fix — by Max"))
+        self.assertEqual(notify.merged(mr("merged")), [])
+
     def test_mark_read_and_clear(self):
         a = notify.run_finished(run())
         notify.run_finished({**run(), "id": "r2"})

@@ -228,6 +228,34 @@ class TelegramTest(unittest.TestCase):
         telegram.CHAT.proc = None
         cfg.set("telegram.claude_chat", None, "user")
 
+    def test_merged_message(self):
+        self.link()
+        SENT.clear()
+        now = time.time()
+        telegram.on_notify(
+            {
+                "kind": "merged",
+                "iid": 7,
+                "mr_title": "Fix totals",
+                "url": "https://gl/x/-/merge_requests/7",
+                "source": "feat/x",
+                "target": "main",
+                "merged_by": "Max",
+                "created": now - 2 * 86400 - 4 * 3600,
+                "merged_at": now,
+                "threads_total": 3,
+                "approved_by": ["Lena"],
+            }
+        )
+        text = self.texts()[-1]
+        self.assertIn("<b>!7</b>", text)
+        self.assertIn("Fix totals", text)
+        self.assertIn("<code>feat/x</code> → <code>main</code>", text)
+        self.assertIn("<b>Max</b>", text)
+        self.assertIn("2 kun 4 soat", text)
+        self.assertIn("3 ta thread", text)
+        self.assertEqual(SENT[-1][1]["reply_markup"]["inline_keyboard"][0][0]["url"], "https://gl/x/-/merge_requests/7")
+
     def test_new_threads_are_grouped_with_fix_buttons(self):
         telegram.on_notify({"kind": "thread", "iid": 7, "author": "Lena", "body": "why?", "mr_title": "Fix totals", "status": "thread"})
         time.sleep(0.1)

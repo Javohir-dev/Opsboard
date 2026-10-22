@@ -5,6 +5,7 @@ const canAlert = () => "Notification" in window && Notification.permission === "
 
 function notifText(n) {
   const o = n.outcome || {}, ref = n.iid ? mrRef(n.iid) : n.name;
+  if (n.kind === "merged") return { level: "ok", head: `Merged · ${ref}`, body: [n.mr_title, n.merged_by ? `by ${n.merged_by}` : ""].filter(Boolean).join(" — ") };
   if (n.kind === "thread") return { level: "info", head: `New thread · ${ref}${n.path && n.line ? ` · ${n.path.split("/").pop()}:${n.line}` : ""}`, body: `${n.author}: ${n.body}` };
   if (n.status === "error") return { level: "bad", head: `Fix failed · ${ref}`, body: n.error || "The run ended with an error" };
   if (o.status === "stopped") return { level: "bad", head: `Fix stopped · ${ref}`, body: o.note || "It could not finish" };
@@ -109,6 +110,7 @@ function openNotif(id) {
   if (!n.read) markNotifsRead([id]);
   closeNotifPanel();
   if (n.kind === "thread") { focusMrThread(n.iid, n.thread_id); return; }
+  if (n.kind === "merged") { location.hash = `#/mr/${n.iid}/overview`; return; }
   if (n.kind === "run" && n.iid) { ui.mrRun = n.run_id; location.hash = `#/mr/${n.iid}/fix`; return; }
   ui.focusRun = n.run_id;
   if (route().page !== "overview") location.hash = "#/"; else render();

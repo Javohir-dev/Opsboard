@@ -5,6 +5,7 @@ All notable changes. Versions follow [semantic versioning](https://semver.org/);
 ## Unreleased
 
 ### Added
+- A notification when one of your requests is merged — in the bell and as a Telegram message with who merged it, the branches, how long it was open, threads and approvals.
 - Telegram thread notifications are one short message per request with **▶ fix** and **⚡ fix ultra** buttons; the message itself shows the run starting and its result. A request can have only one fix running at a time.
 - Request threads like GitLab's: on *Overview* each thread shows the lines it was left on, and every open thread has a reply box and *Resolve thread* (⌘↵ sends). Replying needs a token with the `api` scope.
 - **Worktrees → Clean up:** removes a worktree with its branch, server container and databases after showing what goes and warning about uncommitted changes, unpushed commits, an open merge request or a session still working there; a forced clean-up when you confirm anyway.

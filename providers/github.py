@@ -197,6 +197,7 @@ def collect():
             prev = state.get("review") or {}
         put("review", dict(prev, host="github", configured=True, error=str(exc)[:300]))
         return
+    notify.merged(out)
     notify.new_threads(out, me)
     put("review", {"host": "github", "configured": True, "mrs": out, "fetched": time.time(), "user": me, "labels": labels})
 

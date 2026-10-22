@@ -104,6 +104,7 @@ def collect():
                     "author": (m.get("author") or {}).get("name", ""),
                     "reviewers": [r.get("name", "") for r in m.get("reviewers") or []],
                     "closed": epoch(m.get("closed_at") or ""),
+                    "merged_by": ((m.get("merge_user") or m.get("merged_by") or {}).get("name")) or "",
                     "_threads": heads,
                 }
             )
@@ -113,6 +114,7 @@ def collect():
             prev = state.get("review") or {}
         put("review", dict(prev, host="gitlab", configured=True, error=str(exc)[:300]))
         return
+    notify.merged(out)
     notify.new_threads(out, user)
     put("review", {"host": "gitlab", "configured": True, "mrs": out, "fetched": time.time(), "user": user, "labels": project_labels(pid)})
 

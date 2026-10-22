@@ -343,8 +343,68 @@ def _fix_buttons(iid):
     return [[{"text": f"▶ {skill}", "callback_data": f"fix:{iid}:"}, {"text": f"⚡ {skill} ultra", "callback_data": f"fix:{iid}:p"}]]
 
 
+MERGED = {
+    "uz": {
+        "heads": ["🎉 {ref} merge qilindi!", "🚀 {ref} {target} ga qo'shildi", "🥳 Tabriklayman — {ref} merge bo'ldi!", "✅ {ref} qabul qilindi va merge qilindi", "🏁 {ref} marraga yetdi — merged!"],
+        "by": "👤 merge qildi: {who} · {at}",
+        "open": "⏱ ochiq turdi: {d}",
+        "threads": "💬 {n} ta thread",
+        "approved": "👍 approve: {who}",
+    },
+    "en": {
+        "heads": ["🎉 {ref} is merged!", "🚀 {ref} landed in {target}", "🥳 Congrats — {ref} got merged!", "✅ {ref} was accepted and merged", "🏁 {ref} crossed the finish line — merged!"],
+        "by": "👤 merged by {who} · {at}",
+        "open": "⏱ open for {d}",
+        "threads": "💬 {n} threads",
+        "approved": "👍 approved by {who}",
+    },
+    "ru": {
+        "heads": ["🎉 {ref} слит!", "🚀 {ref} попал в {target}", "🥳 Поздравляю — {ref} слит!", "✅ {ref} принят и слит", "🏁 {ref} на финише — слит!"],
+        "by": "👤 слил: {who} · {at}",
+        "open": "⏱ был открыт: {d}",
+        "threads": "💬 тредов: {n}",
+        "approved": "👍 одобрил: {who}",
+    },
+}
+
+
+def _span(seconds, lang):
+    seconds = max(0, int(seconds))
+    days, hours, minutes = seconds // 86400, seconds % 86400 // 3600, seconds % 3600 // 60
+    units = {"uz": ("kun", "soat", "daqiqa"), "en": ("d", "h", "m"), "ru": ("д", "ч", "мин")}[lang]
+    parts = [f"{days} {units[0]}" if days else "", f"{hours} {units[1]}" if hours else "", f"{minutes} {units[2]}" if minutes and not days else ""]
+    return " ".join(p for p in parts if p) or f"1 {units[2]}"
+
+
+def _merged_text(item):
+    lang = _bot_lang()
+    w = MERGED[lang]
+    ref = f"<b>{_ref(item['iid'])}</b>"
+    head = random.choice(w["heads"]).format(ref=ref, target=f"<code>{esc(item.get('target') or '')}</code>")
+    lines = [head]
+    if item.get("mr_title"):
+        lines.append(f"<i>{esc(item['mr_title'][:160])}</i>")
+    lines.append("")
+    if item.get("source") or item.get("target"):
+        lines.append(f"🔀 <code>{esc(item.get('source') or '')}</code> → <code>{esc(item.get('target') or '')}</code>")
+    if item.get("merged_by"):
+        lines.append(w["by"].format(who=f"<b>{esc(item['merged_by'])}</b>", at=time.strftime("%H:%M", time.localtime(item.get("merged_at") or time.time()))))
+    if item.get("created"):
+        lines.append(w["open"].format(d=_span((item.get("merged_at") or time.time()) - item["created"], lang)))
+    if item.get("threads_total"):
+        lines.append(w["threads"].format(n=item["threads_total"]))
+    if item.get("approved_by"):
+        lines.append(w["approved"].format(who=esc(", ".join(item["approved_by"]))))
+    return "\n".join(lines)
+
+
 def on_notify(item):
     if not chat_id():
+        return
+    if item.get("kind") == "merged":
+        if cfg.get("telegram.notify"):
+            link = _url_button(f"Open in {_host()}", item.get("url"))
+            send(_merged_text(item), [link] if link else None)
         return
     if item.get("kind") == "run":
         _fix_finished(item)

@@ -12,6 +12,7 @@ from core import DATA, log
 
 FILE = DATA / "notifications.json"
 SEEN_FILE = DATA / "threads-seen.json"
+STATES_FILE = DATA / "mr-states.json"
 KEEP = 100
 PAGE_GONE = 75
 _lock = threading.Lock()
@@ -113,9 +114,48 @@ def new_threads(mrs, me):
     return [t for _, t in fresh]
 
 
+def merged(mrs):
+    """Announce requests that went from open to merged since the last look; the first look only remembers states."""
+    try:
+        before = json.loads(STATES_FILE.read_text())
+    except (OSError, ValueError):
+        before = None
+    now = {str(m["iid"]): m.get("state") for m in mrs}
+    tmp = STATES_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(now))
+    os.replace(tmp, STATES_FILE)
+    if before is None:
+        return []
+    done = [m for m in mrs if m.get("state") == "merged" and before.get(str(m["iid"])) == "opened"]
+    for m in done:
+        _publish(
+            {
+                "id": uuid.uuid4().hex[:12],
+                "kind": "merged",
+                "iid": m["iid"],
+                "mr_title": m.get("title", ""),
+                "url": m.get("url", ""),
+                "source": m.get("source", ""),
+                "target": m.get("target", ""),
+                "merged_by": m.get("merged_by", ""),
+                "created": m.get("created") or 0,
+                "merged_at": m.get("merged") or time.time(),
+                "threads_total": m.get("threads_total") or 0,
+                "approved_by": m.get("approved_by") or [],
+                "status": "merged",
+                "at": time.time(),
+                "read": False,
+            },
+            "iid",
+        )
+    return done
+
+
 def text(item):
     o = item.get("outcome") or {}
     ref = f"!{item['iid']}" if item.get("iid") else item.get("name", "")
+    if item.get("kind") == "merged":
+        return f"Merged · {ref}", (item.get("mr_title") or "") + (f" — by {item['merged_by']}" if item.get("merged_by") else "")
     if item.get("kind") == "thread":
         where = f" · {item['path'].split('/')[-1]}:{item['line']}" if item.get("path") and item.get("line") else ""
         return f"New thread · {ref}{where}", f"{item.get('author', '')}: {item.get('body', '')}"
