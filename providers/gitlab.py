@@ -163,13 +163,13 @@ def whoami():
     return {"host": "gitlab", "user": user["username"], "name": user.get("name", ""), "project": gitlab_project(), "server": gitlab_url()}
 
 
-def _own(iid, query="", assigned=False):
+def _own(iid, query="", assigned=True):
     m = gitlab_get(f"projects/{_pid()}/merge_requests/{int(iid)}{query}")
     me = gitlab_get("user")["username"]
     if assigned and me in {a.get("username") for a in m.get("assignees") or []}:
         return m
     if (m.get("author") or {}).get("username") != me:
-        raise PermissionError(f"!{iid} was opened by {(m.get('author') or {}).get('username')}, not by {me} — only your own merge requests")
+        raise PermissionError(f"!{iid} was opened by {(m.get('author') or {}).get('username')} and is not assigned to {me} — only your own merge requests")
     return m
 
 
@@ -194,6 +194,8 @@ def info(iid):
 def mine(conflicts_only=False):
     me = gitlab_get("user")["username"]
     rows = gitlab_get(f"projects/{_pid()}/merge_requests", {"state": "opened", "author_username": me, "per_page": 100})
+    authored = {m["iid"] for m in rows}
+    rows += [m for m in gitlab_get(f"projects/{_pid()}/merge_requests", {"state": "opened", "assignee_username": me, "per_page": 100}) if m["iid"] not in authored]
     return [
         {"number": m["iid"], "title": m["title"], "draft": m.get("draft", False), "source": m["source_branch"], "target": m["target_branch"], "conflicts": m.get("has_conflicts", False)}
         for m in rows

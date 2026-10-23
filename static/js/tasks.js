@@ -172,7 +172,7 @@ function openMenu(btn) {
   const t = (ui.tasks || []).find(x => x.key === key);
   const canFix = canRunFix();
   const own = key.startsWith("!") ? (data.review?.mrs || []).find(x => "!" + x.iid === key) : t && t.mr;
-  const m = canFix && own && own.state === "opened" && own.role !== "assignee" ? own : null;
+  const m = canFix && own && own.state === "opened" ? own : null;
   const busy = m && runningRun(m.iid);
   const menu = $("menu");
   menu.innerHTML = `<div class="mh">Mark ${esc(displayKey(key))}</div>

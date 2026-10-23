@@ -339,10 +339,6 @@ def _bot_lang():
 
 
 def _fix_buttons(iid):
-    m = _mr(iid) or {}
-    if m.get("role", "author") != "author":
-        link = _url_button(f"Open in {_host()}", m.get("url"))
-        return [link] if link else None
     skill = cfg.get("claude.fix_skill") or "fix"
     return [[{"text": f"▶ {skill}", "callback_data": f"fix:{iid}:"}, {"text": f"⚡ {skill} ultra", "callback_data": f"fix:{iid}:p"}]]
 

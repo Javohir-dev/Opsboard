@@ -212,13 +212,13 @@ def whoami():
     return {"host": "github", "user": login(), "project": repo(), "server": web_url()}
 
 
-def _own(number, assigned=False):
+def _own(number, assigned=True):
     pr = get(f"repos/{repo()}/pulls/{int(number)}")
     me = login()
     if assigned and me in {a.get("login") for a in pr.get("assignees") or []}:
         return pr
     if (pr.get("user") or {}).get("login") != me:
-        raise PermissionError(f"#{number} was opened by {(pr.get('user') or {}).get('login')}, not by {me} — only your own pull requests")
+        raise PermissionError(f"#{number} was opened by {(pr.get('user') or {}).get('login')} and is not assigned to {me} — only your own pull requests")
     return pr
 
 

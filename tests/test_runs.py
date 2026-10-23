@@ -78,15 +78,5 @@ class RefreshRunsTest(unittest.TestCase):
         self.assertEqual(r["session_id"], "s")
 
 
-class LaunchFixTest(unittest.TestCase):
-    def test_assigned_request_is_refused(self):
-        from core import lock, state
-
-        with lock:
-            state["review"] = {"mrs": [{"iid": 8, "state": "opened", "role": "assignee"}]}
-        with self.assertRaisesRegex(ValueError, "assigned to you"):
-            runs.launch_fix({"iid": 8, "threads": True, "conflict": True})
-
-
 if __name__ == "__main__":
     unittest.main()

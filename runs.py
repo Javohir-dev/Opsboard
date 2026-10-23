@@ -41,8 +41,6 @@ def launch_fix(body):
         mrs = {m["iid"]: m for m in (state.get("review") or {}).get("mrs", [])}
     if iid not in mrs or mrs[iid]["state"] != "opened":
         raise ValueError(f"!{iid} is not one of your open merge requests")
-    if mrs[iid].get("role", "author") != "author":
-        raise ValueError(f"!{iid} is assigned to you but opened by someone else — fix skills work on your own requests only")
     if not cfg.get("claude.background_runs"):
         raise ValueError("background runs are turned off in Settings")
     if any(r.get("iid") == iid and r["status"] == "running" for r in load_runs()):

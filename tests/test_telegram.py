@@ -228,16 +228,18 @@ class TelegramTest(unittest.TestCase):
         telegram.CHAT.proc = None
         cfg.set("telegram.claude_chat", None, "user")
 
-    def test_assigned_request_gets_a_link_instead_of_fix_buttons(self):
+    def test_assigned_request_gets_fix_buttons_too(self):
         self.link()
+        cfg.set("claude.fix_skill", "mr-fix", "user")
         with lock:
             state["review"]["mrs"].append({"iid": 8, "title": "Group column", "state": "opened", "url": "https://gl/x/-/merge_requests/8", "role": "assignee"})
         SENT.clear()
         with mock.patch.object(telegram, "THREAD_GROUP", 0.1):
             telegram.on_notify({"kind": "thread", "iid": 8, "author": "Bakhrom", "body": "x", "mr_title": "Group column", "status": "thread"})
             self.assertTrue(self.wait_for("sizga assign qilingan", method="sendMessage"))
-        markup = [b for m, b in SENT if m == "sendMessage"][-1]["reply_markup"]["inline_keyboard"]
-        self.assertEqual(markup, [[{"text": "Open in GitLab", "url": "https://gl/x/-/merge_requests/8"}]])
+        markup = [b for m, b in SENT if m == "sendMessage"][-1]["reply_markup"]["inline_keyboard"][0]
+        self.assertEqual([b["callback_data"] for b in markup], ["fix:8:", "fix:8:p"])
+        cfg.set("claude.fix_skill", None, "user")
 
     def test_merged_message(self):
         self.link()

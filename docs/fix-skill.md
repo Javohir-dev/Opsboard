@@ -43,7 +43,7 @@ The dashboard also sets these environment variables (a person calling the skill 
 
 ## 3. Talking to GitLab or GitHub
 
-Use `opsboard review` instead of calling the API yourself. It uses the token from the dashboard's settings, works the same on GitLab and GitHub, and **refuses to touch a merge / pull request the user did not open**.
+Use `opsboard review` instead of calling the API yourself. It uses the token from the dashboard's settings, works the same on GitLab and GitHub, and **refuses to touch a merge / pull request the user neither opened nor is assigned to**.
 
 ```bash
 opsboard review whoami                 # user, git author, reply language, project folder

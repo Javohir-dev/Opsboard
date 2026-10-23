@@ -193,7 +193,7 @@ When a run finishes, the **bell** next to the logo (top right on a phone) shows 
 
 Desktop alerts: in the bell panel press **Turn on** once and allow notifications in the browser; the alert opens the dashboard when clicked. With no dashboard tab showing alerts (closed, or alerts not allowed), Opsboard posts a system notification itself — Notification Center on macOS, `notify-send` on Linux.
 
-Skills talk to GitLab through `opsboard review`, so they need no token or API code of their own, and it refuses to touch merge requests you did not open:
+Skills talk to GitLab through `opsboard review`, so they need no token or API code of their own, and it refuses to touch merge requests you neither opened nor are assigned to:
 
 ```bash
 opsboard review whoami             # host user, git author, reply language, project folder

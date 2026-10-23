@@ -15,7 +15,7 @@ const PHASE_ICON = { done: ["ok", "ok"], running: ["running", "busy"], pending: 
 
 function fixTab(iid, d) {
   const runs = runsFor(iid);
-  if (!runs.length) return `<div class="empty">No fix runs for this request yet.${canRunFix() && (data.review?.mrs || []).find(x => x.iid === iid)?.role !== "assignee" ? ` <button class="linkbtn" data-fix="${iid}">Run ${esc(conf("claude.fix_skill"))}</button>` : ""}</div>`;
+  if (!runs.length) return `<div class="empty">No fix runs for this request yet.${canRunFix() ? ` <button class="linkbtn" data-fix="${iid}">Run ${esc(conf("claude.fix_skill"))}</button>` : ""}</div>`;
   const run = runs.find(r => r.id === ui.mrRun) || runs[0];
   const tl = RUND.cache[run.id];
   const stale = !RUND.at[run.id] || (run.status === "running" ? Date.now() - RUND.at[run.id] > 1800 : !tl || tl.run.status !== run.status);
