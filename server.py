@@ -187,15 +187,18 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError(f"!{iid} is not one of your merge requests")
                 host = review_host()
                 if text:
-                    host.reply(iid, thread, text, bool(body.get("resolve")))
+                    host.reply(iid, thread, text, bool(body.get("resolve")), assigned=True)
                 elif body.get("resolve"):
-                    host.resolve_thread(iid, thread)
+                    host.resolve_thread(iid, thread, assigned=True)
                 else:
                     raise ValueError("write a reply first")
                 MR_CACHE.pop(iid, None)
                 out = {"ok": True}
             except error.HTTPError as exc:
-                out = {"ok": False, "error": f"{'GitHub' if cfg.get('review.host') == 'github' else 'GitLab'} refused it ({exc.code}){' — the token needs the api scope to reply' if exc.code in (401, 403) else ''}"}
+                out = {
+                    "ok": False,
+                    "error": f"{'GitHub' if cfg.get('review.host') == 'github' else 'GitLab'} refused it ({exc.code}){' — the token needs the api scope to reply' if exc.code in (401, 403) else ''}",
+                }
             except (ValueError, TypeError, PermissionError, error.URLError, OSError) as exc:
                 out = {"ok": False, "error": str(exc)[:300]}
             self.send(json.dumps(out), "application/json")

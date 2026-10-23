@@ -125,6 +125,11 @@ def collect():
             if len(batch) < 100:
                 break
             page += 1
+        authored = {it["number"] for it in items}
+        for it in get("search/issues", {"q": f"repo:{name} is:pr assignee:{me} -author:{me}", "sort": "updated", "order": "desc", "per_page": 100}).get("items", []):
+            if it["number"] not in authored:
+                it["_role"] = "assignee"
+                items.append(it)
         keys_rx = key_regex()
         title_rx = re.compile(profile.get("tasks.mr_title")) if profile.get("tasks.mr_title") else None
         labels, out = {}, []
@@ -158,6 +163,7 @@ def collect():
                 "approved_by": [],
                 "labels": [lb["name"] for lb in it.get("labels") or []],
                 "author": (it.get("user") or {}).get("login", ""),
+                "role": it.get("_role", "author"),
                 "reviewers": [],
             }
             if st == "opened":
@@ -206,9 +212,11 @@ def whoami():
     return {"host": "github", "user": login(), "project": repo(), "server": web_url()}
 
 
-def _own(number):
+def _own(number, assigned=False):
     pr = get(f"repos/{repo()}/pulls/{int(number)}")
     me = login()
+    if assigned and me in {a.get("login") for a in pr.get("assignees") or []}:
+        return pr
     if (pr.get("user") or {}).get("login") != me:
         raise PermissionError(f"#{number} was opened by {(pr.get('user') or {}).get('login')}, not by {me} — only your own pull requests")
     return pr
@@ -278,16 +286,16 @@ def threads(number, include_resolved=False):
     return out
 
 
-def reply(number, thread, body, resolve=False):
-    _own(number)
+def reply(number, thread, body, resolve=False, assigned=False):
+    _own(number, assigned=assigned)
     graphql("mutation($id:ID!,$body:String!){addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$id,body:$body}){comment{id}}}", {"id": thread, "body": body})
     if resolve:
-        resolve_thread(number, thread)
+        resolve_thread(number, thread, assigned=assigned)
     return {"replied": thread, "resolved": resolve}
 
 
-def resolve_thread(number, thread):
-    _own(number)
+def resolve_thread(number, thread, assigned=False):
+    _own(number, assigned=assigned)
     graphql("mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{id isResolved}}}", {"id": thread})
     return {"resolved": thread}
 

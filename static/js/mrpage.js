@@ -334,7 +334,7 @@ function pageMr(ctx, arg) {
   const run = m && runningRun(iid);
   const actions = `<span class="h2-actions">
     <button class="iconbtn ${MRD.loading === iid ? "spin" : ""}" data-mr-refresh="${iid}" title="Update from ${hostName()} now" ${MRD.loading === iid ? "disabled" : ""}>${icon("refresh", 14)}</button>
-    ${m && m.state === "opened" && canRunFix() ? (run ? `<span class="cnt running"><span class="dot busy"></span>${esc(conf("claude.fix_skill") || "fix")} ${dur(now() - run.started)}</span>` : `<button class="fixbtn" data-fix="${iid}">Run ${esc(conf("claude.fix_skill"))}</button>`) : ""}
+    ${m && m.state === "opened" && m.role !== "assignee" && canRunFix() ? (run ? `<span class="cnt running"><span class="dot busy"></span>${esc(conf("claude.fix_skill") || "fix")} ${dur(now() - run.started)}</span>` : `<button class="fixbtn" data-fix="${iid}">Run ${esc(conf("claude.fix_skill"))}</button>`) : ""}
     ${url ? `<a class="fixbtn" href="${esc(url)}" target="_blank">Open in ${hostName()}</a>` : ""}</span>`;
   const tab = mrTab();
   ui.mrBase = projectUrl(d?.url || m?.url);

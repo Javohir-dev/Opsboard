@@ -35,6 +35,11 @@ def collect():
             if len(batch) < 100:
                 break
             page += 1
+        authored = {m["iid"] for m in mrs}
+        for m in gitlab_get(f"projects/{pid}/merge_requests", {"assignee_username": user, "state": "all", "per_page": 100, "order_by": "updated_at"}):
+            if m["iid"] not in authored:
+                m["_role"] = "assignee"
+                mrs.append(m)
         try:
             cache = json.loads(MODULE_CACHE.read_text())
         except (OSError, ValueError):
@@ -105,6 +110,7 @@ def collect():
                     "reviewers": [r.get("name", "") for r in m.get("reviewers") or []],
                     "closed": epoch(m.get("closed_at") or ""),
                     "merged_by": ((m.get("merge_user") or m.get("merged_by") or {}).get("name")) or "",
+                    "role": m.get("_role", "author"),
                     "_threads": heads,
                 }
             )
@@ -157,9 +163,11 @@ def whoami():
     return {"host": "gitlab", "user": user["username"], "name": user.get("name", ""), "project": gitlab_project(), "server": gitlab_url()}
 
 
-def _own(iid, query=""):
+def _own(iid, query="", assigned=False):
     m = gitlab_get(f"projects/{_pid()}/merge_requests/{int(iid)}{query}")
     me = gitlab_get("user")["username"]
+    if assigned and me in {a.get("username") for a in m.get("assignees") or []}:
+        return m
     if (m.get("author") or {}).get("username") != me:
         raise PermissionError(f"!{iid} was opened by {(m.get('author') or {}).get('username')}, not by {me} — only your own merge requests")
     return m
@@ -226,16 +234,16 @@ def threads(iid, include_resolved=False):
     return out
 
 
-def reply(iid, thread, body, resolve=False):
-    _own(iid)
+def reply(iid, thread, body, resolve=False, assigned=False):
+    _own(iid, assigned=assigned)
     gitlab_call("POST", f"projects/{_pid()}/merge_requests/{int(iid)}/discussions/{thread}/notes", {"body": body})
     if resolve:
         gitlab_call("PUT", f"projects/{_pid()}/merge_requests/{int(iid)}/discussions/{thread}?resolved=true")
     return {"replied": thread, "resolved": resolve}
 
 
-def resolve_thread(iid, thread):
-    _own(iid)
+def resolve_thread(iid, thread, assigned=False):
+    _own(iid, assigned=assigned)
     gitlab_call("PUT", f"projects/{_pid()}/merge_requests/{int(iid)}/discussions/{thread}?resolved=true")
     return {"resolved": thread}
 

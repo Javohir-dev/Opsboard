@@ -339,6 +339,10 @@ def _bot_lang():
 
 
 def _fix_buttons(iid):
+    m = _mr(iid) or {}
+    if m.get("role", "author") != "author":
+        link = _url_button(f"Open in {_host()}", m.get("url"))
+        return [link] if link else None
     skill = cfg.get("claude.fix_skill") or "fix"
     return [[{"text": f"▶ {skill}", "callback_data": f"fix:{iid}:"}, {"text": f"⚡ {skill} ultra", "callback_data": f"fix:{iid}:p"}]]
 
@@ -426,8 +430,10 @@ def _thread_text(iid, group):
     one, many = OPENED[_bot_lang()]
     who = ", ".join(group["authors"]) or "?"
     line = (one if group["n"] == 1 else many).format(who=f"<b>{esc(who)}</b>", n=group["n"])
-    title = group["title"] or (_mr(iid) or {}).get("title") or ""
-    return f"💬 <b>{_ref(iid)}</b> — {line}" + (f"\n<i>{esc(title[:140])}</i>" if title else "")
+    m = _mr(iid) or {}
+    title = group["title"] or m.get("title") or ""
+    role = {"uz": " · sizga assign qilingan", "en": " · assigned to you", "ru": " · назначен вам"}[_bot_lang()] if m.get("role") == "assignee" else ""
+    return f"💬 <b>{_ref(iid)}</b>{role} — {line}" + (f"\n<i>{esc(title[:140])}</i>" if title else "")
 
 
 def _flush_threads(iid):
