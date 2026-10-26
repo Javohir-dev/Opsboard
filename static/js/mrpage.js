@@ -237,13 +237,24 @@ function replyBox(t) {
   return `<div class="threply"><textarea data-reply-box="${esc(t.id)}" rows="1" placeholder="Reply…"></textarea><div class="threplybtns"><span class="fmsg" id="rmsg-${esc(t.id)}"></span><button class="fixbtn" data-reply="${esc(t.id)}">Reply</button>${t.resolved ? "" : `<button class="fixbtn" data-resolve="${esc(t.id)}">Resolve thread</button>`}</div></div>`;
 }
 
+function fixBadge(t) {
+  const iid = parseInt(route().arg, 10);
+  const skill = esc(conf("claude.fix_skill") || "fix");
+  const live = (data.runs || []).find(r => r.iid === iid && r.status === "running");
+  const last = live || (data.runs || []).find(r => r.iid === iid);
+  const replied = last && (RUND.cache[last.id]?.replied || []).includes(t.id);
+  if (replied) return `<a class="thfix done" href="#/mr/${iid}/fix" data-open-run="${esc(last.id)}" title="Show the run">${icon("ok", 13)}${skill} replied</a>`;
+  if (live && !/conflict-only/.test(live.prompt || "")) return `<a class="thfix" href="#/mr/${iid}/fix" data-open-run="${esc(live.id)}" title="Show progress">${icon("running", 13)}${skill} is on it · ${dur(now() - live.started)}</a>`;
+  return "";
+}
+
 function threadCard(t, opts = {}) {
   const st = threadState(t), first = t.notes[0] || {}, rest = t.notes.slice(1), last = t.notes[t.notes.length - 1] || first;
   const line = t.new_line || t.old_line;
   const where = t.path ? `<a class="thwhere" href="#" data-goto-line="${esc(threadKey(t) || t.path)}" data-file="${esc(t.path)}" translate="no" title="${esc(t.path)}">${esc(t.path.split("/").pop())}${line ? ":" + line : ""}</a>` : `<span class="muted">the ${isGitHub() ? "pull" : "merge"} request</span>`;
   const status = st === "resolved"
     ? `<div class="thres resolved">${icon("ok", 13)}<span>Resolved${t.resolved_at ? ` ${ago(t.resolved_at)}` : ""}${t.resolved_by ? ` by <b>${esc(t.resolved_by)}</b>` : ""}</span></div>`
-    : `<div class="thres open">${icon("pending", 13)}<span>Unresolved</span></div>`;
+    : `<div class="thres open">${icon("pending", 13)}<span>Unresolved</span>${fixBadge(t)}</div>`;
   const head = `<div class="thhead">${avatarOf(first.author)}<div class="grow"><div class="thwho"><b>${esc(first.author)}</b> ${first.username ? `<span class="muted">@${esc(first.username)}</span> ` : ""}<span class="muted">started a thread on</span> ${where} <span class="muted" title="${esc(fmtDateTime(first.created))}">${ago(first.created)}</span></div>${status}</div></div>`;
   if (st === "resolved") {
     const people = [...new Set(t.notes.map(n => n.author))].slice(0, 3);
@@ -332,6 +343,8 @@ function pageMr(ctx, arg) {
   const title = d?.title || m?.title || mrRef(iid);
   const url = d?.url || m?.url || "";
   const run = m && runningRun(iid);
+  const lastRun = (data.runs || []).find(r => r.iid === iid);
+  if (lastRun && (!RUND.at[lastRun.id] || (lastRun.status === "running" && Date.now() - RUND.at[lastRun.id] > 5000))) loadRun(lastRun.id);
   const actions = `<span class="h2-actions">
     <button class="iconbtn ${MRD.loading === iid ? "spin" : ""}" data-mr-refresh="${iid}" title="Update from ${hostName()} now" ${MRD.loading === iid ? "disabled" : ""}>${icon("refresh", 14)}</button>
     ${m && m.state === "opened" && canRunFix() ? (run ? `<span class="cnt running"><span class="dot busy"></span>${esc(conf("claude.fix_skill") || "fix")} ${dur(now() - run.started)}</span>` : `<button class="fixbtn" data-fix="${iid}">Run ${esc(conf("claude.fix_skill"))}</button>`) : ""}

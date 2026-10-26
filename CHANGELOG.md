@@ -5,6 +5,7 @@ All notable changes. Versions follow [semantic versioning](https://semver.org/);
 ## Unreleased
 
 ### Added
+- Unresolved threads on the request page show when the fix skill is working on the request (*mr-fix is on it · 6m*) and which threads it has replied to.
 - Telegram fix buttons always push, reply and resolve: **⚡ ultra** (with tests) and **🚀 ultra-skip** (quick checks). Runs record where they were started (dashboard or Telegram).
 - Requests assigned to you count as yours: listed with an *Assigned* chip, notified in Telegram (with the fix buttons), and open to the fix skill and `opsboard review`.
 - A notification when one of your requests is merged — in the bell and as a Telegram message with who merged it, the branches, how long it was open, threads and approvals.

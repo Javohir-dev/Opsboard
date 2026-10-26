@@ -1022,3 +1022,8 @@ a.cnt:hover { filter: brightness(1.15); }
 .mrerr { display: flex; align-items: center; gap: 12px; }
 .btn-stop { display: inline-flex; align-items: center; gap: 6px; color: var(--bad); border-color: color-mix(in srgb, var(--bad) 50%, var(--line)); }
 .btn-stop:hover { background: color-mix(in srgb, var(--bad) 12%, transparent); }
+.thfix { display: inline-flex; align-items: center; gap: 5px; margin-left: 10px; padding: 1px 9px; border-radius: var(--r-full); font-size: var(--fs-xs); font-weight: 600; color: var(--busy); background: color-mix(in srgb, var(--busy) 15%, transparent); text-decoration: none !important; }
+.thfix .ic { animation: spin .9s linear infinite; }
+.thfix.done { color: var(--ok); background: color-mix(in srgb, var(--ok) 15%, transparent); }
+.thfix.done .ic { animation: none; }
+@media (prefers-reduced-motion: reduce) { .thfix .ic { animation: none; } }
