@@ -194,7 +194,8 @@ function pageSession(ctx, id) {
   const ctrs = s.uContainers.map(x => { const c = ctx.byName[x.name], st = (data.docker_stats || {})[x.name] || {}; const port = c.ports.find(p => p.container === "8069"); return `<tr><td><div class="main mono">${esc(x.name)}</div></td><td class="nowrap"><span class="status"><span class="dot ${c.state === "running" ? "ok" : "bad"}"></span>${esc(c.state)}</span></td><td class="num">${st.mem ? bytes(st.mem) : "—"}</td><td>${port ? `<a href="http://127.0.0.1:${port.host}/web/login" target="_blank">:${port.host} ↗</a>` : ""}</td><td class="num muted">${ago(x.last)}</td></tr>`; });
   const dbs = s.uDbs.map(x => { const c = ctx.dbConns[x.name]; return `<tr><td class="mono">${esc(x.name)}</td><td class="num">${bytes(ctx.sizes[x.name])}</td><td class="num">${c ? c.total : 0}</td><td class="num muted">${ago(x.last)}</td></tr>`; });
   const wts = s.uWorktrees.map(x => { const w = ctx.wts[x.name]; return `<tr><td><div class="main">${esc(x.name)}</div><div class="subt mono">${esc(w.branch)}</div></td><td class="num">${w.dirty || ""}</td><td class="num muted">${ago(x.last)}</td></tr>`; });
-  return `<div class="pagehead"><a href="#/sessions">← Sessions</a><h1>${esc(label(s))}</h1>${statusOf(s)}<span class="sub">${esc(subLabel(s))}</span></div>
+  const run = s.run_id && (data.runs || []).find(r => r.id === s.run_id && r.status === "running");
+  return `<div class="pagehead"><a href="#/sessions">← Sessions</a><h1>${esc(label(s))}</h1>${statusOf(s)}<span class="sub">${esc(subLabel(s))}</span>${run ? `<span class="h2-actions ml-auto">${run.iid ? `<a class="fixbtn" href="#/mr/${run.iid}/fix">Show progress</a>` : ""}<button class="fixbtn btn-stop" data-stop="${esc(run.id)}">${icon("x", 14)}Stop</button></span>` : ""}</div>
     <section class="mb-4">${nowLine(s)}</section>
     <section><div class="tiles">
       ${tile("Uptime", dur(now() - s.started), `pid ${s.pid} · ${esc(s.entrypoint)} · v${esc(s.version)}`)}

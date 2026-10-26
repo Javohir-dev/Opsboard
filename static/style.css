@@ -1020,3 +1020,5 @@ a.cnt:hover { filter: brightness(1.15); }
 .mrthreads .threplybtns { justify-content: flex-end; }
 .glbl-assigned { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); }
 .mrerr { display: flex; align-items: center; gap: 12px; }
+.btn-stop { display: inline-flex; align-items: center; gap: 6px; color: var(--bad); border-color: color-mix(in srgb, var(--bad) 50%, var(--line)); }
+.btn-stop:hover { background: color-mix(in srgb, var(--bad) 12%, transparent); }
