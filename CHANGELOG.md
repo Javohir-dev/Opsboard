@@ -35,6 +35,7 @@ All notable changes. Versions follow [semantic versioning](https://semver.org/);
 - A fix run stays *running* until its Claude process exits; a run with background jobs was marked done after its first turn, so only one of several runs showed as in progress.
 
 ### Changed
+- Notes is called **ToDo**; on Overview the first five ToDo come right after the open requests (*show all* for every note, a link to the rest).
 - The Tasks page is called **Jira** when Jira is the tracker, and the requests page is named after the host — **GitLab** or **GitHub** — in the menu, the page titles and the shortcuts list.
 - Overview starts with the machine; task attention stays on the Tasks page. Expired limits are no longer shown as current.
 

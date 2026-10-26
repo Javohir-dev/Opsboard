@@ -97,19 +97,22 @@ function taskAttentionSection(tasks, heading, extra = "") {
   };
   return `<section><h2>${heading}<span class="count">${attention.length || ""}</span>${extra}</h2><div class="panel list attn">${attention.map(t => isMin(t.key) ? minItem(t, jiraLink) : taskItem(t, jiraLink, { sub: `<div class="s mt-half">${t.problems.filter(p => p[0] !== "muted").map(p => `<span class="fs-sm ${p[0] === "bad" ? "badline" : "warnline"}">${esc(p[1])}</span>`).join(" · ")}</div>`, side: side(t) }, t.problems.some(p => p[0] === "bad") ? "bad" : "warn")).join("") || '<div class="empty">Nothing blocked.</div>'}</div></section>`;
 }
+const OVERVIEW_TODO = 5;
 function notesTodoSection() {
   if (!NOTES.dirty && !NOTES.saving && !editingOverviewNote() && Date.now() - (NOTES.fetched || 0) > 30000) { NOTES.fetched = Date.now(); loadNotes(); }
   if (!NOTES.loaded) return "";
   const all = getPref("overviewNotesAll");
   const keep = new Set([document.activeElement?.dataset?.ntext, ui.notesFocus?.id].filter(Boolean));
-  const items = NOTES.items.filter(i => i.kind === "item" && (i.text.trim() || keep.has(i.id) || i.id === ui.notesFocus?.id) && (all || i.tag === "todo" || keep.has(i.id)));
+  const matching = NOTES.items.filter(i => i.kind === "item" && (i.text.trim() || keep.has(i.id) || i.id === ui.notesFocus?.id) && (all || i.tag === "todo" || keep.has(i.id)));
+  const items = all ? matching : matching.filter((i, n) => n < OVERVIEW_TODO || keep.has(i.id));
+  const more = matching.length - items.length;
   const todo = NOTES.items.filter(i => i.kind === "item" && i.tag === "todo").length;
   const TAG = { todo: ["t-todo", "ToDo"], warn: ["t-warn", icon("warning", 14)], done: ["t-done", "Done"] };
-  return `<section><h2>Notes · to do<span class="count">${todo || ""}</span><span class="h2-actions"><label class="minisw m-0" title="Show every note, not only ToDo"><input type="checkbox" data-pref="overviewNotesAll" ${all ? "checked" : ""}><span class="tog"></span>show all</label><a href="#/notes">Open Notes →</a></span></h2>
+  return `<section><h2>ToDo<span class="count">${todo || ""}</span><span class="h2-actions"><label class="minisw m-0" title="Show every note, not only the first ${OVERVIEW_TODO} ToDo"><input type="checkbox" data-pref="overviewNotesAll" ${all ? "checked" : ""}><span class="tog"></span>show all</label><a href="#/notes">Open ToDo →</a></span></h2>
     <div class="panel list ovnotes">${items.map(it => {
       const t = TAG[it.tag];
       return `<div class="ovnote nrow ${isDone(it) ? "done" : ""}" style="padding-left:${14 + Math.min(it.indent || 0, 4) * 18}px"><button class="ntag ${t ? t[0] : "t-none"}" data-ntag="${it.id}" title="Choose a tag">${t ? t[1] : "+"}<span class="caret">▾</span></button><div class="ntext ovtext" contenteditable="plaintext-only" spellcheck="false" data-ntext="${it.id}">${esc(it.text)}</div>${noteKeys(it.text).map(noteKeyChip).join("")}<span class="muted ovdate">${noteDate(it.created)}</span></div>`;
-    }).join("") || `<div class="empty">${all ? "No notes yet." : "Nothing to do."}</div>`}</div></section>`;
+    }).join("") || `<div class="empty">${all ? "No notes yet." : "Nothing to do."}</div>`}${more > 0 ? `<a class="ovmore" href="#/notes">+${more} more in ToDo →</a>` : ""}</div></section>`;
 }
 function outcomeLine(o) {
   if (!o) return "";

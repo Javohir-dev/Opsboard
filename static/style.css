@@ -1107,3 +1107,4 @@ a.cnt:hover { filter: brightness(1.15); }
 .jgroup .jlist table { table-layout: fixed; width: 100%; }
 .jlist col.c-t { width: 36px; } .jlist col.c-k { width: 84px; } .jlist col.c-s { width: 170px; } .jlist col.c-m { width: 150px; } .jlist col.c-p { width: 40px; } .jlist col.c-u { width: 90px; }
 .jgroup .jlist td { overflow: hidden; text-overflow: ellipsis; }
+.ovmore { display: block; padding: 10px 14px; border-top: 1px solid var(--line); font-size: var(--fs-md); }

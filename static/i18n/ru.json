@@ -1,5 +1,6 @@
 {
  "+ New note": "+ Новая заметка",
+ "+{n} more in ToDo →": "+{n} ещё в ToDo →",
  "API token": "API-токен",
  "Access token": "Токен доступа",
  "Actions for {s}": "Действия для {s}",
@@ -300,6 +301,7 @@
  "Open Notion →": "Открыть Notion →",
  "Open Pull requests →": "Открыть pull requests →",
  "Open Tasks →": "Открыть задачи →",
+ "Open ToDo →": "Открыть ToDo →",
  "Open in Jira": "Открыть в Jira",
  "Open in {s}": "Открыть в {s}",
  "Open in {s} →": "Открыть в {s} →",
@@ -416,6 +418,7 @@
  "Show all ({n} idle and unused hidden)": "Показать все (скрыто простаивающих и неиспользуемых: {n})",
  "Show all {n} messages": "Показать все сообщения ({n})",
  "Show every note, not only ToDo": "Все заметки, не только ToDo",
+ "Show every note, not only the first {n} ToDo": "Показать все заметки, а не только первые {n} ToDo",
  "Show file browser": "Показать дерево файлов",
  "Show finished, failed and cancelled ones too": "Показывать также завершённые, упавшие и отменённые",
  "Show history": "Показать историю",

@@ -141,11 +141,11 @@ function visibleNotes() {
   return out.filter(([it], j, arr) => it.kind !== "divider" || (j > 0 && arr[j - 1][0].kind !== "divider"));
 }
 function pageNotes() {
-  if (!NOTES.loaded) { loadNotes(); return '<div class="pagehead"><h1>Notes</h1></div><div class="muted">Loading…</div>'; }
+  if (!NOTES.loaded) { loadNotes(); return '<div class="pagehead"><h1>ToDo</h1></div><div class="muted">Loading…</div>'; }
   const rows = visibleNotes();
   const open = NOTES.items.filter(i => i.kind === "item" && !isDone(i)).length, done = NOTES.items.filter(i => i.kind === "item" && isDone(i)).length;
   const hiddenDone = !getPref("notesShowDone") && done;
-  return `<div class="pagehead"><h1>Notes</h1><span class="sub">${open} open · ${done} done</span><span id="notes-status" class="muted ml-auto fs-sm"></span></div>
+  return `<div class="pagehead"><h1>ToDo</h1><span class="sub">${open} open · ${done} done</span><span id="notes-status" class="muted ml-auto fs-sm"></span></div>
     <div class="toolbar"><input class="search" id="noteSearch" placeholder="Search notes" value="${esc(ui.noteQuery || "")}">
       ${(() => {
         const f = noteDateFilter();

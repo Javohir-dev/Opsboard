@@ -17,7 +17,7 @@ function render() {
     worktrees: (data.worktrees || []).length,
   };
   const groups = [
-    ["", [["overview", "Overview"], ["sessions", "Sessions"], ["tasks", tasksPage()], ["mrs", mrsPage()], ["notes", "Notes"]]],
+    ["", [["overview", "Overview"], ["sessions", "Sessions"], ["tasks", tasksPage()], ["mrs", mrsPage()], ["notes", "ToDo"]]],
     ["Infrastructure", [["docker", "Docker"], ["postgres", "Postgres"], ["worktrees", "Worktrees"], ["processes", "Processes"]]],
     ["", [["settings", "Settings"]]],
   ];

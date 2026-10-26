@@ -1,5 +1,6 @@
 {
  "+ New note": "+ Yangi note",
+ "+{n} more in ToDo →": "+{n} ta yana ToDo'da →",
  "API token": "API token",
  "Access token": "Kirish tokeni",
  "Actions for {s}": "{s} uchun amallar",
@@ -300,6 +301,7 @@
  "Open Notion →": "Notion'ni ochish →",
  "Open Pull requests →": "Pull requestlarni ochish →",
  "Open Tasks →": "Vazifalarni ochish →",
+ "Open ToDo →": "ToDo'ni ochish →",
  "Open in Jira": "Jira'da ochish",
  "Open in {s}": "{s} da ochish",
  "Open in {s} →": "{s} da ochish →",
@@ -416,6 +418,7 @@
  "Show all ({n} idle and unused hidden)": "Hammasini ko'rsatish ({n} ta bo'sh va ishlatilmagani yashirilgan)",
  "Show all {n} messages": "Barcha {n} ta xabarni ko'rsatish",
  "Show every note, not only ToDo": "Faqat ToDo emas, hamma note'lar",
+ "Show every note, not only the first {n} ToDo": "Faqat birinchi {n} ta ToDo emas, hamma yozuvlarni ko'rsatish",
  "Show file browser": "Fayl daraxtini ko'rsatish",
  "Show finished, failed and cancelled ones too": "Tugagan, xato bergan va bekor qilinganlarini ham ko'rsatish",
  "Show history": "Tarixni ko'rsatish",

@@ -167,14 +167,14 @@ function pageOverview(ctx) {
   const openMrs = (data.review?.mrs || []).filter(m => m.state === "opened").sort((x, y) => y.created - x.created);
   const mrBlock = data.review?.mrs ? `<section><h2>${mrWord()} · open<span class="count">${openMrs.length || ""}</span><span class="h2-actions">${refreshBtn}<a href="#/mrs">Open ${mrsPage()} →</a></span></h2><div class="panel list mrlist">${openMrs.map(mrRow).join("") || '<div class="empty">No open merge requests.</div>'}</div></section>` : "";
   const busy = ctx.sessions.filter(x => x.status === "busy").length;
-  return `<div class="pagehead"><h1>Overview</h1><span class="sub">${plural(ctx.sessions.length, "live session")} · ${busy} working · ${plural(openMrs.length, "open request")}</span></div>` + (showUsage() ? macTiles() : "") + mrBlock + `<div class="cols">
+  return `<div class="pagehead"><h1>Overview</h1><span class="sub">${plural(ctx.sessions.length, "live session")} · ${busy} working · ${plural(openMrs.length, "open request")}</span></div>` + (showUsage() ? macTiles() : "") + mrBlock + notesTodoSection() + `<div class="cols">
     <section><h2>Sessions<span class="count">${ctx.sessions.length} live</span></h2><div class="panel list">${ctx.sessions.map(s => `<a class="item" href="#/s/${esc(s.id)}"><span class="dot ${s.status === "busy" ? "busy" : "ok"}"></span><div class="grow"><div class="t">${esc(label(s))}</div><div class="s">${s.doing ? esc(s.doing.tool + " — " + s.doing.what) : s.status === "busy" ? "Thinking…" : s.jobsRunning.length ? "Waiting for background job — " + esc(s.jobsRunning[0].description) : esc(subLabel(s) || "Waiting for you")}</div></div><div class="r stack-end">${agentCounts(s, true)}<span>${s.status === "busy" ? "working" : "idle"} ${dur(now() - s.status_since)}</span></div></a>`).join("") || '<div class="empty">No live sessions.</div>'}</div></section>
     <section><h2>System alerts<span class="count">${attn.length || ""}</span></h2><div class="panel list attn">${attn.map(([lvl, text, href]) => `<a class="item" href="${href}"><span class="dot ${lvl}"></span><div class="grow"><div class="t">${esc(text)}</div></div></a>`).join("") || '<div class="empty">All good.</div>'}</div>
       <h2 class="mt-7">Stack</h2><div class="panel list">
         <a class="item" href="#/docker"><div class="grow"><div class="t">${running.length} containers running</div><div class="s">${running.filter(c => ctx.slugOf(c.name)).length} QA worktree servers</div></div><div class="r">${bytes(Object.values(data.docker_stats || {}).reduce((a, s) => a + s.mem, 0))}</div></a>
         <a class="item" href="#/postgres"><div class="grow"><div class="t">${totalConns} / ${pg.max_connections || "?"} Postgres connections</div><div class="s">${(pg.active || []).length} active queries · ${Object.keys(ctx.sizes).length} databases</div></div><div class="r">${bytes(Object.values(ctx.sizes).reduce((a, b) => a + b, 0))}</div></a>
         <a class="item" href="#/worktrees"><div class="grow"><div class="t">${(data.worktrees || []).length} worktrees</div><div class="s">${(data.worktrees || []).filter(w => w.dirty).length} with uncommitted changes</div></div></a>
-      </div></section></div>` + notesTodoSection() + runsSection();
+      </div></section></div>` + runsSection();
 }
 
 function pageSessions(ctx) {

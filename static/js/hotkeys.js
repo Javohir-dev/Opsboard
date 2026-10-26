@@ -1,4 +1,4 @@
-const PAGES = [["overview", "Overview", "g o"], ["sessions", "Sessions", "g s"], ["docker", "Docker", "g d"], ["postgres", "Postgres", "g p"], ["tasks", "Tasks", "g t"], ["mrs", "Merge / pull requests", "g m"], ["worktrees", "Worktrees", "g w"], ["processes", "Processes", "g r"], ["notes", "Notes", "g n"], ["settings", "Settings", "g ,"]];
+const PAGES = [["overview", "Overview", "g o"], ["sessions", "Sessions", "g s"], ["docker", "Docker", "g d"], ["postgres", "Postgres", "g p"], ["tasks", "Tasks", "g t"], ["mrs", "Merge / pull requests", "g m"], ["worktrees", "Worktrees", "g w"], ["processes", "Processes", "g r"], ["notes", "ToDo", "g n"], ["settings", "Settings", "g ,"]];
 const CODE_KEYS = { Comma: ",", Period: ".", Slash: "/", Semicolon: ";", Quote: "'", BracketLeft: "[", BracketRight: "]", Backslash: "\\", Minus: "-", Equal: "=", Backquote: "`", Space: "space", Enter: "enter", Escape: "esc" };
 function normCombo(s) {
   return String(s || "").trim().toLowerCase().split(/\s+/).filter(Boolean).map(tok => {
