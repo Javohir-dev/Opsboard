@@ -75,7 +75,20 @@ def launch_fix(body):
             proc = subprocess.Popen(cmd, cwd=str(root), env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=err, start_new_session=True)
         popen[proc.pid] = proc
         runs = load_runs()
-        runs.insert(0, {"id": rid, "iid": iid, "name": name, "prompt": prompt, "pid": proc.pid, "started": time.time(), "status": "running", "log": str(log)})
+        runs.insert(
+            0,
+            {
+                "id": rid,
+                "iid": iid,
+                "name": name,
+                "prompt": prompt,
+                "pid": proc.pid,
+                "started": time.time(),
+                "status": "running",
+                "log": str(log),
+                "source": str(body.get("source") or "dashboard")[:20],
+            },
+        )
         save_runs(runs[:50])
     return prompt
 

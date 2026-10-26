@@ -238,8 +238,15 @@ class TelegramTest(unittest.TestCase):
             telegram.on_notify({"kind": "thread", "iid": 8, "author": "Bakhrom", "body": "x", "mr_title": "Group column", "status": "thread"})
             self.assertTrue(self.wait_for("sizga assign qilingan", method="sendMessage"))
         markup = [b for m, b in SENT if m == "sendMessage"][-1]["reply_markup"]["inline_keyboard"][0]
-        self.assertEqual([b["callback_data"] for b in markup], ["fix:8:", "fix:8:p"])
+        self.assertEqual([b["callback_data"] for b in markup], ["fix:8:p", "fix:8:ps"])
         cfg.set("claude.fix_skill", None, "user")
+
+    def test_ultra_skip_button_runs_without_tests_and_pushes(self):
+        self.link()
+        with mock.patch("runs.launch_fix") as launch, mock.patch("runs.load_runs", return_value=[]):
+            telegram.handle_callback({"id": "q", "data": "fix:7:ps", "message": {"message_id": 3, "chat": {"id": 111}, "text": "x"}})
+        launch.assert_called_once_with({"iid": 7, "threads": True, "conflict": True, "skiptests": True, "push": True, "source": "telegram"})
+        self.assertIn("ultra-skip ishga tushdi", self.texts()[-1])
 
     def test_merged_message(self):
         self.link()
@@ -284,11 +291,11 @@ class TelegramTest(unittest.TestCase):
         self.assertEqual(len([b for m, b in SENT if m == "sendMessage"]), 1)
         self.assertIn("<b>!7</b> — <b>Lena</b>", sent["text"])
         buttons = sent["reply_markup"]["inline_keyboard"][0]
-        self.assertEqual([(b["text"], b["callback_data"]) for b in buttons], [("▶ mr-fix", "fix:7:"), ("⚡ mr-fix ultra", "fix:7:p")])
+        self.assertEqual([(b["text"], b["callback_data"]) for b in buttons], [("⚡ mr-fix ultra", "fix:7:p"), ("🚀 mr-fix ultra-skip", "fix:7:ps")])
         runs_now = [{"id": "r9", "iid": 7, "status": "running"}]
         with mock.patch("runs.launch_fix") as launch, mock.patch("runs.load_runs", side_effect=[[], runs_now]):
             telegram.handle_callback({"id": "q", "data": "fix:7:p", "message": {"message_id": 1, "chat": {"id": 111}, "text": "x"}})
-        launch.assert_called_once_with({"iid": 7, "threads": True, "conflict": True, "skiptests": False, "push": True})
+        launch.assert_called_once_with({"iid": 7, "threads": True, "conflict": True, "skiptests": False, "push": True, "source": "telegram"})
         self.assertIn("mr-fix ultra ishga tushdi", self.texts()[-1])
         telegram.on_notify({"kind": "run", "run_id": "r9", "iid": 7, "status": "done", "outcome": {"status": "pushed", "commit": "abc1234", "threads": {"resolved": 2, "open": 0}}})
         self.assertIn("mr-fix ultra tugadi · pushed · abc1234 · 2/2 threads", self.texts()[-1])

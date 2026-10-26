@@ -340,7 +340,7 @@ def _bot_lang():
 
 def _fix_buttons(iid):
     skill = cfg.get("claude.fix_skill") or "fix"
-    return [[{"text": f"▶ {skill}", "callback_data": f"fix:{iid}:"}, {"text": f"⚡ {skill} ultra", "callback_data": f"fix:{iid}:p"}]]
+    return [[{"text": f"⚡ {skill} ultra", "callback_data": f"fix:{iid}:p"}, {"text": f"🚀 {skill} ultra-skip", "callback_data": f"fix:{iid}:ps"}]]
 
 
 MERGED = {
@@ -445,16 +445,16 @@ def _flush_threads(iid):
                     _sent_texts.pop(next(iter(_sent_texts)))
 
 
-def _start_fix(cq, iid, push):
+def _start_fix(cq, iid, push, skiptests=False):
     msg = cq.get("message") or {}
     words = FIX_STATE[_bot_lang()]
     skill = cfg.get("claude.fix_skill") or "fix"
-    name = f"{skill} ultra" if push else skill
+    name = f"{skill} ultra-skip" if skiptests else f"{skill} ultra" if push else skill
     import runs
 
     if any(r.get("iid") == iid and r["status"] == "running" for r in runs.load_runs()):
         return words["busy"]
-    runs.launch_fix({"iid": iid, "threads": True, "conflict": True, "skiptests": False, "push": push})
+    runs.launch_fix({"iid": iid, "threads": True, "conflict": True, "skiptests": skiptests, "push": push, "source": "telegram"})
     run = next((r for r in runs.load_runs() if r.get("iid") == iid and r["status"] == "running"), None)
     with _pending_lock:
         base = _sent_texts.get(msg.get("message_id")) or _thread_text_from(msg)
@@ -913,7 +913,7 @@ def handle_callback(cq):
     elif kind == "fix":
         iid, _, flags = rest.partition(":")
         try:
-            note = _start_fix(cq, int(iid), "p" in flags)
+            note = _start_fix(cq, int(iid), True, "s" in flags)
         except (ValueError, OSError) as exc:
             note = str(exc)[:190]
     try:
