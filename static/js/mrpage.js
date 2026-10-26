@@ -352,7 +352,10 @@ function pageMr(ctx, arg) {
     <div class="pagehead mrpagehead"><h1 class="mrh1">${esc(title)}</h1>${actions}</div>${sub}
     <div class="mrsticky ${ui.mrStuck ? "stuck" : ""}"><div class="mrmini"><span class="mrstate s-${esc(m?.state || "opened")}">${icon(st[1], 13)}${m?.draft ? "Draft" : st[0]}</span><b class="mrminititle">${esc(title)}</b>${chip(m?.source)}<span class="muted">into</span>${chip(m?.target)}</div>${tabBar}</div>`;
   if (!d && tab === "fix") return head + fixTab(iid, null);
-  if (!d) return head + (err ? `<div class="err mt-3">${esc(err)}</div>` : `<div class="skel-page mt-3" aria-busy="true"><div class="skel skel-block"></div><div class="skel skel-block"></div></div>`);
+  if (err && !d && !MRD.retry?.[iid]) { (MRD.retry ||= {})[iid] = setTimeout(() => { delete MRD.retry[iid]; delete MRD.error[iid]; if (route().page === "mr") render(); }, 15000); }
+  const offline = err && /URLError|nodename|servname|timed out|Connection|Network is unreachable/i.test(err);
+  const errBox = err ? `<div class="err mt-3 mrerr"><div class="grow">${offline ? `Could not reach ${hostName()} — check the internet connection. Trying again in a few seconds.` : esc(err)}${offline ? `<div class="muted fs-sm mt-1">${esc(err)}</div>` : ""}</div><button class="fixbtn" data-mr-retry="${iid}">Retry</button></div>` : "";
+  if (!d) return head + (err ? errBox : `<div class="skel-page mt-3" aria-busy="true"><div class="skel skel-block"></div><div class="skel skel-block"></div></div>`);
   if (tab === "overview") return head + overviewTab(d, m);
   if (tab === "commits") return head + `<div class="mrcommits">${commitsTab(d)}</div>`;
   if (tab === "pipelines") return head + pipelinesTab(d);
@@ -471,6 +474,8 @@ document.addEventListener("click", e => {
   if (gp) { e.preventDefault(); gotoFile(gp.dataset.gotoPath); return; }
   const big = e.target.closest("[data-dbig]");
   if (big) { (ui.mrBig ||= new Set()).add(big.dataset.dbig); render(); return; }
+  const rt = e.target.closest("[data-mr-retry]");
+  if (rt) { const i = parseInt(rt.dataset.mrRetry, 10); delete MRD.error[i]; loadMr(i, true); render(); return; }
   const rf = e.target.closest("[data-mr-refresh]");
   if (rf) { loadMr(parseInt(rf.dataset.mrRefresh, 10), true); render(); return; }
   const gl = e.target.closest("[data-goto-line]");

@@ -1019,3 +1019,4 @@ a.cnt:hover { filter: brightness(1.15); }
 .mrthreads .threply { flex-direction: column; align-items: stretch; }
 .mrthreads .threplybtns { justify-content: flex-end; }
 .glbl-assigned { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); }
+.mrerr { display: flex; align-items: center; gap: 12px; }
