@@ -39,7 +39,7 @@ function pageMrs() {
   let list = all.filter(m => (tab === "all" || m.state === tab) && (!q || (m.title + " !" + m.iid + " " + m.labels.join(" ") + " " + m.source).toLowerCase().includes(q)));
   list.sort((a, b) => (sort === "updated" ? b.updated - a.updated : b.created - a.created));
   const tabsHtml = [["opened", "Open"], ["merged", "Merged"], ["closed", "Closed"], ["all", "All"]].map(([k, l]) => `<button class="mrtab ${tab === k ? "on" : ""}" data-mrtab="${k}">${l}<span class="n">${counts[k] || 0}</span></button>`).join("");
-  return `<div class="pagehead"><h1>${mrWord()}</h1><span class="sub">${esc(gl.user || "")} · ${esc((isGitHub() ? conf("github.repo") : conf("gitlab.project")) || "")}</span></div>
+  return `<div class="pagehead"><h1>${mrsPage()}</h1><span class="sub">${esc(gl.user || "")} · ${esc((isGitHub() ? conf("github.repo") : conf("gitlab.project")) || "")}</span></div>
     <div class="mrbar"><div class="mrtabs">${tabsHtml}</div>
       <input class="search" id="mrSearch" placeholder="Search title, !number, label, branch" value="${esc(ui.mrQuery || "")}">
       <select id="mrSort" class="mrsort"><option value="created" ${sort === "created" ? "selected" : ""}>Created date</option><option value="updated" ${sort === "updated" ? "selected" : ""}>Updated date</option></select>

@@ -17,7 +17,8 @@ function eventToken(e) {
 }
 function hotkeys() {
   const custom = conf("ui.hotkeys") || {};
-  return PAGES.map(([page, label, def]) => ({ page, label, def, combo: normCombo(page in custom ? custom[page] : def) }));
+  const named = { tasks: tasksPage(), mrs: mrsPage() };
+  return PAGES.map(([page, label, def]) => ({ page, label: named[page] || label, def, combo: normCombo(page in custom ? custom[page] : def) }));
 }
 const HK = { buffer: [], at: 0 };
 function editingTarget(t) { return t && (t.closest?.("input, textarea, select, [contenteditable]") != null); }

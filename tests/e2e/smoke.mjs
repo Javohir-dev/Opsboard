@@ -62,7 +62,7 @@ try {
   await page.goto(`${base}/#/mr/7`);
   await page.waitForTimeout(1500);
   check((await page.locator("#view .err").textContent()).includes("not one of your merge requests"), "the request page refuses requests that are not yours");
-  check((await page.locator("#nav .navi.on").textContent()).includes("Merge requests"), "the request page keeps Merge requests active in the menu");
+  check((await page.locator("#nav .navi.on").textContent()).includes("GitLab"), "the request page keeps GitLab active in the menu");
   await page.goto(`${base}/#/notes`);
   await page.waitForTimeout(800);
   await page.click("[data-nadd]");
@@ -116,8 +116,8 @@ try {
     await page.goto(`${hubBase}/#/mrs`);
     await page.waitForTimeout(1200);
     check(new URL(page.url()).hash === "#/mrs", "GitHub without Jira is not locked behind Settings");
-    check((await page.locator("#view h1").textContent()) === "Pull requests", "GitHub wording on the requests page");
-    check((await page.locator("#nav").textContent()).includes("Pull requests"), "GitHub wording in the navigation");
+    check((await page.locator("#view h1").textContent()) === "GitHub", "the requests page is named after the host");
+    check((await page.locator("#nav").textContent()).includes("GitHub"), "the menu names the requests page after the host");
     check((await page.locator("#nav").textContent()).includes("Обзор"), "the page is translated (ru)");
     check((await page.locator("#fix h3").textContent()) !== "Run fix", "static dialogs are translated too");
     await page.goto(`${hubBase}/#/`);
