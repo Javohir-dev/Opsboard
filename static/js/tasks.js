@@ -151,6 +151,7 @@ function markAttrs(key, cls = "") {
   const c = markOf(key);
   return c ? `class="${cls} marked" style="--mk:${MARKS[c][0]}" data-mark-title="${MARKS[c][1]}"` : `class="${cls}"`;
 }
+const EXT_ICON = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>`;
 const ICON_MIN = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h7"/><path d="M7 8l4 4-4 4"/><path d="M21 12h-7"/><path d="M17 8l-4 4 4 4"/></svg>`;
 const ICON_EXP = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 12H3"/><path d="M6 8l-4 4 4 4"/><path d="M14 12h7"/><path d="M18 8l4 4-4 4"/></svg>`;
 function minSet() {
@@ -180,7 +181,10 @@ function openMenu(btn) {
     ${cur ? `<button class="mi" data-mark-set="" data-key="${esc(key)}">Clear mark <span class="muted">(${MARKS[cur][1]})</span></button>` : ""}
     ${m || minimizable ? "<hr>" : ""}
     ${minimizable ? `<button class="mi" data-min="${esc(key)}" data-on="1">${ICON_MIN}Minimize</button>` : ""}
-    ${m ? `<button class="mi" data-fix="${m.iid}" ${busy ? "disabled" : ""}>${busy ? "fix is running…" : `Run ${esc(conf("claude.fix_skill"))} · ${mrRef(m.iid)}`}</button>` : ""}`;
+    ${m ? `<button class="mi" data-fix="${m.iid}" ${busy ? "disabled" : ""}>${busy ? "fix is running…" : `Run ${esc(conf("claude.fix_skill"))} · ${mrRef(m.iid)}`}</button>` : ""}
+    ${own?.url || (t && hasJira()) ? "<hr>" : ""}
+    ${own?.url ? `<a class="mi" href="${esc(own.url)}" target="_blank" rel="noopener">${EXT_ICON}Open in ${hostName()}</a>` : ""}
+    ${t && hasJira() ? `<a class="mi" href="${esc(jiraLink(t.key))}" target="_blank" rel="noopener">${EXT_ICON}Open in Jira</a>` : ""}`;
   menu.hidden = false;
   const r = btn.getBoundingClientRect(), w = menu.offsetWidth, h = menu.offsetHeight;
   menu.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.right - w)) + "px";

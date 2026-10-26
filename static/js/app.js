@@ -318,7 +318,7 @@ document.addEventListener("click", async e => {
     return;
   }
   if (!e.target.closest("#menu")) closeMenu();
-  else if (e.target.closest("[data-fix]")) closeMenu();
+  else if (e.target.closest("[data-fix], #menu a")) closeMenu();
   const kb = e.target.closest("[data-bucket]");
   if (kb) { const off = new Set((getPrefRaw("taskOff") ?? "done,cancelled").split(",").filter(Boolean)); off.has(kb.dataset.bucket) ? off.delete(kb.dataset.bucket) : off.add(kb.dataset.bucket); try { localStorage.setItem("ops.taskOff", [...off].join(",")); } catch (x) {} render(); return; }
   const ah = e.target.closest("[data-area]");
