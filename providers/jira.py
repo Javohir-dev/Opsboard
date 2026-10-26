@@ -38,6 +38,37 @@ def jira_account():
     return {"connected": True, "email": cfg.get("jira.email", ""), "name": cfg.get("jira.name", "")}
 
 
+_sprint_field = {"site": None, "id": None}
+
+
+def sprint_field(headers):
+    """The id of Jira's Sprint field (it differs per site), looked up once."""
+    if _sprint_field["site"] != jira_site():
+        fid = None
+        try:
+            fid = next((f["id"] for f in http_json(f"{jira_site()}/rest/api/3/field", headers) if (f.get("schema") or {}).get("custom") == "com.pyxis.greenhopper.jira:gh-sprint"), None)
+        except (error.URLError, ValueError, KeyError, OSError):
+            return None
+        _sprint_field.update(site=jira_site(), id=fid)
+    return _sprint_field["id"]
+
+
+SPRINT_ORDER = {"active": 0, "future": 1, "closed": 2}
+
+
+def pick_sprint(values):
+    """The sprint an issue belongs to now: the active one, else the next future one, else the last closed one."""
+    sprints = [
+        {"id": s.get("id"), "name": s.get("name", ""), "state": s.get("state", ""), "start": epoch(s.get("startDate") or ""), "end": epoch(s.get("endDate") or ""), "goal": s.get("goal") or ""}
+        for s in values or []
+        if isinstance(s, dict)
+    ]
+    if not sprints:
+        return None
+    sprints.sort(key=lambda s: (SPRINT_ORDER.get(s["state"], 3), s["start"] if s["state"] != "closed" else -s["end"]))
+    return sprints[0]
+
+
 def collect():
     if not jira_configured():
         put("jira", {"configured": False, "site": jira_site()})
@@ -46,6 +77,9 @@ def collect():
     fields = ["summary", "status", "priority", "issuetype", "created", "updated", "duedate", "resolutiondate", "assignee", "reporter", "labels", "parent"]
     try:
         headers = jira_headers()
+        sprint_id = sprint_field(headers)
+        if sprint_id:
+            fields = fields + [sprint_id]
         while True:
             body = {"jql": cfg.get("jira.jql"), "fields": fields, "maxResults": 100}
             if token:
@@ -69,6 +103,7 @@ def collect():
                         "reporter": (f.get("reporter") or {}).get("displayName", ""),
                         "labels": f.get("labels") or [],
                         "parent": {"key": (f.get("parent") or {}).get("key", ""), "summary": (((f.get("parent") or {}).get("fields") or {}).get("summary", ""))} if f.get("parent") else None,
+                        "sprint": pick_sprint(f.get(sprint_id)) if sprint_id else None,
                     }
                 )
             token = page.get("nextPageToken")

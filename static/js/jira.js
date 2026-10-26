@@ -34,9 +34,30 @@ function issueMrChip(t) {
   const threads = m.state === "opened" && m.threads_total ? `<span class="jmrth ${m.threads ? "open" : ""}">${icon("comment", 11)}${m.threads_total - (m.threads || 0)}/${m.threads_total}</span>` : "";
   return `<a class="jmr jmr-${st}" href="#/mr/${m.iid}" title="${esc(m.title)}" data-stop-card>${icon("mrs", 12)}${mrRef(m.iid)}${threads}${m.conflicts ? `<span class="jmrbad" title="merge conflict">${icon("warning", 11)}</span>` : ""}</a>`;
 }
+const issueDone = t => t.category === "done" || ["done", "cancelled"].includes(t.bucket);
+function openSprint(t) { return t.sprint && t.sprint.state !== "closed" ? t.sprint : null; }
+function sprintsOf(tasks) {
+  const seen = {};
+  tasks.forEach(t => { const sp = openSprint(t); if (sp) seen[sp.id] = sp; });
+  return Object.values(seen).sort((a, b) => (a.state === "active" ? 0 : 1) - (b.state === "active" ? 0 : 1) || (a.start || 9e12) - (b.start || 9e12));
+}
+const fmtDay = ts => ts ? new Date(ts * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : "";
+function inScope(t, scope, sprints) {
+  if (scope === "all") return true;
+  if (scope === "backlog") return !openSprint(t) && !issueDone(t);
+  if (scope) return String(openSprint(t)?.id) === scope;
+  const active = sprints.filter(sp => sp.state === "active");
+  return active.length ? active.some(sp => sp.id === openSprint(t)?.id) : true;
+}
+function sprintCounts(items) {
+  const n = { new: 0, indeterminate: 0, done: 0 };
+  items.forEach(t => n[t.category in n ? t.category : "new"]++);
+  return `<span class="jcounts"><span class="c-new" title="To do">${n.new}</span><span class="c-ind" title="In progress">${n.indeterminate}</span><span class="c-done" title="Done">${n.done}</span></span>`;
+}
+
 function jiraFilters() {
   const pick = k => getPrefRaw("jira." + k) || "";
-  return { hideDone: getPrefRaw("jira.hideDone") !== "0", attention: getPref("jira.attention"), claude: getPref("jira.claude"), withMr: getPref("jira.withMr"), type: pick("type"), prio: pick("prio") };
+  return { sprint: pick("sprint"), hideDone: getPrefRaw("jira.hideDone") !== "0", attention: getPref("jira.attention"), claude: getPref("jira.claude"), withMr: getPref("jira.withMr"), type: pick("type"), prio: pick("prio") };
 }
 function columnsOf(tasks) {
   const cols = {};
@@ -62,17 +83,34 @@ function jiraBoard(tasks) {
   return `<div class="jboard">${cols.map(c => `<div class="jcol"><div class="jcolh"><span translate="no">${esc(c.status)}</span><span class="jcount">${c.items.length}</span></div>
     <div class="jcards">${c.items.sort((a, b) => b.updated - a.updated).map(jiraCard).join("")}</div></div>`).join("")}</div>`;
 }
-function jiraList(tasks) {
-  if (!tasks.length) return '<div class="empty">No issues match.</div>';
-  const rows = tasks.slice().sort((a, b) => b.updated - a.updated).map(t => `<tr class="jrow ${ui.jiraOpen === t.key ? "on" : ""}" data-issue="${esc(t.key)}">
-    <td class="jt">${typeIcon(t.type)}</td><td class="nowrap"><span class="jkey" translate="no">${esc(t.key)}</span></td>
+function jiraRow(t) {
+  return `<tr class="jrow ${ui.jiraOpen === t.key ? "on" : ""}" data-issue="${esc(t.key)}">
+    <td class="jt">${typeIcon(t.type)}</td><td class="nowrap"><span class="jkey ${issueDone(t) ? "done" : ""}" translate="no">${esc(t.key)}</span></td>
     <td><div class="jsum1">${esc(cleanTitle(t.summary))}</div>${t.parent ? `<div class="subt" translate="no">${esc(t.parent.summary || t.parent.key)}</div>` : ""}</td>
     <td class="nowrap">${lozenge(t.status, t.category)}</td>
-    <td class="nowrap">${priorityIcon(t.priority)}<span class="muted fs-sm">${esc(t.priority || "")}</span></td>
     <td class="nowrap">${issueMrChip(t) || '<span class="muted">—</span>'}</td>
-    <td class="num muted" title="${esc(fmtDateTime(t.updated))}">${ago(t.updated)}</td>
-    <td class="num muted">${esc(t.due || "")}</td></tr>`).join("");
-  return `<div class="tbl panel jlist"><table><thead><tr><th></th><th>Key</th><th>Summary</th><th>Status</th><th>Priority</th><th>${mrsPage()}</th><th class="num">Updated</th><th class="num">Due</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    <td class="nowrap">${priorityIcon(t.priority)}</td>
+    <td class="num muted" title="${esc(fmtDateTime(t.updated))}">${ago(t.updated)}</td></tr>`;
+}
+function backlogGroup(id, title, meta, items) {
+  const shut = getPref("jira.shut." + id);
+  const rows = items.slice().sort((x, y) => issueDone(x) - issueDone(y) || y.updated - x.updated).map(jiraRow).join("");
+  return `<section class="jgroup"><div class="jgh" data-jgroup="${esc(id)}" role="button" tabindex="0" aria-expanded="${!shut}"><span class="dchev ${shut ? "" : "open"}">${icon("chevron", 14)}</span><b translate="no">${esc(title)}</b><span class="muted">${meta}</span><span class="grow"></span>${sprintCounts(items)}</div>
+    ${shut ? "" : items.length ? `<div class="tbl panel jlist"><table><colgroup><col class="c-t"><col class="c-k"><col><col class="c-s"><col class="c-m"><col class="c-p"><col class="c-u"></colgroup><tbody>${rows}</tbody></table></div>` : '<div class="empty">No issues.</div>'}</section>`;
+}
+function jiraList(tasks, sprints, f) {
+  const groups = [];
+  const single = f.sprint && f.sprint !== "all" && f.sprint !== "backlog";
+  const shown = single ? sprints.filter(sp => String(sp.id) === f.sprint) : f.sprint === "backlog" ? [] : sprints;
+  shown.forEach(sp => {
+    const items = tasks.filter(t => openSprint(t)?.id === sp.id);
+    groups.push(backlogGroup("sp" + sp.id, sp.name, `${fmtDay(sp.start)}${sp.end ? " – " + fmtDay(sp.end) : ""} · ${plural(items.length, "issue")}${sp.state === "active" ? "" : " · planned"}`, items));
+  });
+  if (!single) {
+    const backlog = tasks.filter(t => !openSprint(t) && !issueDone(t));
+    groups.push(backlogGroup("backlog", "Backlog", plural(backlog.length, "issue"), backlog));
+  }
+  return groups.join("") || '<div class="empty">No issues match.</div>';
 }
 
 function loadIssue(key, fresh = false) {
@@ -129,26 +167,33 @@ function pageJira(ctx) {
   const types = [...new Set(tasks.map(t => t.type).filter(Boolean))].sort();
   const prios = Object.keys(PRIORITY).map(p => p[0].toUpperCase() + p.slice(1)).filter(p => tasks.some(t => t.priority === p));
   const attention = new Set(needsAttention(tasks).map(t => t.key));
-  const visible = tasks.filter(t => (!f.hideDone || !(t.category === "done" || ["done", "cancelled"].includes(t.bucket)))
-    && (!f.attention || attention.has(t.key)) && (!f.claude || t.sessions.length) && (!f.withMr || t.mr)
+  const sprints = sprintsOf(tasks);
+  const matches = tasks.filter(t => (!f.attention || attention.has(t.key)) && (!f.claude || t.sessions.length) && (!f.withMr || t.mr)
     && (!f.type || t.type === f.type) && (!f.prio || t.priority === f.prio)
     && (!q || (t.key + " " + t.summary + " " + (t.labels || []).join(" ") + " " + t.mrs.map(m => "!" + m.iid).join(" ")).toLowerCase().includes(q)));
+  const visible = matches.filter(t => inScope(t, f.sprint, sprints) && (!f.hideDone || !issueDone(t) || (openSprint(t) && f.sprint !== "all")));
   const view = getPrefRaw("jira.view") || "board";
+  const active = sprints.filter(sp => sp.state === "active");
+  const sprintSelect = `<select class="jselect jsprint" data-jselect="sprint" title="Sprint"><option value="">${active.length ? esc(active.map(sp => sp.name).join(", ")) : "Current sprint"}</option>${sprints.filter(sp => sp.state !== "active").map(sp => `<option value="${esc(sp.id)}" ${f.sprint === String(sp.id) ? "selected" : ""}>${esc(sp.name)}</option>`).join("")}<option value="backlog" ${f.sprint === "backlog" ? "selected" : ""}>Backlog</option><option value="all" ${f.sprint === "all" ? "selected" : ""}>All issues</option></select>`;
   const chip = (k, label, on, n) => `<button class="jchip ${on ? "on" : ""}" data-jchip="${k}">${label}${n != null ? `<span class="n">${n}</span>` : ""}</button>`;
   const src = jira.configured ? (jira.error ? `<span class="err" title="${esc(jira.error)}">Jira error</span>` : `updated ${ago(jira.fetched)}`) : '<span class="warnline">Jira not connected</span>';
+  const current = active[0];
+  const sub = view === "board" && !f.sprint && current ? `${esc(current.name)} · ${fmtDay(current.start)} – ${fmtDay(current.end)} · ${plural(visible.length, "issue")}` : `${visible.length} of ${tasks.length} issues`;
   const open = ui.jiraOpen && tasks.find(t => t.key === ui.jiraOpen);
-  return `<div class="pagehead"><h1>Jira</h1><span class="sub">${visible.length} of ${tasks.length} issues · ${src}</span>
+  const listTasks = matches.filter(t => !f.hideDone || !issueDone(t) || openSprint(t));
+  return `<div class="pagehead"><h1>Jira</h1><span class="sub">${sub} · ${src}</span>
       <span class="acctline ml-auto">${jira.account?.connected ? `<b class="text-strong">${esc(jira.account.name || jira.account.email)}</b>` : ""}</span>
       <button class="btn-primary" id="taskRefresh" ${ui.refreshing ? "disabled" : ""}>${ui.refreshing ? "Updating…" : "Update"}</button></div>
     <div class="jbar">
+      ${sprintSelect}
       <label class="ftsearch jsearch">${icon("search", 14)}<input id="taskSearch" type="search" placeholder="Search issues" value="${esc(ui.taskQuery || "")}" spellcheck="false"></label>
-      ${chip("attention", "Needs attention", f.attention, attention.size)}${chip("claude", "Claude working", f.claude, tasks.filter(t => t.sessions.length).length)}${chip("withMr", `With ${mrsPage()}`, f.withMr)}${chip("hideDone", "Hide done", f.hideDone)}
+      ${chip("attention", "Needs attention", f.attention, [...attention].filter(k => matches.some(t => t.key === k)).length)}${chip("claude", "Claude working", f.claude, tasks.filter(t => t.sessions.length).length)}${chip("withMr", `With ${mrsPage()}`, f.withMr)}${chip("hideDone", "Hide done", f.hideDone)}
       <select class="jselect" data-jselect="type"><option value="">All types</option>${types.map(x => `<option ${f.type === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>
       <select class="jselect" data-jselect="prio"><option value="">All priorities</option>${prios.map(x => `<option ${f.prio === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>
       <span class="grow"></span>
-      <span class="ftmode"><button class="${view === "board" ? "on" : ""}" data-jview="board" title="Board">${icon("overview", 15)}</button><button class="${view === "list" ? "on" : ""}" data-jview="list" title="List">${icon("tasks", 15)}</button></span>
+      <span class="ftmode"><button class="${view === "board" ? "on" : ""}" data-jview="board" title="Board">${icon("overview", 15)}</button><button class="${view === "list" ? "on" : ""}" data-jview="list" title="Backlog">${icon("tasks", 15)}</button></span>
     </div>
-    ${view === "list" ? jiraList(visible) : jiraBoard(visible)}
+    ${view === "list" ? jiraList(listTasks, sprints, f) : jiraBoard(visible)}
     ${jiraPanel(open)}`;
 }
 
@@ -157,6 +202,8 @@ document.addEventListener("click", e => {
   if (e.target.closest("[data-stop-card]")) return;
   const ch = e.target.closest("[data-jchip]");
   if (ch) { const k = ch.dataset.jchip; if (k === "hideDone") setPref("jira.hideDone", !jiraFilters().hideDone); else setPref("jira." + k, !getPref("jira." + k)); render(); return; }
+  const g = e.target.closest("[data-jgroup]");
+  if (g) { setPref("jira.shut." + g.dataset.jgroup, !getPref("jira.shut." + g.dataset.jgroup)); render(); return; }
   const v = e.target.closest("[data-jview]");
   if (v) { try { localStorage.setItem("ops.jira.view", v.dataset.jview); } catch (x) {} render(); return; }
   if (e.target.closest("[data-jira-close]")) { ui.jiraOpen = null; render(); return; }

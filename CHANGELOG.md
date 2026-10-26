@@ -5,6 +5,7 @@ All notable changes. Versions follow [semantic versioning](https://semver.org/);
 ## Unreleased
 
 ### Added
+- Jira by sprint: the board shows the active sprint (pick another sprint, the backlog or all issues); the list is Jira's backlog — each open sprint with its dates and status counts, then the backlog without finished issues. The sprint field is found automatically.
 - **Jira page like Jira:** a board with a column per Jira status and cards with type, key, priority, epic, labels, the linked request and its threads; a list view; quick filters (needs attention, Claude working, with a request, hide done, type, priority); an issue panel with details, the description and comments as Jira renders them.
 - When a fix run ends, its request is reloaded from GitLab at once (and again 20 seconds later), so resolved threads stop showing as open.
 - Unresolved threads on the request page show when the fix skill is working on the request (*mr-fix is on it · 6m*) and which threads it has replied to.

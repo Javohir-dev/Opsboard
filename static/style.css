@@ -1094,3 +1094,16 @@ a.cnt:hover { filter: brightness(1.15); }
 @media (max-width: 760px) { .jsearch { width: 100%; } .jcol { flex-basis: 85vw; } }
 .jselect { background-color: var(--panel) !important; color: var(--text); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 0 34px 0 10px; }
 .jlist th:first-child, .jlist td.jt { width: 1%; padding-right: 0; }
+.jsprint { font-weight: 600; min-width: 150px; }
+.jgroup { margin-bottom: 14px; }
+.jgh { display: flex; align-items: center; gap: 10px; padding: 8px 4px; cursor: pointer; font-size: var(--fs-md); border-radius: var(--r-sm); }
+.jgh:hover { background: var(--panel2); }
+.jgh .dchev { display: inline-flex; color: var(--muted); }
+.jcounts { display: inline-flex; gap: 4px; }
+.jcounts span { min-width: 22px; text-align: center; padding: 0 6px; border-radius: 4px; font-size: var(--fs-xs); font-weight: 700; }
+.c-new { background: var(--chip); color: var(--muted); }
+.c-ind { background: color-mix(in srgb, #4c9aff 30%, transparent); color: #9ec2ff; }
+.c-done { background: color-mix(in srgb, #36b37e 30%, transparent); color: #79e2b6; }
+.jgroup .jlist table { table-layout: fixed; width: 100%; }
+.jlist col.c-t { width: 36px; } .jlist col.c-k { width: 84px; } .jlist col.c-s { width: 170px; } .jlist col.c-m { width: 150px; } .jlist col.c-p { width: 40px; } .jlist col.c-u { width: 90px; }
+.jgroup .jlist td { overflow: hidden; text-overflow: ellipsis; }
