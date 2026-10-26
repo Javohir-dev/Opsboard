@@ -5,6 +5,8 @@ All notable changes. Versions follow [semantic versioning](https://semver.org/);
 ## Unreleased
 
 ### Added
+- **Jira page like Jira:** a board with a column per Jira status and cards with type, key, priority, epic, labels, the linked request and its threads; a list view; quick filters (needs attention, Claude working, with a request, hide done, type, priority); an issue panel with details, the description and comments as Jira renders them.
+- When a fix run ends, its request is reloaded from GitLab at once (and again 20 seconds later), so resolved threads stop showing as open.
 - Unresolved threads on the request page show when the fix skill is working on the request (*mr-fix is on it · 6m*) and which threads it has replied to.
 - Telegram fix buttons always push, reply and resolve: **⚡ ultra** (with tests) and **🚀 ultra-skip** (quick checks). Runs record where they were started (dashboard or Telegram).
 - Requests assigned to you count as yours: listed with an *Assigned* chip, notified in Telegram (with the fix buttons), and open to the fix skill and `opsboard review`.

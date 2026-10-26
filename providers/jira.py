@@ -43,7 +43,7 @@ def collect():
         put("jira", {"configured": False, "site": jira_site()})
         return
     issues, token = [], None
-    fields = ["summary", "status", "priority", "issuetype", "created", "updated", "duedate", "resolutiondate"]
+    fields = ["summary", "status", "priority", "issuetype", "created", "updated", "duedate", "resolutiondate", "assignee", "reporter", "labels", "parent"]
     try:
         headers = jira_headers()
         while True:
@@ -65,6 +65,10 @@ def collect():
                         "updated": epoch(f.get("updated", "")),
                         "resolved": epoch(f.get("resolutiondate") or ""),
                         "due": f.get("duedate"),
+                        "assignee": (f.get("assignee") or {}).get("displayName", ""),
+                        "reporter": (f.get("reporter") or {}).get("displayName", ""),
+                        "labels": f.get("labels") or [],
+                        "parent": {"key": (f.get("parent") or {}).get("key", ""), "summary": (((f.get("parent") or {}).get("fields") or {}).get("summary", ""))} if f.get("parent") else None,
                     }
                 )
             token = page.get("nextPageToken")
@@ -85,3 +89,43 @@ def collect():
     status_map.update(detect.detect_status_map(issues))
     if status_map:
         cfg.set("jira.status_map", status_map, "auto", "your Jira statuses", 0.8)
+
+
+ISSUE_FIELDS = "summary,status,priority,issuetype,assignee,reporter,created,updated,duedate,resolutiondate,labels,parent,description,comment,subtasks,issuelinks"
+
+
+def issue(key):
+    """One issue with its description and comments rendered to HTML by Jira."""
+    import re as _re
+
+    if not _re.fullmatch(r"[A-Z][A-Z0-9_]{0,19}-\d{1,7}", key or ""):
+        raise ValueError("not an issue key")
+    it = http_json(f"{jira_site()}/rest/api/3/issue/{key}?fields={ISSUE_FIELDS}&expand=renderedFields", jira_headers())
+    f, r = it.get("fields") or {}, it.get("renderedFields") or {}
+    person = lambda u: {"name": (u or {}).get("displayName", ""), "avatar": ((u or {}).get("avatarUrls") or {}).get("48x48", "")}  # noqa: E731
+    comments = (f.get("comment") or {}).get("comments") or []
+    rendered = (r.get("comment") or {}).get("comments") or []
+    return {
+        "key": it["key"],
+        "url": f"{jira_site()}/browse/{it['key']}",
+        "summary": f.get("summary", ""),
+        "status": (f.get("status") or {}).get("name", ""),
+        "category": ((f.get("status") or {}).get("statusCategory") or {}).get("key", ""),
+        "type": (f.get("issuetype") or {}).get("name", ""),
+        "priority": (f.get("priority") or {}).get("name", ""),
+        "assignee": person(f.get("assignee")),
+        "reporter": person(f.get("reporter")),
+        "labels": f.get("labels") or [],
+        "parent": {"key": f["parent"]["key"], "summary": (f["parent"].get("fields") or {}).get("summary", "")} if f.get("parent") else None,
+        "created": epoch(f.get("created") or ""),
+        "updated": epoch(f.get("updated") or ""),
+        "due": f.get("duedate"),
+        "resolved": epoch(f.get("resolutiondate") or ""),
+        "description": r.get("description") or "",
+        "subtasks": [
+            {"key": s["key"], "summary": (s.get("fields") or {}).get("summary", ""), "status": ((s.get("fields") or {}).get("status") or {}).get("name", "")} for s in f.get("subtasks") or []
+        ],
+        "comments": [
+            {"author": person(c.get("author")), "created": epoch(c.get("created") or ""), "body": (rendered[i].get("body") if i < len(rendered) else "") or ""} for i, c in enumerate(comments)
+        ],
+    }

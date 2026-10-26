@@ -50,7 +50,7 @@ function render() {
   const machine = `${meter("CPU", `${(m.cpu ?? 0).toFixed(0)}%`, m.cpu)}${meter("RAM", `${bytes(m.mem_used)} / ${bytes(m.mem_total, 0)}`, pct(m.mem_used, m.mem_total))}${m.swap_total ? meter("Swap", bytes(m.swap_used), pct(m.swap_used, m.swap_total)) : ""}`;
   patch($("hstats"), `${showUsage() ? `${usage ? `<div class="utitle">Claude usage${live ? `<span class="ulive" title="Updated every minute from Anthropic">live</span>` : ""}</div>${cu.account?.email ? `<div class="uacct" title="${esc([cu.account.email, cu.account.org, cu.account.plan].filter(Boolean).join(" · "))}"><span class="uemail" translate="no">${esc(cu.account.email)}</span>${cu.account.org || cu.account.plan ? `<span class="uorg" translate="no">${esc([cu.account.org, cu.account.plan].filter(Boolean).join(" · "))}</span>` : ""}</div>` : ""}${usage}${stale}${liveNote}` : cu.account?.email ? `<div class="utitle">Claude usage</div><div class="reset" title="Claude Code saves your plan limits when it shows them">Run /usage in Claude Code once to show your limits here</div>${liveNote}` : ""}` : machine}${errs.length ? `<div class="err fs-sm" title="${esc(errs.map(e => e.join(": ")).join("\n"))}">${errs.length} collector error(s)</div>` : ""}${data.version?.update ? `<a class="badge warn" href="#/settings" title="Run opsboard update">${esc(data.version.latest)} available</a>` : ""}`);
   $("ver").textContent = data.version?.current ? "v" + data.version.current : "";
-  const pages = { overview: pageOverview, sessions: pageSessions, s: c => pageSession(c, r.arg), docker: pageDocker, postgres: pagePostgres, tasks: pageTasks, mrs: pageMrs, mr: c => pageMr(c, r.arg), worktrees: pageWorktrees, processes: pageProcesses, settings: pageSettings, notes: pageNotes };
+  const pages = { overview: pageOverview, sessions: pageSessions, s: c => pageSession(c, r.arg), docker: pageDocker, postgres: pagePostgres, tasks: c => (hasJira() ? pageJira(c) : pageTasks(c)), mrs: pageMrs, mr: c => pageMr(c, r.arg), worktrees: pageWorktrees, processes: pageProcesses, settings: pageSettings, notes: pageNotes };
   const view = (pages[r.page] || pageOverview)(ctx);
   if (ui.forcePatch || view !== ui.lastView) { ui.lastView = view; patch($("view"), view); }
   ui.forcePatch = false;
@@ -92,7 +92,7 @@ function labelDots() {
 }
 function hideEmptyColumns() {
   document.querySelectorAll("#view .tbl table").forEach(t => {
-    if (t.closest(".area")) return;
+    if (t.closest(".area, .jlist")) return;
     const rows = [...t.tBodies[0]?.rows || []];
     if (!rows.length) return;
     const n = t.tHead?.rows[0]?.cells.length || 0;

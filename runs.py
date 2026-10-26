@@ -133,7 +133,7 @@ def refresh_runs():
     with runs_lock:
         runs = load_runs()
         changed = False
-        finished = []
+        finished, stopped = [], []
         for r in runs:
             recent = time.time() - r.get("started", 0) < 86400
             if r["status"] in ("done", "error") and recent and not r.get("exited") and _same_process(r):
@@ -174,6 +174,8 @@ def refresh_runs():
                 changed = True
                 if r["status"] != "stopped":
                     finished.append(r)
+                else:
+                    stopped.append(r)
         if changed:
             save_runs(runs)
     if finished:
@@ -181,6 +183,9 @@ def refresh_runs():
             titles = {m["iid"]: m.get("title", "") for m in (state.get("review") or {}).get("mrs", [])}
         for r in finished:
             notify.run_finished(r, titles.get(r.get("iid"), ""))
+        for r in stopped:
+            for hook in notify.HOOKS:
+                hook({"kind": "run", "run_id": r["id"], "iid": r.get("iid"), "status": "stopped", "silent": True})
     return runs
 
 

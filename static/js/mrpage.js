@@ -344,6 +344,9 @@ function pageMr(ctx, arg) {
   const url = d?.url || m?.url || "";
   const run = m && runningRun(iid);
   const lastRun = (data.runs || []).find(r => r.iid === iid);
+  const seenKey = lastRun ? lastRun.id + ":" + lastRun.status : "";
+  if (ui.mrRunSeen?.[iid] && ui.mrRunSeen[iid] !== seenKey && lastRun?.status !== "running") loadMr(iid, true);
+  (ui.mrRunSeen ||= {})[iid] = seenKey;
   if (lastRun && (!RUND.at[lastRun.id] || (lastRun.status === "running" && Date.now() - RUND.at[lastRun.id] > 5000))) loadRun(lastRun.id);
   const actions = `<span class="h2-actions">
     <button class="iconbtn ${MRD.loading === iid ? "spin" : ""}" data-mr-refresh="${iid}" title="Update from ${hostName()} now" ${MRD.loading === iid ? "disabled" : ""}>${icon("refresh", 14)}</button>

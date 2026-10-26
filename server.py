@@ -24,6 +24,7 @@ from core import DATA, HERE, gitlab_url, lock, log, loop, run, setup_logging, st
 from notes import load_marks, load_notes, notes_lock, save_notes, set_mark
 from providers import github, review_host, tracker
 from providers.gitlab import gitlab_get
+from providers.jira import issue as jira_issue
 from providers.jira import jira_account, save_jira_account
 from runs import fix_prompt, launch_fix, run_timeline, stop_run
 from sessions import collect_sessions
@@ -34,6 +35,7 @@ RE_TOKENS = re.compile(r"ATATT[A-Za-z0-9_\-=]{20,}|glpat-[A-Za-z0-9_\-]{16,}|gh[
 
 
 MR_CACHE = {}
+JIRA_CACHE = {}
 MR_TTL = 60
 
 
@@ -49,6 +51,15 @@ def mr_detail(iid, fresh=False):
     out["fetched"] = time.time()
     MR_CACHE[iid] = (out["fetched"], out)
     return out
+
+
+def after_run(item):
+    """A finished fix run changed its request: reload it now, and once more after GitLab settles."""
+    if item.get("kind") != "run":
+        return
+    MR_CACHE.pop(item.get("iid"), None)
+    refresh_tasks.set()
+    threading.Timer(20, lambda: (MR_CACHE.pop(item.get("iid"), None), refresh_tasks.set())).start()
 
 
 def redact(text):
@@ -426,6 +437,22 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as exc:
                 out = {"ok": False, "error": str(exc)[:300]}
             self.send(json.dumps(out, ensure_ascii=False), "application/json")
+        elif self.path.startswith("/api/jira-issue?"):
+            query = dict(p.split("=", 1) for p in self.path.split("?", 1)[1].split("&") if "=" in p)
+            try:
+                if DEMO:
+                    raise ValueError("demo mode — no Jira")
+                key = parse.unquote(query.get("key", ""))
+                hit = JIRA_CACHE.get(key)
+                if not hit or time.time() - hit[0] > 60 or query.get("fresh") == "1":
+                    hit = (time.time(), jira_issue(key))
+                    JIRA_CACHE[key] = hit
+                out = {"ok": True, "issue": hit[1]}
+            except error.HTTPError as exc:
+                out = {"ok": False, "error": f"Jira answered {exc.code}"}
+            except (ValueError, KeyError, error.URLError, OSError) as exc:
+                out = {"ok": False, "error": str(exc)[:300]}
+            self.send(redact(json.dumps(out, ensure_ascii=False)), "application/json")
         elif self.path.startswith("/api/doctor"):
             self.send(redact(json.dumps(demo.DOCTOR if DEMO else detect.doctor())), "application/json")
         elif self.path.startswith("/api/state"):
@@ -512,6 +539,7 @@ def main():
     threading.Thread(target=lambda: detect.apply(detect.detect_all()[0]), daemon=True).start()
     threading.Thread(target=collect_tasks_loop, daemon=True).start()
     notify.HOOKS.append(telegram.on_notify)
+    notify.HOOKS.append(after_run)
     telegram.start()
     ALLOWED_HOSTS.update({f"127.0.0.1:{args.port}", f"localhost:{args.port}"})
     page_token()

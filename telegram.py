@@ -407,7 +407,8 @@ def on_notify(item):
             send(_merged_text(item), [link] if link else None)
         return
     if item.get("kind") == "run":
-        _fix_finished(item)
+        if not item.get("silent"):
+            _fix_finished(item)
         return
     if item.get("kind") != "thread" or not cfg.get("telegram.notify"):
         return

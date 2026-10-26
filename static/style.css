@@ -1027,3 +1027,70 @@ a.cnt:hover { filter: brightness(1.15); }
 .thfix.done { color: var(--ok); background: color-mix(in srgb, var(--ok) 15%, transparent); }
 .thfix.done .ic { animation: none; }
 @media (prefers-reduced-motion: reduce) { .thfix .ic { animation: none; } }
+
+/* Jira page */
+.jbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.jsearch { width: 240px; }
+.jchip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--panel); color: var(--text); font-size: var(--fs-md); cursor: pointer; }
+.jchip:hover { background: var(--panel2); }
+.jchip.on { background: color-mix(in srgb, var(--accent) 18%, transparent); border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); color: var(--accent); font-weight: 600; }
+.jchip .n { font-size: var(--fs-xs); background: var(--chip); color: var(--muted); border-radius: var(--r-full); padding: 0 6px; }
+.jselect { height: 32px; font-size: var(--fs-md); }
+.jboard { display: flex; gap: 10px; overflow-x: auto; align-items: flex-start; padding-bottom: 12px; }
+.jcol { flex: 0 0 272px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-md); display: flex; flex-direction: column; max-height: calc(100vh - 230px); }
+.jcolh { display: flex; align-items: center; gap: 8px; padding: 12px 12px 8px; font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
+.jcount { font-weight: 600; background: var(--chip); border-radius: var(--r-full); padding: 0 7px; }
+.jcards { display: flex; flex-direction: column; gap: 6px; padding: 0 8px 10px; overflow-y: auto; }
+.jcard { position: relative; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 10px 12px 8px; cursor: pointer; box-shadow: 0 1px 1px rgba(0, 0, 0, .12); }
+.jcard:hover { background: var(--panel2); }
+.jcard.on, .jrow.on { outline: 2px solid var(--accent); outline-offset: -1px; }
+.jcard.marked { box-shadow: inset 3px 0 0 var(--mk); }
+.jepic { display: inline-block; max-width: 100%; margin-bottom: 6px; padding: 1px 6px; border-radius: var(--r-xs); background: color-mix(in srgb, #904ee2 20%, transparent); color: #b48cf0; font-size: var(--fs-xs); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jsum { font-size: var(--fs-md); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.jlabels { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.jlabels span { font-size: var(--fs-xs); padding: 0 6px; border-radius: var(--r-xs); background: var(--chip); color: var(--muted); }
+.jfoot { display: flex; align-items: center; gap: 6px; margin-top: 10px; min-height: 18px; }
+.jtype, .jprio { display: inline-flex; flex: none; }
+.jkey { font-size: var(--fs-sm); font-weight: 600; color: var(--muted); white-space: nowrap; }
+.jkey.done { text-decoration: line-through; }
+.jmr { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; height: 18px; border-radius: var(--r-xs); font-size: var(--fs-xs); font-weight: 600; text-decoration: none !important; background: var(--chip); color: var(--muted); }
+.jmr-open { color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, transparent); }
+.jmr-merged { color: var(--ok); background: color-mix(in srgb, var(--ok) 15%, transparent); }
+.jmr-closed { color: var(--bad); }
+.jmrth { display: inline-flex; align-items: center; gap: 2px; margin-left: 2px; color: var(--ok); }
+.jmrth.open { color: var(--warn); }
+.jmrbad { display: inline-flex; color: var(--bad); }
+.jwarn { display: inline-flex; } .jwarn.bad { color: var(--bad); } .jwarn.warn { color: var(--warn); }
+.jclaude { display: inline-flex; color: var(--busy); }
+.jloz { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .2px; white-space: nowrap; background: var(--chip); color: var(--text); }
+.jloz-indeterminate { background: color-mix(in srgb, #4c9aff 25%, transparent); color: #7eb3ff; }
+.jloz-done { background: color-mix(in srgb, #36b37e 25%, transparent); color: #57d9a3; }
+:root[data-theme="light"] .jloz-indeterminate { color: #0747a6; } :root[data-theme="light"] .jloz-done { color: #006644; }
+.jlist td { vertical-align: middle; }
+.jlist .jt { width: 26px; }
+.jrow { cursor: pointer; }
+.jsum1 { font-size: var(--fs-md); }
+.jscrim { position: fixed; inset: 0; background: rgba(0, 0, 0, .35); z-index: 40; }
+.jpanel { position: fixed; top: 0; right: 0; bottom: 0; width: min(640px, 100vw); z-index: 41; background: var(--panel); border-left: 1px solid var(--line); box-shadow: -10px 0 30px rgba(0, 0, 0, .3); display: flex; flex-direction: column; }
+.jph { display: flex; align-items: center; gap: 8px; padding: 12px 18px; border-bottom: 1px solid var(--line); }
+.jcrumb { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-md); font-weight: 600; }
+.jpbody { overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 18px; }
+.jptitle { margin: 0; font-size: var(--fs-xl); line-height: 1.35; text-transform: none; letter-spacing: 0; color: var(--text); }
+.jsec h3 { margin: 0 0 8px; font-size: var(--fs-md); }
+.jdetails { display: grid; grid-template-columns: 110px 1fr; gap: 10px 14px; align-items: center; font-size: var(--fs-md); padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-md); }
+.jdk { color: var(--muted); }
+.jdv { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.jperson { display: inline-flex; align-items: center; gap: 8px; }
+.jperson .avatar { width: 24px; height: 24px; }
+.jpmrs { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--r-md); }
+.jpmr { display: flex; align-items: center; gap: 8px; padding: 8px 12px; color: var(--text); text-decoration: none !important; }
+.jpmr + .jpmr { border-top: 1px solid var(--line); }
+.jpmr:hover { background: var(--panel2); }
+.ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.jdesc { font-size: var(--fs-md); }
+.jcomment { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+.jcomment .md { flex-basis: 100%; padding-left: 32px; font-size: var(--fs-md); }
+.jsubt { padding: 4px 0; font-size: var(--fs-md); cursor: pointer; }
+@media (max-width: 760px) { .jsearch { width: 100%; } .jcol { flex-basis: 85vw; } }
+.jselect { background-color: var(--panel) !important; color: var(--text); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 0 34px 0 10px; }
+.jlist th:first-child, .jlist td.jt { width: 1%; padding-right: 0; }
