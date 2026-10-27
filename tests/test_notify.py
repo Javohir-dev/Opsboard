@@ -89,6 +89,22 @@ class NotifyTest(unittest.TestCase):
         self.assertEqual(notify.text(item), ("Merged · !7", "Fix — by Max"))
         self.assertEqual(notify.merged(mr("merged")), [])
 
+    def test_battery_low_once_until_it_recovers(self):
+        notify._battery["low"] = False
+        mac = lambda level, st="discharging": {"battery": level, "battery_state": st, "power": "Battery" if st == "discharging" else "AC"}  # noqa: E731
+        self.assertIsNone(notify.battery(mac(40)))
+        item = notify.battery(mac(14))
+        self.assertEqual((item["kind"], item["level"]), ("battery", 14))
+        self.assertEqual(notify.text(item), ("Battery low · 14%", "Plug in the charger"))
+        self.assertEqual(self.sound.call_args.args, (True,))
+        self.assertIsNone(notify.battery(mac(12)))
+        self.assertIsNone(notify.battery(mac(13, "charging")))
+        self.assertIsNotNone(notify.battery(mac(11)))
+        cfg.set("notify.battery_low", 0, "user")
+        notify._battery["low"] = False
+        self.assertIsNone(notify.battery(mac(5)))
+        cfg.set("notify.battery_low", None, "user")
+
     def test_mark_read_and_clear(self):
         a = notify.run_finished(run())
         notify.run_finished({**run(), "id": "r2"})

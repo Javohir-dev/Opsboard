@@ -283,9 +283,9 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("not a skill name")
                 if key == "claude.reply_language" and value not in (None, "thread", "uz", "ru", "en"):
                     raise ValueError("unknown reply language")
-                if key in ("server.port", "refresh.tasks_seconds") and value is not None:
+                if key in ("server.port", "refresh.tasks_seconds", "notify.battery_low") and value is not None:
                     value = int(value)
-                    if not (1024 <= value <= 65535 if key == "server.port" else 30 <= value <= 3600):
+                    if not (1024 <= value <= 65535 if key == "server.port" else 0 <= value <= 95 if key == "notify.battery_low" else 30 <= value <= 3600):
                         raise ValueError("value out of range")
                 cfg.set(key, value, "user", "Settings page")
                 if key in ("project.root", "jira.projects", "jira.jql"):

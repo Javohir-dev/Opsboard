@@ -401,6 +401,11 @@ def _merged_text(item):
 def on_notify(item):
     if not chat_id():
         return
+    if item.get("kind") == "battery":
+        if cfg.get("telegram.notify"):
+            words = {"uz": "🪫 <b>Batareya {n}% qoldi</b>\nMac'ni quvvatga ulang.", "en": "🪫 <b>Battery at {n}%</b>\nPlug in the Mac.", "ru": "🪫 <b>Батарея {n}%</b>\nПодключите Mac к зарядке."}
+            send(words[_bot_lang()].format(n=item.get("level")))
+        return
     if item.get("kind") == "merged":
         if cfg.get("telegram.notify"):
             link = _url_button(f"Open in {_host()}", item.get("url"))

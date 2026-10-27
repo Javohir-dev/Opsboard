@@ -248,6 +248,12 @@ class TelegramTest(unittest.TestCase):
         launch.assert_called_once_with({"iid": 7, "threads": True, "conflict": True, "skiptests": True, "push": True, "source": "telegram"})
         self.assertIn("ultra-skip ishga tushdi", self.texts()[-1])
 
+    def test_battery_message(self):
+        self.link()
+        SENT.clear()
+        telegram.on_notify({"kind": "battery", "level": 14})
+        self.assertIn("Batareya 14% qoldi", self.texts()[-1])
+
     def test_merged_message(self):
         self.link()
         SENT.clear()

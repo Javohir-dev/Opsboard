@@ -7,6 +7,7 @@ from pathlib import Path
 import claudeusage
 import config as cfg
 import machine
+import notify
 import stackprofile as profile
 from core import db_container, db_user, epoch, lock, put, run, size_bytes, state, worktree_paths
 from sessions import HISTORY, SEP
@@ -37,7 +38,9 @@ def collect_mac():
 
 
 def collect_mac_slow():
-    put("mac_static", machine.static())
+    info = machine.static()
+    put("mac_static", info)
+    notify.battery(info)
 
 
 def collect_docker():

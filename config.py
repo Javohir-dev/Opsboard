@@ -42,6 +42,7 @@ DEFAULTS = {
     "claude.fix_skill": "",
     "claude.live_usage": True,
     "notify.sound": True,
+    "notify.battery_low": 15,
     "telegram.chat_id": "",
     "telegram.user": "",
     "telegram.notify": True,

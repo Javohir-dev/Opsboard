@@ -151,9 +151,29 @@ def merged(mrs):
     return done
 
 
+_battery = {"low": False}
+
+
+def battery(info):
+    """One alert when the battery drops below the limit while it discharges; armed again once it charges or recovers."""
+    level, st = info.get("battery"), (info.get("battery_state") or "").lower()
+    limit = int(cfg.get("notify.battery_low") or 0)
+    if level is None or limit <= 0:
+        return None
+    discharging = st == "discharging" or (info.get("power") == "Battery" and st not in ("charging", "charged", "full", "finishing charge"))
+    if _battery["low"] and (not discharging or level >= limit + 5):
+        _battery["low"] = False
+    if _battery["low"] or not discharging or level >= limit:
+        return None
+    _battery["low"] = True
+    return _publish({"id": uuid.uuid4().hex[:12], "kind": "battery", "level": level, "status": "battery", "at": time.time(), "read": False}, "kind", bad=True)
+
+
 def text(item):
     o = item.get("outcome") or {}
     ref = f"!{item['iid']}" if item.get("iid") else item.get("name", "")
+    if item.get("kind") == "battery":
+        return f"Battery low · {item.get('level')}%", "Plug in the charger"
     if item.get("kind") == "merged":
         return f"Merged · {ref}", (item.get("mr_title") or "") + (f" — by {item['merged_by']}" if item.get("merged_by") else "")
     if item.get("kind") == "thread":
