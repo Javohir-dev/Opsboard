@@ -95,7 +95,8 @@ class NotifyTest(unittest.TestCase):
         self.assertIsNone(notify.battery(mac(40)))
         item = notify.battery(mac(14))
         self.assertEqual((item["kind"], item["level"]), ("battery", 14))
-        self.assertEqual(notify.text(item), ("Battery low · 14%", "Plug in the charger"))
+        self.assertEqual(notify.text(item), ("Battery low · 14%", "time left unknown at this rate — plug in the charger"))
+        self.assertEqual(item["head"], "Battery low · 14%")
         self.assertEqual(self.sound.call_args.args, (True,))
         self.assertIsNone(notify.battery(mac(12)))
         self.assertIsNone(notify.battery(mac(13, "charging")))
@@ -104,6 +105,14 @@ class NotifyTest(unittest.TestCase):
         notify._battery["low"] = False
         self.assertIsNone(notify.battery(mac(5)))
         cfg.set("notify.battery_low", None, "user")
+
+    def test_battery_time_left(self):
+        notify._battery.update(low=False, samples=[])
+        item = notify.battery({"battery": 14, "battery_state": "discharging", "power": "Battery", "battery_minutes": 95})
+        self.assertEqual((item["minutes"], notify.text(item)[1]), (95, "about 1 h 35 min left at this rate — plug in the charger"))
+        notify._battery.update(low=False, samples=[(time.time() - 600, 20)])
+        item = notify.battery({"battery": 14, "battery_state": "discharging", "power": "Battery"})
+        self.assertEqual(item["minutes"], 23)
 
     def test_mark_read_and_clear(self):
         a = notify.run_finished(run())

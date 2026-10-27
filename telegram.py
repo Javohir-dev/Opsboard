@@ -403,8 +403,19 @@ def on_notify(item):
         return
     if item.get("kind") == "battery":
         if cfg.get("telegram.notify"):
-            words = {"uz": "🪫 <b>Batareya {n}% qoldi</b>\nMac'ni quvvatga ulang.", "en": "🪫 <b>Battery at {n}%</b>\nPlug in the Mac.", "ru": "🪫 <b>Батарея {n}%</b>\nПодключите Mac к зарядке."}
-            send(words[_bot_lang()].format(n=item.get("level")))
+            lang, mins = _bot_lang(), item.get("minutes")
+            span = _span(mins * 60, lang) if mins else ""
+            left = (
+                {"uz": f"Shu tarzda taxminan <b>{span}</b>ga yetadi.", "en": f"At this rate it lasts about <b>{span}</b>.", "ru": f"При таком расходе хватит примерно на <b>{span}</b>."}[lang]
+                if mins
+                else ""
+            )
+            words = {
+                "uz": "🪫 <b>Batareya {n}% qoldi</b>\n{left}\nMac'ni quvvatga ulang.",
+                "en": "🪫 <b>Battery at {n}%</b>\n{left}\nPlug in the Mac.",
+                "ru": "🪫 <b>Батарея {n}%</b>\n{left}\nПодключите Mac к зарядке.",
+            }
+            send(words[lang].format(n=item.get("level"), left=left).replace("\n\n", "\n"))
         return
     if item.get("kind") == "merged":
         if cfg.get("telegram.notify"):

@@ -5,7 +5,7 @@ All notable changes. Versions follow [semantic versioning](https://semver.org/);
 ## Unreleased
 
 ### Added
-- **Low battery alert:** when the battery drops below 15% while discharging — once, in the bell (with a sound) and in Telegram; *Settings → Claude → Low battery alert* sets the level (0 = off).
+- **Low battery alert:** when the battery drops below 15% while discharging, with how long it lasts at this rate (macOS's estimate, else the drop of the last half hour) — once, in the bell (with a sound) and in Telegram; *Settings → Claude → Low battery alert* sets the level (0 = off).
 - Jira by sprint: the board shows the active sprint (pick another sprint, the backlog or all issues); the list is Jira's backlog — each open sprint with its dates and status counts, then the backlog without finished issues. The sprint field is found automatically.
 - **Jira page like Jira:** a board with a column per Jira status and cards with type, key, priority, epic, labels, the linked request and its threads; a list view; quick filters (needs attention, Claude working, with a request, hide done, type, priority); an issue panel with details, the description and comments as Jira renders them.
 - When a fix run ends, its request is reloaded from GitLab at once (and again 20 seconds later), so resolved threads stop showing as open.
@@ -32,6 +32,7 @@ All notable changes. Versions follow [semantic versioning](https://semver.org/);
 - Agents cannot switch *Live Claude usage* on through `opsboard config` (`--source agent` is refused); the setup prompt tells Claude never to read Claude Code's sign-in.
 
 ### Fixed
+- Notifications carry their own title and text, so a tab opened before an update never shows *undefined*.
 - Agents started by a Claude Code *Workflow* show up under their session (running, completed or failed, with the workflow phase); they were missing because they live in `subagents/workflows/`.
 - A fix run stays *running* until its Claude process exits; a run with background jobs was marked done after its first turn, so only one of several runs showed as in progress.
 

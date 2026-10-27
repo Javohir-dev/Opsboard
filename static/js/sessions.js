@@ -62,7 +62,7 @@ function macTiles() {
   const isMac = (m.os || "macOS") === "macOS";
   const memSub = isMac ? `pressure ${memUsedPct}% · wired ${bytes(m.mem_wired)} · compressed ${bytes(m.mem_compressed)}` : `in use ${memUsedPct}% · cache ${bytes(m.mem_cache)}`;
   const gpuSub = m.gpu == null ? "no supported GPU found" : [m.gpu_renderer != null ? `renderer ${m.gpu_renderer}%` : m.gpu_name || "", m.gpu_mem ? `in use ${bytes(m.gpu_mem)}` : ""].filter(Boolean).join(" · ");
-  const powerSub = [m.power, m.battery_state, m.cpu_speed_limit != null ? `CPU speed limit ${m.cpu_speed_limit}%` : "", `${m.processes || "?"} procs`].filter(Boolean).join(" · ");
+  const powerSub = [m.power, m.battery_state, m.battery_minutes && m.battery_state === "discharging" ? `~${m.battery_minutes >= 60 ? `${Math.floor(m.battery_minutes / 60)}h ${m.battery_minutes % 60}m` : `${m.battery_minutes}m`} left` : "", m.cpu_speed_limit != null ? `CPU speed limit ${m.cpu_speed_limit}%` : "", `${m.processes || "?"} procs`].filter(Boolean).join(" · ");
   return `<section><h2>${esc(m.os || "Machine")}<span class="count">${esc([m.distro, m.chip, m.model, m.pcores && `${m.pcores}P+${m.ecores}E cores`, !m.pcores && m.ncpu && `${m.ncpu} cores`, m.mem_total && bytes(m.mem_total, 0) + " RAM"].filter(Boolean).join(" · "))}</span></h2><div class="tiles">${[
     tile("CPU", `${(m.cpu ?? 0).toFixed(0)}%`, `user ${m.cpu_user ?? 0}% · sys ${m.cpu_sys ?? 0}% · load ${(m.load || []).join(" / ")}`, spark(h.cpu, 100, color(m.cpu))),
     tile("RAM", `${bytes(m.mem_used)} <span class="muted fs-lg fw-500">/ ${bytes(m.mem_total, 0)}</span>`, memSub, bar([[pct(m.mem_used, m.mem_total), color(memUsedPct)]]) + spark(h.mem, 100, color(memUsedPct))),

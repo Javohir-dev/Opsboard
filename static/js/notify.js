@@ -5,7 +5,8 @@ const canAlert = () => "Notification" in window && Notification.permission === "
 
 function notifText(n) {
   const o = n.outcome || {}, ref = n.iid ? mrRef(n.iid) : n.name;
-  if (n.kind === "battery") return { level: "bad", head: `Battery low · ${n.level}%`, body: "Plug in the charger" };
+  if (n.kind === "battery") return { level: "bad", head: `Battery low · ${n.level}%`, body: n.minutes ? `about ${n.minutes >= 60 ? `${Math.floor(n.minutes / 60)} h ${n.minutes % 60} min` : `${n.minutes} min`} left at this rate — plug in the charger` : "Plug in the charger" };
+  if (n.kind && !["run", "thread", "merged"].includes(n.kind) && n.head) return { level: "info", head: n.head, body: n.body || "" };
   if (n.kind === "merged") return { level: "ok", head: `Merged · ${ref}`, body: [n.mr_title, n.merged_by ? `by ${n.merged_by}` : ""].filter(Boolean).join(" — ") };
   if (n.kind === "thread") return { level: "info", head: `New thread · ${ref}${n.path && n.line ? ` · ${n.path.split("/").pop()}:${n.line}` : ""}`, body: `${n.author}: ${n.body}` };
   if (n.status === "error") return { level: "bad", head: `Fix failed · ${ref}`, body: n.error || "The run ended with an error" };

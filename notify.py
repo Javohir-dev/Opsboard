@@ -58,6 +58,8 @@ def run_finished(r, mr_title=""):
 
 
 def _publish(item, same, bad=False):
+    item.setdefault("head", text(item)[0])
+    item.setdefault("body", text(item)[1])
     with _lock:
         items = [x for x in load() if not (x.get("kind") == item["kind"] and x.get(same) == item[same])]
         _save([item] + items)
@@ -151,7 +153,20 @@ def merged(mrs):
     return done
 
 
-_battery = {"low": False}
+_battery = {"low": False, "samples": []}
+
+
+def battery_minutes(info):
+    """Minutes left: macOS's / the kernel's own estimate, else the drop of the last half hour while discharging."""
+    if info.get("battery_minutes"):
+        return int(info["battery_minutes"])
+    samples = _battery["samples"]
+    if len(samples) < 2:
+        return None
+    (t0, l0), (t1, l1) = samples[0], samples[-1]
+    if l0 <= l1 or t1 - t0 < 120:
+        return None
+    return int(l1 / ((l0 - l1) / ((t1 - t0) / 60)))
 
 
 def battery(info):
@@ -161,19 +176,26 @@ def battery(info):
     if level is None or limit <= 0:
         return None
     discharging = st == "discharging" or (info.get("power") == "Battery" and st not in ("charging", "charged", "full", "finishing charge"))
+    now = time.time()
+    if discharging:
+        _battery["samples"] = [x for x in _battery["samples"] if now - x[0] < 1800] + [(now, level)]
+    else:
+        _battery["samples"] = []
     if _battery["low"] and (not discharging or level >= limit + 5):
         _battery["low"] = False
     if _battery["low"] or not discharging or level >= limit:
         return None
     _battery["low"] = True
-    return _publish({"id": uuid.uuid4().hex[:12], "kind": "battery", "level": level, "status": "battery", "at": time.time(), "read": False}, "kind", bad=True)
+    return _publish({"id": uuid.uuid4().hex[:12], "kind": "battery", "level": level, "minutes": battery_minutes(info), "status": "battery", "at": time.time(), "read": False}, "kind", bad=True)
 
 
 def text(item):
     o = item.get("outcome") or {}
     ref = f"!{item['iid']}" if item.get("iid") else item.get("name", "")
     if item.get("kind") == "battery":
-        return f"Battery low · {item.get('level')}%", "Plug in the charger"
+        mins = item.get("minutes")
+        left = f"about {mins // 60} h {mins % 60} min left" if mins and mins >= 60 else f"about {mins} min left" if mins else "time left unknown"
+        return f"Battery low · {item.get('level')}%", f"{left} at this rate — plug in the charger"
     if item.get("kind") == "merged":
         return f"Merged · {ref}", (item.get("mr_title") or "") + (f" — by {item['merged_by']}" if item.get("merged_by") else "")
     if item.get("kind") == "thread":

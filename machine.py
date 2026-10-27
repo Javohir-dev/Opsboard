@@ -92,6 +92,7 @@ def mac_static():
     batt = run(["pmset", "-g", "batt"])
     m = re.search(r"(\d+)%; ([^;]+);", batt)
     m2 = re.search(r"CPU_Speed_Limit\s*=\s*(\d+)", run(["pmset", "-g", "therm"]))
+    left = re.search(r"(\d+):(\d{2}) remaining", batt)
     return {
         "os": OS_NAME,
         "mem_total": int(info["hw.memsize"] or 0),
@@ -103,6 +104,7 @@ def mac_static():
         "power": "AC" if "AC Power" in batt else "Battery",
         "battery": int(m.group(1)) if m else None,
         "battery_state": m.group(2).strip() if m else "",
+        "battery_minutes": int(left.group(1)) * 60 + int(left.group(2)) if left and m and m.group(2).strip() == "discharging" and not left.group(0).startswith("0:00") else None,
         "cpu_speed_limit": int(m2.group(1)) if m2 else 100,
     }
 
@@ -169,11 +171,15 @@ def linux_static():
         if line.startswith("MemTotal:"):
             mem_total = int(line.split()[1]) * 1024
     vendor, product = read("/sys/devices/virtual/dmi/id/sys_vendor"), read("/sys/devices/virtual/dmi/id/product_name")
-    battery, state, ac = None, "", None
+    battery, state, ac, minutes = None, "", None, None
     for ps in sorted(Path("/sys/class/power_supply").glob("*")) if Path("/sys/class/power_supply").is_dir() else []:
         kind = read(ps / "type")
         if kind == "Battery" and battery is None and read(ps / "capacity").isdigit():
             battery, state = int(read(ps / "capacity")), read(ps / "status").lower()
+            now = next((read(ps / k) for k in ("energy_now", "charge_now") if read(ps / k).isdigit()), "")
+            rate = next((read(ps / k) for k in ("power_now", "current_now") if read(ps / k).isdigit()), "")
+            if state == "discharging" and now and rate and int(rate) > 0:
+                minutes = int(int(now) / int(rate) * 60)
         elif kind == "Mains":
             ac = read(ps / "online") == "1"
     distro = ""
@@ -192,6 +198,7 @@ def linux_static():
         "power": "Battery" if ac is False else "AC",
         "battery": battery,
         "battery_state": state,
+        "battery_minutes": minutes,
         "cpu_speed_limit": None,
     }
 

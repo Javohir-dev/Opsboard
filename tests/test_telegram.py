@@ -251,8 +251,9 @@ class TelegramTest(unittest.TestCase):
     def test_battery_message(self):
         self.link()
         SENT.clear()
-        telegram.on_notify({"kind": "battery", "level": 14})
+        telegram.on_notify({"kind": "battery", "level": 14, "minutes": 25})
         self.assertIn("Batareya 14% qoldi", self.texts()[-1])
+        self.assertIn("taxminan <b>25 daqiqa</b>ga yetadi", self.texts()[-1])
 
     def test_merged_message(self):
         self.link()
