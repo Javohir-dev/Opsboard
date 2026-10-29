@@ -107,6 +107,7 @@ function notesTodoSection() {
   const items = all ? matching : matching.filter((i, n) => n < OVERVIEW_TODO || keep.has(i.id));
   const more = matching.length - items.length;
   const todo = NOTES.items.filter(i => i.kind === "item" && i.tag === "todo").length;
+  if (!items.length) return "";
   const TAG = { todo: ["t-todo", "ToDo"], warn: ["t-warn", icon("warning", 14)], done: ["t-done", "Done"] };
   return `<section><h2>ToDo<span class="count">${todo || ""}</span><span class="h2-actions"><label class="minisw m-0" title="Show every note, not only the first ${OVERVIEW_TODO} ToDo"><input type="checkbox" data-pref="overviewNotesAll" ${all ? "checked" : ""}><span class="tog"></span>show all</label><a href="#/notes">Open ToDo →</a></span></h2>
     <div class="panel list ovnotes">${items.map(it => {
