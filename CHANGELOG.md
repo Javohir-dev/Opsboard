@@ -37,7 +37,7 @@ All notable changes. Versions follow [semantic versioning](https://semver.org/);
 - A fix run stays *running* until its Claude process exits; a run with background jobs was marked done after its first turn, so only one of several runs showed as in progress.
 
 ### Changed
-- ToDo lists the newest notes first: **+ New note** is at the top and adds there, and a restored note comes back on top.
+- ToDo lists the newest notes first: **+ New note** is at the top and adds there, Enter opens the new line above the current one, and a restored note comes back on top.
 - The Warning tag is plain text like ToDo and Done, and Overview lists Warning notes next to ToDo.
 - Overview leaves out the ToDo and open-requests blocks when they have nothing to show.
 - Notes is called **ToDo**; on Overview the first five ToDo come right after the open requests (*show all* for every note, a link to the rest).

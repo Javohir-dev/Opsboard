@@ -176,10 +176,10 @@ document.addEventListener("keydown", e => {
   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); setNoteTag(it, isDone(it) ? (it.prev_tag || "todo") : "done"); scheduleSave(200); rerenderNotes({ id, at }); return; }
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
-    if (/^\s*-{3,}\s*$/.test(text)) { NOTES.deleted.add(it.id); NOTES.items.splice(i, 1, { ...newNote(), kind: "divider" }, newNote("", 0)); scheduleSave(200); rerenderNotes({ id: NOTES.items[i + 1].id, at: 0 }); return; }
+    if (/^\s*-{3,}\s*$/.test(text)) { NOTES.deleted.add(it.id); NOTES.items.splice(i, 1, newNote("", 0), { ...newNote(), kind: "divider" }); scheduleSave(200); rerenderNotes({ id: NOTES.items[i].id, at: 0 }); return; }
     it.text = text.slice(0, at);
     const next = newNote(text.slice(at), it.indent);
-    NOTES.items.splice(i + 1, 0, next); scheduleSave(200); rerenderNotes({ id: next.id, at: 0 }); return;
+    NOTES.items.splice(i, 0, next); scheduleSave(200); rerenderNotes({ id: next.id, at: 0 }); return;
   }
   if (e.key === "Tab") { e.preventDefault(); it.indent = Math.max(0, Math.min(4, it.indent + (e.shiftKey ? -1 : 1))); scheduleSave(200); rerenderNotes({ id, at }); return; }
   if (e.key === "Backspace" && at === 0 && !getSelection().toString()) {

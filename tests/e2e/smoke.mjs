@@ -83,7 +83,7 @@ try {
   await page.keyboard.press("Enter");
   await page.waitForTimeout(300);
   const lines = await page.locator("[data-ntext]").allTextContents();
-  check(lines[0] === "smoke note" && lines[1] === " kept", `Enter splits the line (${JSON.stringify(lines)})`);
+  check(lines[0] === " kept" && lines[1] === "smoke note", `Enter opens the new line above (${JSON.stringify(lines)})`);
   check(await page.evaluate(() => document.activeElement?.textContent === " kept"), "focus moves to the new line");
   await page.selectOption("#noteRange", "all");
   await page.goto(`${base}/#/settings`);
