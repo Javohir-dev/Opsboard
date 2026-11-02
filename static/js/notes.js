@@ -61,7 +61,7 @@ function restoreNote(id) {
   const j = NOTES.trash.findIndex(i => i.id === id); if (j < 0) return null;
   const [it] = NOTES.trash.splice(j, 1);
   it.deleted_at = 0; noteEvent(it, "restored", "", it.text); NOTES.deleted.delete(it.id);
-  NOTES.items.push(it); return it;
+  NOTES.items.unshift(it); return it;
 }
 function notesPayload() {
   recordTextChanges();
@@ -159,6 +159,7 @@ function pageNotes() {
       <button class="linkbtn ml-auto" data-ntrash="1">Deleted${NOTES.trash.length ? ` (${NOTES.trash.length})` : ""}</button>
       <span class="muted fs-sm" title="Enter new line · Tab indent · ⌘Enter done · --- divider · paste a Notion checklist to import">Shortcuts ${icon("info", 14)}</span></div>
     <div class="panel notes" id="notes">
+      <button class="nadd ntop" data-nadd="1">+ New note</button>
       ${rows.map(([it]) => it.kind === "divider"
         ? `<div class="nrow ndiv" data-id="${it.id}"><hr><button class="nx" data-ndel="${it.id}" title="Remove divider" aria-label="Remove divider">${icon("x", 14)}</button></div>`
         : `<div class="nrow ${isDone(it) ? "done" : ""}" data-id="${it.id}" style="--ind:${it.indent}">
@@ -166,7 +167,6 @@ function pageNotes() {
             <div class="ntext" contenteditable="plaintext-only" spellcheck="false" data-ntext="${it.id}">${esc(it.text)}</div>
             <span class="nmeta">${noteKeys(it.text).map(noteKeyChip).join("")}<span class="ndate" title="Created ${esc(fmtDateTime(it.created))}${it.updated && it.updated - it.created > 60 ? " · changed " + esc(fmtDateTime(it.updated)) : ""}">${noteDate(it.created)}</span><button class="kebab nkebab" data-nmenu="${it.id}" title="More" aria-label="More actions">${icon("more", 16)}</button></span>
           </div>`).join("")}
-      <button class="nadd" data-nadd="1">+ New note</button>
     </div>
     ${hiddenDone ? `<div class="muted mt-2 fs-sm">${done} done hidden — turn on “show done” to see them.</div>` : ""}`;
 }

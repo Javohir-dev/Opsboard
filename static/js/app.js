@@ -305,7 +305,7 @@ document.addEventListener("click", async e => {
   const nr = e.target.closest("[data-nrestore]");
   if (nr) { const it = restoreNote(nr.dataset.nrestore); scheduleSave(200); showTrash(); rerenderNotes(it ? { id: it.id, at: "end" } : null); return; }
   if (e.target.closest("[data-nfilter-clear]")) { setNoteDateFilter({ range: "all", from: "", to: "" }); rerenderNotes(); return; }
-  if (e.target.closest("[data-nadd]")) { const n = newNote(); NOTES.items.push(n); scheduleSave(200); rerenderNotes({ id: n.id, at: 0 }); return; }
+  if (e.target.closest("[data-nadd]")) { const n = newNote(); NOTES.items.unshift(n); scheduleSave(200); rerenderNotes({ id: n.id, at: 0 }); return; }
   const mn = e.target.closest("[data-min]");
   if (mn) { setMin(mn.dataset.min, mn.dataset.on === "1"); closeMenu(); render(); return; }
   const ms = e.target.closest("[data-mark-set]");
