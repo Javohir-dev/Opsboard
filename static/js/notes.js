@@ -162,7 +162,7 @@ function pageNotes() {
       ${rows.map(([it]) => it.kind === "divider"
         ? `<div class="nrow ndiv" data-id="${it.id}"><hr><button class="nx" data-ndel="${it.id}" title="Remove divider" aria-label="Remove divider">${icon("x", 14)}</button></div>`
         : `<div class="nrow ${isDone(it) ? "done" : ""}" data-id="${it.id}" style="--ind:${it.indent}">
-            <button class="ntag ${it.tag ? "t-" + it.tag : "t-none"}" data-ntag="${it.id}" title="Choose a tag">${{ todo: "ToDo", warn: icon("warning", 14), done: "Done" }[it.tag] || "+"}<span class="caret">▾</span></button>
+            <button class="ntag ${it.tag ? "t-" + it.tag : "t-none"}" data-ntag="${it.id}" title="Choose a tag">${{ todo: "ToDo", warn: "Warning", done: "Done" }[it.tag] || "+"}<span class="caret">▾</span></button>
             <div class="ntext" contenteditable="plaintext-only" spellcheck="false" data-ntext="${it.id}">${esc(it.text)}</div>
             <span class="nmeta">${noteKeys(it.text).map(noteKeyChip).join("")}<span class="ndate" title="Created ${esc(fmtDateTime(it.created))}${it.updated && it.updated - it.created > 60 ? " · changed " + esc(fmtDateTime(it.updated)) : ""}">${noteDate(it.created)}</span><button class="kebab nkebab" data-nmenu="${it.id}" title="More" aria-label="More actions">${icon("more", 16)}</button></span>
           </div>`).join("")}
@@ -212,7 +212,7 @@ function openTagMenu(btn) {
   const cur = it.tag || "";
   const opt = (v, label, cls) => `<button class="mi" data-ntag-set="${v}" data-id="${it.id}"><span class="ntag ${cls} ntag-static">${label}</span>${cur === v ? '<span class="check-on">✓</span>' : ""}</button>`;
   const menu = $("menu");
-  menu.innerHTML = `<div class="mh">Tag</div>${opt("todo", "ToDo", "t-todo")}${opt("warn", `${icon("warning", 13)} Warning`, "t-warn")}${opt("done", "Done", "t-done")}<hr>${opt("", "None", "t-none")}`;
+  menu.innerHTML = `<div class="mh">Tag</div>${opt("todo", "ToDo", "t-todo")}${opt("warn", "Warning", "t-warn")}${opt("done", "Done", "t-done")}<hr>${opt("", "None", "t-none")}`;
   menu.dataset.key = "tag:" + it.id;
   menu.hidden = false;
   const r = btn.getBoundingClientRect(), h = menu.offsetHeight;
