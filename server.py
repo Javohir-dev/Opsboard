@@ -23,6 +23,7 @@ import worktrees
 from core import DATA, HERE, gitlab_url, lock, log, loop, run, setup_logging, state
 from notes import load_marks, load_notes, notes_lock, save_notes, set_mark
 from providers import github, review_host, tracker
+from providers import gitlab as gitlab_provider
 from providers.gitlab import gitlab_get
 from providers.jira import issue as jira_issue
 from providers.jira import jira_account, save_jira_account
@@ -36,6 +37,7 @@ RE_TOKENS = re.compile(r"ATATT[A-Za-z0-9_\-=]{20,}|glpat-[A-Za-z0-9_\-]{16,}|gh[
 
 MR_CACHE = {}
 JIRA_CACHE = {}
+UPLOAD_CACHE = {}
 MR_TTL = 60
 
 
@@ -453,6 +455,28 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, KeyError, error.URLError, OSError) as exc:
                 out = {"ok": False, "error": str(exc)[:300]}
             self.send(redact(json.dumps(out, ensure_ascii=False)), "application/json")
+        elif self.path.startswith("/api/gitlab-upload?"):
+            query = dict(p.split("=", 1) for p in self.path.split("?", 1)[1].split("&") if "=" in p)
+            try:
+                if DEMO or review_host() is not gitlab_provider:
+                    raise ValueError("only for GitLab")
+                key = (query.get("secret", ""), query.get("name", ""))
+                hit = UPLOAD_CACHE.get(key) or gitlab_provider.upload_file(*key)
+                UPLOAD_CACHE[key] = hit
+                while len(UPLOAD_CACHE) > 40:
+                    UPLOAD_CACHE.pop(next(iter(UPLOAD_CACHE)))
+                body, ctype, inline = hit
+                self.send_response(200)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "private, max-age=3600")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                if not inline:
+                    self.send_header("Content-Disposition", f"attachment; filename*=UTF-8''{query.get('name', 'file')}")
+                self.end_headers()
+                self.wfile.write(body)
+            except (ValueError, error.URLError, OSError) as exc:
+                self.send_error(404, str(exc)[:100])
         elif self.path.startswith("/api/doctor"):
             self.send(redact(json.dumps(demo.DOCTOR if DEMO else detect.doctor())), "application/json")
         elif self.path.startswith("/api/state"):

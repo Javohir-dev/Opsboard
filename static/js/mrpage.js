@@ -130,7 +130,9 @@ if (window.DOMPurify) {
   DOMPurify.addHook("afterSanitizeAttributes", node => {
     for (const attr of ["href", "src"]) {
       const v = node.getAttribute?.(attr);
-      if (v && v.startsWith("/") && !v.startsWith("//") && mdBase) node.setAttribute(attr, mdBase + v);
+      const up = v && !isGitHub() && v.match(/^(?:https?:\/\/[^/]+)?(?:\/[^/]+)*?\/uploads\/([0-9a-f]{32})\/([^/?#]+)$/);
+      if (up && (v.startsWith("/uploads/") || (mdBase && v.startsWith(mdBase + "/uploads/")))) node.setAttribute(attr, `/api/gitlab-upload?secret=${up[1]}&name=${encodeURIComponent(decodeURIComponent(up[2]))}`);
+      else if (v && v.startsWith("/") && !v.startsWith("//") && mdBase) node.setAttribute(attr, mdBase + v);
     }
     if (node.tagName === "A") { node.setAttribute("target", "_blank"); node.setAttribute("rel", "noopener"); }
   });
@@ -141,7 +143,11 @@ function md(text, base = "") {
   if (!window.marked || !window.DOMPurify) return mdLite(text);
   mdBase = base;
   let html;
-  try { html = DOMPurify.sanitize(marked.parse(String(text || "")), { FORBID_TAGS: ["style", "form", "input", "button", "textarea", "select"], FORBID_ATTR: ["style"] }); } catch (e) { return mdLite(text); }
+  const src = String(text || "").replace(/!\[([^\]\n]*)\]\(([^)\s]+)\)\{([^}\n]*)\}/g, (all, alt, url, attrs) => {
+    const w = (attrs.match(/width\s*=\s*"?(\d+)/) || [])[1], h = (attrs.match(/height\s*=\s*"?(\d+)/) || [])[1];
+    return `<img src="${url}" alt="${alt.replace(/"/g, "&quot;")}"${w ? ` width="${w}"` : ""}${h ? ` height="${h}"` : ""}>`;
+  });
+  try { html = DOMPurify.sanitize(marked.parse(src), { FORBID_TAGS: ["style", "form", "input", "button", "textarea", "select"], FORBID_ATTR: ["style"] }); } catch (e) { return mdLite(text); }
   return html.replace(/<pre><code class="language-mermaid">([\s\S]*?)<\/code><\/pre>/g, (_, code) => {
     const src = new DOMParser().parseFromString(code, "text/html").documentElement.textContent;
     const key = (darkTheme() ? "d:" : "l:") + src;

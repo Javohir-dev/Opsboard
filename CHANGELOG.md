@@ -32,6 +32,7 @@ All notable changes. Versions follow [semantic versioning](https://semver.org/);
 - Agents cannot switch *Live Claude usage* on through `opsboard config` (`--source agent` is refused); the setup prompt tells Claude never to read Claude Code's sign-in.
 
 ### Fixed
+- Images uploaded to GitLab show in descriptions and threads: Opsboard fetches them with your token (the browser could not, the project is private), and GitLab's `{width=… height=…}` sizes them instead of showing as text.
 - Notifications carry their own title and text, so a tab opened before an update never shows *undefined*.
 - Agents started by a Claude Code *Workflow* show up under their session (running, completed or failed, with the workflow phase); they were missing because they live in `subagents/workflows/`.
 - A fix run stays *running* until its Claude process exits; a run with background jobs was marked done after its first turn, so only one of several runs showed as in progress.

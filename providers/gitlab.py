@@ -2,7 +2,7 @@ import collections
 import json
 import re
 import time
-from urllib import error, parse
+from urllib import error, parse, request
 
 import config as cfg
 import notify
@@ -400,3 +400,19 @@ def detail(iid):
         "commits": commits,
         "pipelines": pipelines,
     }
+
+
+UPLOAD_TYPES = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "gif": "image/gif", "webp": "image/webp", "bmp": "image/bmp"}
+
+
+def upload_file(secret, name):
+    """A file uploaded to the project (an image in a comment), fetched with the token."""
+    if not re.fullmatch(r"[0-9a-f]{32}", secret or "") or not name or "/" in name or ".." in name:
+        raise ValueError("not an upload")
+    req = request.Request(f"{gitlab_url()}/api/v4/projects/{_pid()}/uploads/{secret}/{parse.quote(parse.unquote(name))}", headers={"PRIVATE-TOKEN": cfg.secret("gitlab.token")})
+    with request.urlopen(req, timeout=30) as resp:
+        body = resp.read(15 * 1024 * 1024 + 1)
+    if len(body) > 15 * 1024 * 1024:
+        raise ValueError("file is too large")
+    ext = parse.unquote(name).rsplit(".", 1)[-1].lower()
+    return body, UPLOAD_TYPES.get(ext, "application/octet-stream"), ext in UPLOAD_TYPES

@@ -1113,3 +1113,4 @@ a.cnt:hover { filter: brightness(1.15); }
 .menu .mi .ntag { width: auto; padding: 2px 10px; }
 .menu .mi .ntag.t-none { opacity: 1; }
 .nadd.ntop { margin-bottom: 4px; }
+.md img { height: auto; max-width: 100%; }
