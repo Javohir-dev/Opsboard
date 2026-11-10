@@ -255,6 +255,9 @@ class TelegramTest(unittest.TestCase):
         self.assertIn("Batareya 14% qoldi", self.texts()[-1])
         self.assertIn("taxminan <b>25 daqiqa</b>ga yetadi", self.texts()[-1])
 
+    def test_emoji_number(self):
+        self.assertEqual(telegram.emoji_number(12), "1️⃣2️⃣")
+
     def test_merged_message(self):
         self.link()
         SENT.clear()
@@ -293,7 +296,7 @@ class TelegramTest(unittest.TestCase):
         with mock.patch.object(telegram, "THREAD_GROUP", 0.2):
             telegram.on_notify({"kind": "thread", "iid": 7, "author": "Lena", "body": "a", "mr_title": "Fix totals", "status": "thread"})
             telegram.on_notify({"kind": "thread", "iid": 7, "author": "Lena", "body": "b", "mr_title": "Fix totals", "status": "thread"})
-            self.assertTrue(self.wait_for("2 ta thread ochdi", method="sendMessage"))
+            self.assertTrue(self.wait_for("2️⃣ ta thread ochdi", method="sendMessage"))
         sent = [b for m, b in SENT if m == "sendMessage"][-1]
         self.assertEqual(len([b for m, b in SENT if m == "sendMessage"]), 1)
         self.assertIn("<b>!7</b> — <b>Lena</b>", sent["text"])

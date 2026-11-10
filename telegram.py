@@ -439,10 +439,17 @@ def on_notify(item):
         threading.Timer(THREAD_GROUP, _flush_threads, args=(iid,)).start()
 
 
+KEYCAP = {str(d): f"{d}\ufe0f\u20e3" for d in range(10)}
+
+
+def emoji_number(n):
+    return "".join(KEYCAP.get(c, c) for c in str(n))
+
+
 def _thread_text(iid, group):
     one, many = OPENED[_bot_lang()]
     who = ", ".join(group["authors"]) or "?"
-    line = (one if group["n"] == 1 else many).format(who=f"<b>{esc(who)}</b>", n=group["n"])
+    line = (one if group["n"] == 1 else many).format(who=f"<b>{esc(who)}</b>", n=emoji_number(group["n"]))
     m = _mr(iid) or {}
     title = group["title"] or m.get("title") or ""
     role = {"uz": " · sizga assign qilingan", "en": " · assigned to you", "ru": " · назначен вам"}[_bot_lang()] if m.get("role") == "assignee" else ""
