@@ -121,6 +121,7 @@ async function tick() {
   try {
     data = await (await fetch("/api/state" + (canAlert() ? "?alerts=1" : ""), { cache: "no-store" })).json();
     clockSkew = Date.now() / 1000 - data.now;
+    if (reloadOnNewBuild()) return;
     if (await loadLanguage()) { if (ui.translatedStatic) return location.reload(); translateTree(document.body); watchTranslations(); ui.translatedStatic = true; }
     if (!ui.booted) {
       ui.booted = true;
@@ -131,6 +132,16 @@ async function tick() {
     render();
   } catch (e) { $("hstats").innerHTML = '<div class="err fs-sm">dashboard server is not running</div>'; }
   setTimeout(tick, 2000);
+}
+
+function reloadOnNewBuild() {
+  ui.build ??= data.build;
+  if (!data.build || data.build === ui.build) return false;
+  if (NOTES.dirty || NOTES.saving) { flushNotes(); return false; }
+  const typing = el => el && /^(TEXTAREA|INPUT)$/.test(el.tagName) && el.value.trim();
+  if (typing(document.activeElement) || [...document.querySelectorAll("#view textarea")].some(typing)) return false;
+  location.reload();
+  return true;
 }
 
 function flushNotes() {

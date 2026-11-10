@@ -75,10 +75,16 @@ def redact(text):
 DEMO = os.environ.get("OPS_DEMO") == "1"
 
 
+def build_id():
+    files = [HERE / "index.html", *(HERE / "static").rglob("*")]
+    return str(int(max((f.stat().st_mtime for f in files if f.is_file()), default=0)))
+
+
 def snapshot():
     with lock:
         data = demo.build(time.time()) if DEMO else {k: v for k, v in state.items() if not k.startswith("_")}
         data["now"] = time.time()
+        data["build"] = build_id()
         data["marks"] = load_marks()
         data["config"] = cfg.public()
         data["profile"] = profile.active()
