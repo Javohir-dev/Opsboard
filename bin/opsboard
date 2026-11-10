@@ -1,5 +1,6 @@
 #!/bin/sh
 DIR="${OPS_DASH_HOME:-$(cd "$(dirname "$0")/.." && pwd)}"
+[ -z "$OPS_PYTHON" ] && [ -x "$DIR/local/py" ] && OPS_PYTHON="$DIR/local/py"
 if [ -n "$OPS_PYTHON" ]; then PY="$OPS_PYTHON"; elif [ -x /usr/bin/python3 ]; then PY=/usr/bin/python3; else PY="$(command -v python3)"; fi
 OPENER="$(command -v open || command -v xdg-open || true)"
 PIDF="$DIR/.pid"
