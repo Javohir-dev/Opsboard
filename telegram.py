@@ -26,6 +26,8 @@ _status = {"bot": "", "error": "", "running": False}
 _pair = {"code": "", "until": 0.0}
 _boot = time.time()
 esc = html.escape
+WIDGET_HANDLERS = []
+REPLY_HOOKS = []
 
 
 class TelegramError(Exception):
@@ -554,6 +556,58 @@ def edit(message_id, text, plain=False, chat=None):
         return None
 
 
+def send_widget(source, caption, chat_data=None, notify=True, height=None):
+    if not chat_id():
+        return None
+    try:
+        return call("sendWidget", chat_id=chat_id(), html=source, caption=caption[:1024], parse_mode="HTML", chat_data=chat_data, height=height, allow_queries=True, disable_notification=None if notify else True)
+    except TelegramError as exc:
+        log.warning("telegram widget failed: %s", exc)
+        return None
+
+
+def edit_widget(message_id, chat_data, caption=None):
+    try:
+        call("editMessageWidgetData", chat_id=chat_id(), message_id=message_id, chat_data=chat_data)
+    except TelegramError as exc:
+        if "not modified" not in str(exc):
+            log.warning("telegram widget edit failed: %s", exc)
+            return False
+    if caption:
+        try:
+            call("editMessageCaption", chat_id=chat_id(), message_id=message_id, caption=caption[:1024], parse_mode="HTML")
+        except TelegramError as exc:
+            if "not modified" not in str(exc):
+                log.warning("telegram caption edit failed: %s", exc)
+    return True
+
+
+def delete(message_id):
+    try:
+        call("deleteMessage", chat_id=chat_id(), message_id=message_id)
+        return True
+    except TelegramError:
+        return False
+
+
+def handle_widget_query(q):
+    if not chat_id() or (q.get("chat") or {}).get("id") != chat_id():
+        return
+    answer = None
+    for handler in WIDGET_HANDLERS:
+        try:
+            answer = handler(q)
+        except Exception:  # noqa: BLE001
+            log.exception("widget handler failed")
+            answer = "error"
+        if answer is not None:
+            break
+    try:
+        call("answerWidgetQuery", widget_query_id=q["id"], data=str(answer)[:1024] if answer is not None else None)
+    except TelegramError as exc:
+        log.warning("widget answer failed: %s", exc)
+
+
 def react(message_id, emoji="👀"):
     try:
         call("setMessageReaction", chat_id=chat_id(), message_id=message_id, reaction=[{"type": "emoji", "emoji": emoji}])
@@ -921,6 +975,8 @@ def handle_message(msg):
         return
     if chat["id"] != linked or not text.strip():
         return
+    if msg.get("reply_to_message") and any(hook(msg) for hook in REPLY_HOOKS):
+        return
     text_out, buttons = reply_for(text, msg.get("message_id"))
     if text_out:
         send(text_out, buttons)
@@ -972,7 +1028,7 @@ def bot_loop():
                 call("setMyCommands", commands=COMMANDS)
                 known = tok
                 _status.update(running=True, error="")
-            updates = call("getUpdates", http_timeout=40, timeout=25, offset=offset, allowed_updates=["message", "callback_query"])
+            updates = call("getUpdates", http_timeout=40, timeout=25, offset=offset, allowed_updates=["message", "callback_query", "widget_query"])
             _status.update(running=True, error="")
             for u in updates:
                 offset = u["update_id"] + 1
@@ -981,6 +1037,8 @@ def bot_loop():
                         handle_message(u["message"])
                     elif "callback_query" in u:
                         handle_callback(u["callback_query"])
+                    elif "widget_query" in u:
+                        handle_widget_query(u["widget_query"])
                 except Exception:  # noqa: BLE001
                     log.exception("telegram update failed")
         except TelegramError as exc:

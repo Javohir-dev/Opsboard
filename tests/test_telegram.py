@@ -112,6 +112,39 @@ class TelegramTest(unittest.TestCase):
     def texts(self):
         return [b.get("text", "") for m, b in SENT if m in ("sendMessage", "editMessageText")]
 
+    def test_widget_queries_go_to_handlers_from_the_linked_chat_only(self):
+        self.link()
+        seen = []
+        telegram.WIDGET_HANDLERS.append(lambda q: seen.append(q["data"]) or "ok")
+        try:
+            telegram.handle_widget_query({"id": "w1", "chat": {"id": 222}, "data": "c"})
+            telegram.handle_widget_query({"id": "w2", "chat": {"id": 111}, "data": "c"})
+        finally:
+            telegram.WIDGET_HANDLERS.clear()
+        self.assertEqual(seen, ["c"])
+        self.assertIn(("answerWidgetQuery", {"widget_query_id": "w2", "data": "ok"}), SENT)
+
+    def test_reply_hook_takes_replies_before_commands_and_chat(self):
+        self.link()
+        SENT.clear()
+        telegram.REPLY_HOOKS.append(lambda m: m["reply_to_message"]["message_id"] == 5)
+        try:
+            telegram.handle_message(dict(message("/mrs"), reply_to_message={"message_id": 5}))
+            self.assertEqual(SENT, [])
+            telegram.handle_message(dict(message("/mrs"), reply_to_message={"message_id": 6}))
+        finally:
+            telegram.REPLY_HOOKS.clear()
+        self.assertIn("!7", self.texts()[-1])
+
+    def test_widget_send_and_silent_edit(self):
+        self.link()
+        SENT.clear()
+        telegram.send_widget("<b>x</b>", "cap", chat_data="{}", notify=False)
+        telegram.edit_widget(9, '{"s":1}')
+        self.assertEqual([m for m, _ in SENT], ["sendWidget", "editMessageWidgetData"])
+        self.assertTrue(SENT[0][1]["disable_notification"])
+        self.assertEqual(SENT[1][1], {"chat_id": 111, "message_id": 9, "chat_data": '{"s":1}'})
+
     def test_pairing_needs_the_code(self):
         telegram.pair_code()
         telegram.handle_message(message("/start wrong"))
