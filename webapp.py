@@ -225,7 +225,7 @@ def watch():
             _stop()
 
 
-def start(base, page_token, port):
+def _serve(base, page_token, port):
     from http.server import ThreadingHTTPServer
 
     class Server(ThreadingHTTPServer):
@@ -234,5 +234,19 @@ def start(base, page_token, port):
 
     server = Server(("127.0.0.1", port), gateway_class(base, page_token))
     threading.Thread(target=server.serve_forever, daemon=True, name="webapp-gateway").start()
-    threading.Thread(target=loop, args=(port,), daemon=True, name="webapp-tunnel").start()
-    threading.Thread(target=watch, daemon=True, name="webapp-watch").start()
+
+
+def start(base, page_token, port):
+    def run():
+        while not enabled():
+            time.sleep(5)
+        try:
+            _serve(base, page_token, port)
+        except OSError as exc:
+            _status["error"] = f"port {port} is busy — set telegram.webapp_port ({exc.strerror})"
+            log.warning("webapp: gateway on %s failed: %s", port, exc)
+            return
+        threading.Thread(target=watch, daemon=True, name="webapp-watch").start()
+        loop(port)
+
+    threading.Thread(target=run, daemon=True, name="webapp").start()
