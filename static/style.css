@@ -36,6 +36,13 @@ h2 .count { color: var(--text); letter-spacing: 0; text-transform: none; }
 .tile .label { color: var(--muted); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .6px; }
 .tile .big { font-size: var(--fs-2xl); font-weight: 600; font-variant-numeric: tabular-nums; margin: 2px 0; }
 .tile .sub { color: var(--muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.tile .label:has(.pwr) { display: flex; align-items: center; }
+.pwr { margin-left: auto; display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: var(--r-full); }
+.pwr.charging { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); animation: pwr-glow 2.4s ease-in-out infinite; }
+.pwr.charging svg { filter: drop-shadow(0 0 3px color-mix(in srgb, var(--ok) 70%, transparent)); }
+.pwr.plugged { color: var(--muted); background: var(--panel2); }
+@keyframes pwr-glow { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 0%, transparent); } 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--ok) 18%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .pwr.charging { animation: none; } }
 .bar { height: 6px; border-radius: var(--r-xs); background: var(--panel2); overflow: hidden; margin: 6px 0 4px; display: flex; }
 .bar > span { display: block; height: 100%; }
 svg.spark { width: 100%; height: 34px; display: block; margin-top: 4px; }

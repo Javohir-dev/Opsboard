@@ -12,6 +12,12 @@ function spark(values, max, col) {
   return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><polygon points="0,${h} ${pts} ${w},${h}" fill="${col}" opacity=".13"/><polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>`;
 }
 const bar = parts => `<div class="bar">${parts.map(([p, c]) => `<span style="width:${p}%;background:${c}"></span>`).join("")}</div>`;
+function powerIcon(m) {
+  const st = (m.battery_state || "").toLowerCase();
+  if (m.battery == null || m.power !== "AC") return "";
+  if (st === "charging" || st === "finishing charge") return `<span class="pwr charging" title="Charging" aria-label="Charging"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M13 2 4.5 13.5h6L10 22l8.5-11.5h-6z"/></svg></span>`;
+  return `<span class="pwr plugged" title="On power" aria-label="On power"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4"/></svg></span>`;
+}
 const tile = (label, big, sub, extra = "") => `<div class="tile"><div class="label">${label}</div><div class="big">${big}</div>${extra}<div class="sub">${sub}</div></div>`;
 const table = (head, rows, empty = "Nothing here.") => `<div class="tbl"><table><thead><tr>${head.map(h => typeof h === "string" ? `<th>${h}</th>` : `<th class="${h[1]}">${h[0]}</th>`).join("")}</tr></thead><tbody>${rows.join("") || `<tr><td colspan="${head.length}" class="muted">${empty}</td></tr>`}</tbody></table></div>`;
 
@@ -72,7 +78,7 @@ function macTiles() {
     tile("Network", `↓ ${bytes(m.net_in)}/s`, `↑ ${bytes(m.net_out)}/s`, spark(h.net_in, 0, "var(--accent)")),
     tile(isMac ? "Docker VM" : "Docker", `${dockerCpu.toFixed(0)}% CPU`, `${bytes(dockerMem)} of ${bytes(d.mem)} · ${d.ncpu || "?"} vCPU · v${d.version || "?"}`, bar([[pct(dockerMem, d.mem), color(pct(dockerMem, d.mem))]])),
     tile("Docker disk", rows.Images ? units(rows.Images.Size) : "—", `${units(rows.Images?.Reclaimable?.replace(/\s*\(.*\)/, "") || "?")} reclaimable · volumes ${units(rows["Local Volumes"]?.Size || "?")}`),
-    tile("Power", m.battery != null ? `${m.battery}%` : m.power || "—", powerSub),
+    tile(`Power${powerIcon(m)}`, m.battery != null ? `${m.battery}%` : m.power || "—", powerSub),
   ].join("")}</div></section>`;
 }
 
