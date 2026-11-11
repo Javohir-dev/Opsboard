@@ -1,0 +1,72 @@
+<style>
+body{margin:0;padding:10px 10px 12px;color:var(--tg-theme-text-color);font-family:system-ui,sans-serif;font-size:14px;line-height:1.3}
+.hd{display:flex;align-items:center;gap:6px;margin:0 2px 8px}
+.hd b{font-size:15px}
+.hd .c{color:var(--tg-theme-hint-color)}
+.hd .g{flex:1}
+.hd button{flex:0 0 auto;min-width:0;padding:4px 10px;font-size:13px}
+.mr{padding:8px;border-radius:10px;background:var(--tg-theme-secondary-bg-color);margin-bottom:6px}
+.t{font-weight:600}
+.s{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:5px;font-size:12px;color:var(--tg-theme-hint-color)}
+.l{padding:1px 6px;border-radius:9px;font-size:11px;font-weight:600;white-space:nowrap}
+.as{background:#3b4a8a;color:#dfe5ff}
+.cf{background:#b3261e;color:#fff}
+.p{white-space:nowrap}
+.ok{color:#31b545}
+.bad{color:var(--tg-theme-destructive-text-color)}
+.ag{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px;color:var(--tg-theme-accent-text-color)}
+.dot{width:8px;height:8px;border-radius:4px;background:var(--tg-theme-accent-text-color);animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+.b{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+button{flex:1 1 auto;min-width:60px;border:0;border-radius:8px;padding:7px 8px;background:var(--tg-theme-bg-color);color:var(--tg-theme-text-color);font-family:inherit;font-size:13px}
+button.arm{background:var(--tg-theme-destructive-text-color);color:#fff}
+.n{font-size:12px;margin-top:6px;color:var(--tg-theme-hint-color)}
+.e{color:var(--tg-theme-hint-color);padding:6px 2px}
+</style>
+<div id="r"></div>
+<script>
+var W=window.TelegramWidget,open=0,arm="",note={},timer=0,status="";
+var PI={success:["✓","ok"],failed:["✕","bad"],running:["◔",""],pending:["◷",""],created:["◷",""],canceled:["⊘",""],skipped:["⊘",""],manual:["▶",""]};
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function dur(t){var s=Math.max(0,(Date.now()/1000|0)-t);return s<3600?Math.max(1,Math.round(s/60))+" min":Math.floor(s/3600)+" h "+Math.round(s%3600/60)+" min"}
+function D(){try{return JSON.parse(W.chatData)||{}}catch(x){return{}}}
+function tog(i){open=open==i?0:i;arm="";draw()}
+function go(u){if(u)W.openLink(u)}
+function ask(a,key){
+ if(arm!==a){arm=a;clearTimeout(timer);timer=setTimeout(function(){arm="";draw()},4000);draw();return}
+ arm="";note[key]="Sending…";draw();
+ W.request(a).then(function(x){note[key]=x.result&&x.result!="ok"?x.result:"Started ✓";draw()},function(err){note[key]="Failed: "+(err.code||err.message);draw()});
+}
+function upd(){status="Updating…";draw();W.request("u").then(function(x){status=x.result&&x.result!="ok"?x.result:"";draw()},function(err){status=err.code=="RATE_LIMITED"?"Too fast — wait a moment":"Failed: "+(err.code||err.message);draw()})}
+function row(m,d){
+ var iid=m[0],f=m[5],pi=PI[m[2]],h="",b=[],ref=d.h+iid;
+ h+='<div class="mr"><div onclick="tog('+iid+')"><div class="t">'+e(m[1])+'</div><div class="s"><span>'+e(ref)+'</span>';
+ if(f&4)h+='<span class="l as">Assigned</span>';
+ if(f&8)h+='<span class="l as">Draft</span>';
+ if(f&2)h+='<span class="l cf">merge conflict</span>';
+ (m[6]||[]).forEach(function(l){h+='<span class="l" style="background:#'+e(l[1])+';color:#'+e(l[2])+'">'+e(l[0])+'</span>'});
+ h+='</div><div class="s">';
+ if(pi)h+='<span class="p '+pi[1]+'">'+pi[0]+' '+e(m[2])+'</span>';
+ if(f&1)h+='<span class="p ok">✓ Approved</span>';
+ if(m[4])h+=m[3]?'<span class="p bad">💬 '+(m[4]-m[3])+' of '+m[4]+'</span>':'<span class="p ok">💬 Resolved</span>';
+ if(m[7])h+='<span class="p">'+e(m[7])+'</span>';
+ h+='</div>';
+ if(m[8])h+='<div class="ag"><span class="dot"></span>'+e(m[8])+' is working'+(m[9]?' · '+dur(m[9]):'')+'</div>';
+ h+='</div>';
+ if(open==iid){
+  if(d.b)b.push('<button onclick="go(\''+e(d.b+iid)+'\')">Open</button>');
+  if(!m[10])["p","ps"].forEach(function(k){var a="f:"+iid+":"+k;b.push('<button class="'+(arm==a?"arm":"")+'" onclick="ask(\''+a+'\','+iid+')">'+(arm==a?"Tap again":k=="p"?"⚡ mr-fix ultra":"🚀 ultra-skip")+'</button>')});
+  h+='<div class="b">'+b.join("")+'</div>';
+ }
+ if(note[iid])h+='<div class="n">'+e(note[iid])+'</div>';
+ return h+'</div>';
+}
+function draw(){
+ var d=D(),l=d.l||[],h='<div class="hd"><b>Open requests</b><span class="c">'+(d.n||0)+'</span><span class="g"></span><button onclick="upd()">↻</button></div>';
+ h+=l.length?l.map(function(m){return row(m,d)}).join(""):'<div class="e">No open requests</div>';
+ if(d.n>l.length)h+='<div class="n">+'+(d.n-l.length)+' more in Opsboard</div>';
+ h+='<div class="n">'+(status||("Updated "+(d.t?new Date(d.t*1000).toTimeString().slice(0,5):"")+" · tap a request for actions"))+'</div>';
+ document.getElementById("r").innerHTML=h;
+}
+if(W){W.onEvent("chatDataChanged",function(){note={};draw()});draw();setInterval(draw,30000);W.ready()}
+</script>

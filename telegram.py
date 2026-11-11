@@ -28,6 +28,11 @@ _boot = time.time()
 esc = html.escape
 WIDGET_HANDLERS = []
 REPLY_HOOKS = []
+MR_AGENTS = []
+MRS_WIDGET = Path(__file__).resolve().parent / "widgets" / "mrs.html"
+MRS_FILE = DATA / "telegram-mrs.json"
+MRS_LIVE = 24 * 3600
+_mrs_lock = threading.Lock()
 
 
 class TelegramError(Exception):
@@ -127,6 +132,125 @@ def _url_button(text, url):
 def _dur(s):
     s = max(0, int(s))
     return f"{s}s" if s < 60 else f"{s // 60}m" if s < 3600 else f"{s / 3600:.1f}h"
+
+
+def mr_agent(m):
+    import runs
+
+    run = next((r for r in runs.load_runs() if r.get("iid") == m["iid"] and r["status"] == "running"), None)
+    if run:
+        return {"who": cfg.get("claude.fix_skill") or "fix", "since": run.get("started") or 0, "fix": True}
+    for hook in MR_AGENTS:
+        try:
+            hit = hook(m)
+        except Exception:  # noqa: BLE001
+            log.exception("mr agent hook failed")
+            hit = None
+        if hit:
+            return hit
+    return None
+
+
+def _hex(c):
+    c = str(c or "").lstrip("#")
+    return c.lower() if re.fullmatch(r"[0-9a-fA-F]{6}", c) else ""
+
+
+def mrs_data(limit=6):
+    mrs = _mrs()
+    with lock:
+        colors = dict((state.get("review") or {}).get("labels") or {})
+        jira = {i["key"]: i.get("status", "") for i in (state.get("jira") or {}).get("issues") or []}
+        aliases = dict(state.get("key_aliases") or {})
+    rows = []
+    for m in mrs:
+        flags = (1 if m.get("approved") else 0) | (2 if m.get("conflicts") else 0) | (4 if m.get("role") == "assignee" else 0) | (8 if m.get("draft") else 0)
+        labels = [[n, _hex((colors.get(n) or {}).get("color")) or "6b7280", _hex((colors.get(n) or {}).get("text")) or "ffffff"] for n in m.get("labels") or []]
+        key = (m.get("keys") or [""])[0]
+        status = jira.get(aliases.get(key, key), "")
+        agent = mr_agent(m) or {}
+        rows.append([m["iid"], m["title"], m.get("pipeline") or "", m.get("threads") or 0, m.get("threads_total") or 0, flags, labels, f"{key} · {status}" if key and status else key, agent.get("who", ""), int(agent.get("since") or 0), 1 if agent.get("fix") else 0])
+    base = mrs[0]["url"].rsplit("/", 1)[0] + "/" if mrs and mrs[0].get("url", "").startswith("https://") else ""
+    head = {"h": _ref(0)[0], "b": base, "n": len(rows), "t": int(time.time())}
+    for keep in range(min(limit, len(rows)), -1, -1):
+        for width in (90, 60, 40):
+            out = json.dumps(dict(head, l=[[r[0], r[1] if len(r[1]) <= width else r[1][: width - 1].rstrip() + "…", *r[2:]] for r in rows[:keep]]), ensure_ascii=False, separators=(",", ":"))
+            if len(out.encode()) <= 1024:
+                return out
+    return json.dumps(dict(head, l=[]))
+
+
+def _mrs_state():
+    try:
+        return json.loads(MRS_FILE.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_mrs_state(st):
+    tmp = MRS_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(st))
+    os.replace(tmp, MRS_FILE)
+
+
+def send_mrs_widget():
+    data = mrs_data()
+    count = len(_mrs())
+    msg = send_widget(MRS_WIDGET.read_text(encoding="utf-8"), f"<b>Open requests</b> · {count}", data)
+    if not msg:
+        return None
+    with _mrs_lock:
+        old = _mrs_state()
+        if old.get("mid"):
+            delete(old["mid"])
+        _save_mrs_state({"mid": msg["message_id"], "data": data, "at": time.time()})
+    return msg
+
+
+def refresh_mrs_widget(force=False):
+    with _mrs_lock:
+        st = _mrs_state()
+        if not st.get("mid") or time.time() - st.get("at", 0) > MRS_LIVE:
+            return False
+        data = mrs_data()
+        same = json.loads(data).get("l") == json.loads(st.get("data") or "{}").get("l")
+        if same and not force:
+            return True
+        if edit_widget(st["mid"], data):
+            st["data"] = data
+            _save_mrs_state(st)
+            return True
+        return False
+
+
+def on_mrs_widget(q):
+    with _mrs_lock:
+        mid = _mrs_state().get("mid")
+    if not mid or q.get("message_id") != mid:
+        return None
+    data = q.get("data") or ""
+    if data == "u":
+        return "ok" if refresh_mrs_widget(force=True) else "Could not update"
+    kind, _, rest = data.partition(":")
+    iid, _, flags = rest.partition(":")
+    if kind != "f" or not iid.isdigit() or not any(m["iid"] == int(iid) for m in _mrs()):
+        return "Unknown action"
+    try:
+        _, busy = _launch_fix(int(iid), True, "s" in flags)
+    except (ValueError, OSError) as exc:
+        return str(exc)[:190]
+    refresh_mrs_widget()
+    return busy or "ok"
+
+
+def mrs_loop():
+    while True:
+        time.sleep(20)
+        try:
+            if chat_id():
+                refresh_mrs_widget()
+        except Exception:  # noqa: BLE001
+            log.exception("mrs widget refresh failed")
 
 
 def help_text():
@@ -471,17 +595,23 @@ def _flush_threads(iid):
                     _sent_texts.pop(next(iter(_sent_texts)))
 
 
+def _launch_fix(iid, push, skiptests=False):
+    import runs
+
+    if any(r.get("iid") == iid and r["status"] == "running" for r in runs.load_runs()):
+        return None, FIX_STATE[_bot_lang()]["busy"]
+    runs.launch_fix({"iid": iid, "threads": True, "conflict": True, "skiptests": skiptests, "push": push, "source": "telegram"})
+    return next((r for r in runs.load_runs() if r.get("iid") == iid and r["status"] == "running"), None), ""
+
+
 def _start_fix(cq, iid, push, skiptests=False):
     msg = cq.get("message") or {}
     words = FIX_STATE[_bot_lang()]
     skill = cfg.get("claude.fix_skill") or "fix"
     name = f"{skill} ultra-skip" if skiptests else f"{skill} ultra" if push else skill
-    import runs
-
-    if any(r.get("iid") == iid and r["status"] == "running" for r in runs.load_runs()):
-        return words["busy"]
-    runs.launch_fix({"iid": iid, "threads": True, "conflict": True, "skiptests": skiptests, "push": push, "source": "telegram"})
-    run = next((r for r in runs.load_runs() if r.get("iid") == iid and r["status"] == "running"), None)
+    run, busy = _launch_fix(iid, push, skiptests)
+    if busy:
+        return busy
     with _pending_lock:
         base = _sent_texts.get(msg.get("message_id")) or _thread_text_from(msg)
     status = words["started"].format(name=esc(name), at=time.strftime("%H:%M"))
@@ -594,7 +724,7 @@ def handle_widget_query(q):
     if not chat_id() or (q.get("chat") or {}).get("id") != chat_id():
         return
     answer = None
-    for handler in WIDGET_HANDLERS:
+    for handler in [on_mrs_widget, *WIDGET_HANDLERS]:
         try:
             answer = handler(q)
         except Exception:  # noqa: BLE001
@@ -934,7 +1064,7 @@ def reply_for(text, message_id=None):
     if cmd in ("/start", "/help"):
         return help_text(), None
     if cmd == "/mrs":
-        return cmd_mrs()
+        return (None, None) if _mrs() and send_mrs_widget() else cmd_mrs()
     if cmd == "/mr":
         return cmd_mr(num) if num else ("Usage: /mr 7376", None)
     if cmd == "/sessions":
@@ -1050,3 +1180,4 @@ def bot_loop():
 
 def start():
     threading.Thread(target=bot_loop, daemon=True, name="telegram").start()
+    threading.Thread(target=mrs_loop, daemon=True, name="telegram-mrs").start()

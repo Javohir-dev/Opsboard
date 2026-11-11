@@ -22,7 +22,7 @@ class FakeTelegram(BaseHTTPRequestHandler):
         method = self.path.rsplit("/", 1)[-1]
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
         SENT.append((method, body))
-        result = {"getMe": {"username": "test_bot"}, "sendMessage": {"message_id": len(SENT), "chat": {"id": body.get("chat_id")}}}.get(method, True)
+        result = {"getMe": {"username": "test_bot"}, "sendMessage": {"message_id": len(SENT), "chat": {"id": body.get("chat_id")}}, "sendWidget": {"message_id": len(SENT)}}.get(method, True)
         raw = json.dumps({"ok": True, "result": result}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -134,7 +134,38 @@ class TelegramTest(unittest.TestCase):
             telegram.handle_message(dict(message("/mrs"), reply_to_message={"message_id": 6}))
         finally:
             telegram.REPLY_HOOKS.clear()
-        self.assertIn("!7", self.texts()[-1])
+        self.assertIn("sendWidget", [m for m, _ in SENT])
+
+    def test_mrs_widget_lists_labels_threads_and_working_agents(self):
+        self.link()
+        with lock:
+            state["review"]["mrs"][0]["labels"] = ["pm:ok"]
+            state["review"]["mrs"][0]["keys"] = ["AD-5"]
+            state["review"]["labels"] = {"pm:ok": {"color": "#8FBC8F", "text": "#1F1E24"}}
+            state["jira"] = {"issues": [{"key": "AD-5", "status": "Review"}]}
+        telegram.MR_AGENTS.append(lambda m: {"who": "Dev Agent", "since": 100})
+        try:
+            data = json.loads(telegram.mrs_data())
+        finally:
+            telegram.MR_AGENTS.clear()
+        self.assertEqual(data["b"], "https://gl/x/-/merge_requests/")
+        self.assertEqual(data["l"][0], [7, "Fix totals", "success", 1, 3, 0, [["pm:ok", "8fbc8f", "1f1e24"]], "AD-5 · Review", "Dev Agent", 100, 0])
+
+    def test_mrs_widget_fits_and_takes_actions_only_on_its_own_message(self):
+        self.link()
+        with lock:
+            state["review"]["mrs"] = [dict(state["review"]["mrs"][0], iid=i, title="Очень длинный заголовок " * 8) for i in range(1, 12)]
+        self.assertLessEqual(len(telegram.mrs_data().encode()), 1024)
+        SENT.clear()
+        telegram.handle_message(message("/mrs"))
+        mid = next(b for m, b in SENT if m == "sendWidget") and telegram._mrs_state()["mid"]
+        with mock.patch.object(telegram, "_launch_fix", return_value=(None, "")) as launch:
+            telegram.handle_widget_query({"id": "a", "chat": {"id": 111}, "message_id": mid + 1, "data": "f:3:p"})
+            telegram.handle_widget_query({"id": "b", "chat": {"id": 111}, "message_id": mid, "data": "f:3:ps"})
+            telegram.handle_widget_query({"id": "c", "chat": {"id": 111}, "message_id": mid, "data": "f:999:p"})
+        launch.assert_called_once_with(3, True, True)
+        answers = {b["widget_query_id"]: b.get("data") for m, b in SENT if m == "answerWidgetQuery"}
+        self.assertEqual((answers["b"], answers["c"]), ("ok", "Unknown action"))
 
     def test_widget_send_and_silent_edit(self):
         self.link()
@@ -160,7 +191,7 @@ class TelegramTest(unittest.TestCase):
         telegram.handle_message(message("/mrs", kind="group"))
         self.assertEqual(SENT, [])
         telegram.handle_message(message("/mrs"))
-        self.assertIn("!7", self.texts()[-1])
+        self.assertIn("sendWidget", [m for m, _ in SENT])
 
     def test_sessions_show_working_ones_with_agents(self):
         self.link()
