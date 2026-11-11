@@ -158,7 +158,7 @@ class TelegramTest(unittest.TestCase):
         self.assertLessEqual(len(telegram.mrs_data().encode()), 1024)
         SENT.clear()
         telegram.handle_message(message("/mrs"))
-        mid = next(b for m, b in SENT if m == "sendWidget") and telegram._mrs_state()["mid"]
+        mid = next(b for m, b in SENT if m == "sendWidget") and telegram._live_state()["mrs"]["mid"]
         with mock.patch.object(telegram, "_launch_fix", return_value=(None, "")) as launch:
             telegram.handle_widget_query({"id": "a", "chat": {"id": 111}, "message_id": mid + 1, "data": "f:3:p"})
             telegram.handle_widget_query({"id": "b", "chat": {"id": 111}, "message_id": mid, "data": "f:3:ps"})
@@ -239,7 +239,11 @@ class TelegramTest(unittest.TestCase):
                 "live_error": "",
             }
         telegram.handle_message(message("/usage"))
-        text = self.texts()[-1]
+        widget = next(b for m, b in SENT if m == "sendWidget")
+        self.assertEqual(widget["caption"], "<b>Claude usage</b> · Session 42%")
+        data = json.loads(widget["chat_data"])
+        self.assertEqual((data["e"], data["s"], data["l"][0][:2]), ("dev@example.com", "live", ["Session (5hr)", 42]))
+        text = telegram.cmd_usage()[0]
         self.assertIn("Session (5hr)</b> · 42%", text)
         self.assertIn("▰▰▰▰▱▱▱▱▱▱", text)
         self.assertRegex(text, r"resets in (59m|1\.0h)")

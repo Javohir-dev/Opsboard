@@ -29,10 +29,12 @@ esc = html.escape
 WIDGET_HANDLERS = []
 REPLY_HOOKS = []
 MR_AGENTS = []
-MRS_WIDGET = Path(__file__).resolve().parent / "widgets" / "mrs.html"
-MRS_FILE = DATA / "telegram-mrs.json"
-MRS_LIVE = 24 * 3600
-_mrs_lock = threading.Lock()
+WIDGETS = Path(__file__).resolve().parent / "widgets"
+LIVE_FILE = DATA / "telegram-live.json"
+LIVE_TTL = 24 * 3600
+LIVE = {}
+EXTRA_COMMANDS = {}
+_live_lock = threading.Lock()
 
 
 class TelegramError(Exception):
@@ -180,57 +182,77 @@ def mrs_data(limit=6):
     return json.dumps(dict(head, l=[]))
 
 
-def _mrs_state():
+def register_live(name, source, data, caption, action=None):
+    LIVE[name] = {"html": Path(source), "data": data, "caption": caption, "action": action}
+
+
+def _live_state():
     try:
-        return json.loads(MRS_FILE.read_text())
+        return json.loads(LIVE_FILE.read_text())
     except (OSError, ValueError):
         return {}
 
 
-def _save_mrs_state(st):
-    tmp = MRS_FILE.with_suffix(".tmp")
+def _save_live_state(st):
+    tmp = LIVE_FILE.with_suffix(".tmp")
     tmp.write_text(json.dumps(st))
-    os.replace(tmp, MRS_FILE)
+    os.replace(tmp, LIVE_FILE)
 
 
-def send_mrs_widget():
-    data = mrs_data()
-    count = len(_mrs())
-    msg = send_widget(MRS_WIDGET.read_text(encoding="utf-8"), f"<b>Open requests</b> · {count}", data)
+def send_live(name):
+    w = LIVE[name]
+    data = w["data"]()
+    msg = send_widget(w["html"].read_text(encoding="utf-8"), w["caption"](), data)
     if not msg:
         return None
-    with _mrs_lock:
-        old = _mrs_state()
-        if old.get("mid"):
-            delete(old["mid"])
-        _save_mrs_state({"mid": msg["message_id"], "data": data, "at": time.time()})
+    with _live_lock:
+        st = _live_state()
+        if (st.get(name) or {}).get("mid"):
+            delete(st[name]["mid"])
+        st[name] = {"mid": msg["message_id"], "data": data, "at": time.time()}
+        _save_live_state(st)
     return msg
 
 
-def refresh_mrs_widget(force=False):
-    with _mrs_lock:
-        st = _mrs_state()
-        if not st.get("mid") or time.time() - st.get("at", 0) > MRS_LIVE:
+def _content(data):
+    try:
+        return {k: v for k, v in json.loads(data or "{}").items() if k != "t"}
+    except ValueError:
+        return None
+
+
+def refresh_live(name, force=False):
+    with _live_lock:
+        st = _live_state()
+        cur = st.get(name)
+        if name not in LIVE or not cur or time.time() - cur.get("at", 0) > LIVE_TTL:
             return False
-        data = mrs_data()
-        same = json.loads(data).get("l") == json.loads(st.get("data") or "{}").get("l")
-        if same and not force:
+        data = LIVE[name]["data"]()
+        if not force and _content(data) == _content(cur.get("data")):
             return True
-        if edit_widget(st["mid"], data):
-            st["data"] = data
-            _save_mrs_state(st)
+        if edit_widget(cur["mid"], data):
+            cur["data"] = data
+            _save_live_state(st)
             return True
         return False
 
 
-def on_mrs_widget(q):
-    with _mrs_lock:
-        mid = _mrs_state().get("mid")
-    if not mid or q.get("message_id") != mid:
+def on_live_widget(q):
+    with _live_lock:
+        st = _live_state()
+    name = next((n for n, c in st.items() if n in LIVE and c.get("mid") == q.get("message_id")), None)
+    if not name:
         return None
     data = q.get("data") or ""
     if data == "u":
-        return "ok" if refresh_mrs_widget(force=True) else "Could not update"
+        return "ok" if refresh_live(name, force=True) else "Could not update"
+    action = LIVE[name]["action"]
+    out = action(data) if action else "Unknown action"
+    refresh_live(name)
+    return out
+
+
+def mrs_action(data):
     kind, _, rest = data.partition(":")
     iid, _, flags = rest.partition(":")
     if kind != "f" or not iid.isdigit() or not any(m["iid"] == int(iid) for m in _mrs()):
@@ -239,23 +261,52 @@ def on_mrs_widget(q):
         _, busy = _launch_fix(int(iid), True, "s" in flags)
     except (ValueError, OSError) as exc:
         return str(exc)[:190]
-    refresh_mrs_widget()
     return busy or "ok"
 
 
-def mrs_loop():
+def _claude_usage():
+    import system
+
+    with lock:
+        usage = dict(state.get("claude_usage") or {})
+    if not (cfg.get("claude.live_usage") and usage.get("limits")):
+        usage = system.claude_usage(live=False) or {}
+    return usage
+
+
+def usage_data():
+    u = _claude_usage()
+    acct = u.get("account") or {}
+    limits = [[lim["label"], 0 if lim.get("resets_at") and lim["resets_at"] < time.time() else lim["percent"], int(lim.get("resets_at") or 0), lim.get("severity") or ""] for lim in u.get("limits") or []]
+    d = {"e": acct.get("email") or "", "o": acct.get("org") or "", "l": limits, "s": u.get("source") or "", "f": int(u.get("fetched") or 0), "x": (u.get("live_error") or "")[:160], "t": int(time.time())}
+    return json.dumps(d, ensure_ascii=False, separators=(",", ":"))
+
+
+def usage_caption():
+    limits = _claude_usage().get("limits") or []
+    return "<b>Claude usage</b>" + "".join(f" · {esc(lim['label'].split(' (')[0])} {lim['percent']}%" for lim in limits[:2])
+
+
+def live_loop():
     while True:
         time.sleep(20)
-        try:
-            if chat_id():
-                refresh_mrs_widget()
-        except Exception:  # noqa: BLE001
-            log.exception("mrs widget refresh failed")
+        if not chat_id():
+            continue
+        for name in list(LIVE):
+            try:
+                refresh_live(name)
+            except Exception:  # noqa: BLE001
+                log.exception("live widget %s refresh failed", name)
+
+
+register_live("mrs", WIDGETS / "mrs.html", lambda: mrs_data(), lambda: f"<b>Open requests</b> · {len(_mrs())}", mrs_action)
+register_live("usage", WIDGETS / "usage.html", usage_data, usage_caption)
 
 
 def help_text():
+    extra = "".join(f"\n/{k} — {esc(v[0][:1].lower() + v[0][1:])}" for k, v in EXTRA_COMMANDS.items())
     chat = "\n\nAny other message goes to Claude on your Mac. /new starts a fresh conversation, /cancel stops the current answer." if cfg.get("telegram.claude_chat") else ""
-    return f"<b>Opsboard</b>\n/mrs — your open requests\n/mr 7376 — one request\n/sessions — Claude sessions that are working, with their agents\n/usage — Claude plan limits and when they reset\n/info — linked accounts, this Mac and the bot's settings{chat}"
+    return f"<b>Opsboard</b>\n/mrs — your open requests\n/mr 7376 — one request\n/sessions — Claude sessions that are working, with their agents\n/usage — Claude plan limits and when they reset\n/info — linked accounts, this Mac and the bot's settings{extra}{chat}"
 
 
 def cmd_mrs():
@@ -724,7 +775,7 @@ def handle_widget_query(q):
     if not chat_id() or (q.get("chat") or {}).get("id") != chat_id():
         return
     answer = None
-    for handler in [on_mrs_widget, *WIDGET_HANDLERS]:
+    for handler in [on_live_widget, *WIDGET_HANDLERS]:
         try:
             answer = handler(q)
         except Exception:  # noqa: BLE001
@@ -1064,7 +1115,7 @@ def reply_for(text, message_id=None):
     if cmd in ("/start", "/help"):
         return help_text(), None
     if cmd == "/mrs":
-        return (None, None) if _mrs() and send_mrs_widget() else cmd_mrs()
+        return (None, None) if _mrs() and send_live("mrs") else cmd_mrs()
     if cmd == "/mr":
         return cmd_mr(num) if num else ("Usage: /mr 7376", None)
     if cmd == "/sessions":
@@ -1072,7 +1123,9 @@ def reply_for(text, message_id=None):
     if cmd == "/info":
         return cmd_info()
     if cmd == "/usage":
-        return cmd_usage()
+        return (None, None) if _claude_usage().get("limits") and send_live("usage") else cmd_usage()
+    if cmd[1:] in EXTRA_COMMANDS:
+        return EXTRA_COMMANDS[cmd[1:]][1]()
     if cmd == "/new":
         CHAT.reset()
         return "🆕 New conversation with Claude.", None
@@ -1155,7 +1208,7 @@ def bot_loop():
         try:
             if tok != known:
                 _status["bot"] = call("getMe")["username"]
-                call("setMyCommands", commands=COMMANDS)
+                call("setMyCommands", commands=COMMANDS + [{"command": k, "description": v[0]} for k, v in EXTRA_COMMANDS.items()])
                 known = tok
                 _status.update(running=True, error="")
             updates = call("getUpdates", http_timeout=40, timeout=25, offset=offset, allowed_updates=["message", "callback_query", "widget_query"])
@@ -1180,4 +1233,4 @@ def bot_loop():
 
 def start():
     threading.Thread(target=bot_loop, daemon=True, name="telegram").start()
-    threading.Thread(target=mrs_loop, daemon=True, name="telegram-mrs").start()
+    threading.Thread(target=live_loop, daemon=True, name="telegram-live").start()

@@ -1,0 +1,45 @@
+<style>
+body{margin:0;padding:10px 12px 12px;color:var(--tg-theme-text-color);font-family:system-ui,sans-serif;font-size:14px;line-height:1.3}
+.hd{display:flex;align-items:center;gap:6px}
+.hd b{font-size:15px;flex:1}
+.hd button{border:0;border-radius:8px;padding:4px 10px;background:var(--tg-theme-secondary-bg-color);color:var(--tg-theme-text-color);font-size:13px}
+.ac{font-size:12px;color:var(--tg-theme-hint-color);margin:2px 0 6px}
+.lim{margin-top:10px}
+.row{display:flex;align-items:baseline;gap:6px}
+.row b{flex:1;font-weight:600}
+.pc{font-weight:700;font-size:15px}
+.bar{height:8px;border-radius:4px;background:var(--tg-theme-secondary-bg-color);margin:5px 0 3px;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:4px;transition:width .4s}
+.ok{background:#31b545}.warn{background:#f0a020}.bad{background:#e53935}
+.okc{color:#31b545}.warnc{color:#f0a020}.badc{color:#e53935}
+.rs{font-size:12px;color:var(--tg-theme-hint-color)}
+.n{font-size:12px;margin-top:10px;color:var(--tg-theme-hint-color)}
+.x{font-size:12px;margin-top:4px;color:var(--tg-theme-destructive-text-color)}
+</style>
+<div id="r"></div>
+<script>
+var W=window.TelegramWidget,msg="";
+var DN=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"],MN=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function e(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function D(){try{return JSON.parse(W.chatData)||{}}catch(x){return{}}}
+function p2(n){return(n<10?"0":"")+n}
+function left(s){var h=Math.floor(s/3600),m=Math.round(s%3600/60);return h>=24?Math.floor(h/24)+" d "+(h%24)+" h":h?h+" h "+m+" min":m+" min"}
+function at(t){var d=new Date(t*1000),hm=p2(d.getHours())+":"+p2(d.getMinutes());return t-Date.now()/1000<72000?hm:DN[d.getDay()]+" "+d.getDate()+" "+MN[d.getMonth()]+", "+hm}
+function ago(t){var s=Math.max(0,(Date.now()/1000|0)-t);return s<90?"just now":s<3600?Math.round(s/60)+" min ago":Math.floor(s/3600)+" h ago"}
+function upd(){msg="Updating…";draw();W.request("u").then(function(x){msg=x.result&&x.result!="ok"?x.result:"";draw()},function(err){msg=err.code=="RATE_LIMITED"?"Too fast — wait a moment":"Failed: "+(err.code||err.message);draw()})}
+function draw(){
+ var d=D(),now=Date.now()/1000,h='<div class="hd"><b>Claude usage</b><button onclick="upd()">↻</button></div>';
+ if(d.e)h+='<div class="ac">'+e(d.e)+(d.o?" · "+e(d.o):"")+'</div>';
+ (d.l||[]).forEach(function(l){
+  var past=l[2]&&l[2]<now,p=past?0:l[1],c=p>=95||l[3]=="critical"?"bad":p>=80||l[3]=="warning"?"warn":"ok";
+  h+='<div class="lim"><div class="row"><b>'+e(l[0])+'</b><span class="pc '+c+'c">'+(past?"—":p+"%")+'</span></div><div class="bar"><i class="'+c+'" style="width:'+Math.max(p?2:0,Math.min(100,p))+'%"></i></div>';
+  if(l[2])h+='<div class="rs">'+(past?"reset — refresh in Claude Code":"resets in "+left(l[2]-now)+" · "+at(l[2]))+'</div>';
+  h+='</div>';
+ });
+ if(!(d.l||[]).length)h+='<div class="n">No limits yet — run /usage once in Claude Code.</div>';
+ h+='<div class="n">'+(msg||(d.s=="live"?"⚡ live · updated "+ago(d.f):"🗂 from Claude Code's cache · "+ago(d.f)))+'</div>';
+ if(d.x)h+='<div class="x">⚠️ '+e(d.x)+'</div>';
+ document.getElementById("r").innerHTML=h;
+}
+if(W){W.onEvent("chatDataChanged",function(){msg="";draw()});draw();setInterval(draw,30000);W.ready()}
+</script>
