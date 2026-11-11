@@ -19,6 +19,7 @@ import machine
 import notify
 import stackprofile as profile
 import telegram
+import webapp
 import worktrees
 from core import DATA, HERE, gitlab_url, lock, log, loop, run, setup_logging, state
 from notes import load_marks, load_notes, notes_lock, save_notes, set_mark
@@ -94,7 +95,7 @@ def snapshot():
         data["profiles"] = profile.names()
         data["notifications"] = notify.load()
         data["wt_jobs"] = {} if DEMO else worktrees.jobs()
-        data["telegram"] = {"configured": False} if DEMO else telegram.public()
+        data["telegram"] = {"configured": False} if DEMO else dict(telegram.public(), webapp=webapp.public())
         return redact(json.dumps(data, default=str))
 
 
@@ -573,6 +574,7 @@ def main():
     telegram.start()
     ALLOWED_HOSTS.update({f"127.0.0.1:{args.port}", f"localhost:{args.port}"})
     page_token()
+    webapp.start(Handler, page_token, int(cfg.get("telegram.webapp_port") or args.port + 1))
     server = Server(("127.0.0.1", args.port), Handler)
     log.info("listening on http://127.0.0.1:%s/ (data in %s, secrets in %s)", args.port, DATA, cfg.secretstore.name())
     print(f"http://127.0.0.1:{args.port}/", flush=True)

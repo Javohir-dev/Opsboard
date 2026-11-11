@@ -49,6 +49,8 @@ DEFAULTS = {
     "telegram.claude_chat": False,
     "telegram.chat_permission": "plan",
     "telegram.language": "auto",
+    "telegram.webapp": False,
+    "telegram.webapp_port": 8096,
     "refresh.tasks_seconds": 300,
 }
 SECRETS = ("jira.token", "gitlab.token", "github.token", "telegram.token")

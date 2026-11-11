@@ -14,7 +14,7 @@ function mrRow(m) {
     if (isMin("!" + m.iid)) return `<div ${markAttrs("!" + m.iid, "mrrow minimized")} data-mr="${m.iid}"><a class="mrtitle" href="#/mr/${m.iid}">${esc(m.title)}</a><span class="muted mrmin-iid">${mrRef(m.iid)}</span><button class="kebab" data-min="!${m.iid}" data-on="0" title="Expand" aria-label="Expand !${m.iid}">${ICON_EXP}</button></div>`;
     return `<div ${markAttrs("!" + m.iid, "mrrow")} data-mr="${m.iid}">
       <div class="mrmain">
-        <a class="mrtitle" href="#/mr/${m.iid}">${esc(m.title)}</a>
+        <a class="mrtitle" href="#/mr/${m.iid}" title="${esc(m.title)}">${esc(m.title)}</a>
         <div class="mrsub"><span title="Created ${esc(fmtDateTime(m.created))}">${mrRef(m.iid)} · created ${ago(m.created)} by ${esc(m.author)}</span><span class="mrbr" title="${esc(m.source)} → ${esc(m.target)}"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 5-6 4-12 8"/></svg>${esc(m.target)}</span>
 <span class="mrlabels">${m.role === "assignee" ? `<span class="glbl glbl-assigned" title="Opened by ${esc(m.author)} — assigned to you">Assigned</span>` : ""}${m.conflicts ? '<span class="glbl glbl-conflict">merge conflict</span>' : ""}${m.labels.map(mrLabel).join("")}</span>
           ${issue ? `<a class="mrjira" href="${jiraLink(issue.key)}" target="_blank" title="${esc(issue.summary)}">${esc(issue.key)} · ${esc(issue.status)}</a>` : ""}</div>

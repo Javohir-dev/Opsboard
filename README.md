@@ -319,6 +319,7 @@ Tests never touch your own data: they run a separate server with `OPS_DATA_DIR` 
 ## Security
 
 - The server listens on `127.0.0.1` only. It answers only requests addressed to `127.0.0.1:<port>` or `localhost:<port>` (this blocks DNS-rebinding attacks), and every change must carry the page's own token (`.page-token`, `600`), so other web pages cannot act on it.
+- **Telegram Mini App** (Settings → Telegram, off by default) opens a Cloudflare quick tunnel to a separate local gateway port (`telegram.webapp_port`, 8096). The gateway answers only the tunnel's host name, serves nothing but a sign-in page until Telegram's signed `initData` proves you are the linked Telegram account (HMAC with the bot token, at most an hour old), then gives a 12-hour `HttpOnly` session. Settings and tokens cannot be changed through it. Turning it off closes the tunnel and ends every session.
 - Tokens are kept in the **macOS Keychain** or the Linux **Secret Service** (libsecret, via `secret-tool`); only when neither is available do they fall back to `config.json` (`600`). Tokens already in `config.json` move to the Keychain on the next start. They are shown in the browser only as `••••1A3F` and redacted from everything the dashboard displays — including text you pasted into Claude.
 - The dashboard only reads GitLab and Jira. Writing happens only in a background fix run that you start yourself, through `opsboard review`, and only on your own merge requests.
 

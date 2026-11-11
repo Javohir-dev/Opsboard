@@ -237,7 +237,7 @@ details[open] > summary::before { transform: rotate(45deg); }
 .mrpill { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--muted); white-space: nowrap; }
 .mrpill.okp { color: var(--ok); font-weight: 400; }
 .mrpill.thr-open { height: 24px; padding: 0 12px; border-radius: var(--r-md); font-weight: 600; color: var(--warn); background: color-mix(in srgb, var(--warn) 18%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 45%, transparent); }
-@media (max-width: 760px) { .mrlist .mrrow { flex-direction: column; gap: 8px; } .mrside { align-items: flex-start; } .mrwhen { padding-right: 0; } .slot.sa, .slot.st { width: auto; } .mrbar .search { flex: 1; min-width: 0; } }
+@media (max-width: 760px) { .mrrow .mrtitle { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .mrrow, .mrrow .mrmain { min-width: 0; max-width: 100%; } .mrlist .mrrow .mrmain { width: 100%; } .mrtabs { max-width: 100%; overflow-x: auto; scrollbar-width: none; } .mrlist .mrrow { flex-direction: column; gap: 8px; } .mrside { align-items: flex-start; } .mrwhen { padding-right: 0; } .slot.sa, .slot.st { width: auto; } .mrbar .search { flex: 1; min-width: 0; } }
 .pipe { display: inline-grid; place-items: center; width: 18px; height: 18px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid; font-size: var(--fs-xs); font-weight: 700; }
 .p-ok { color: var(--ok); } .p-bad { color: var(--bad); } .p-run { color: var(--accent); } .p-wait, .p-skip { color: var(--muted); }
 .avatar { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--chip); font-size: var(--fs-xs); font-weight: 600; color: var(--text); }
