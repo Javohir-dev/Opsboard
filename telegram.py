@@ -158,6 +158,12 @@ def _hex(c):
     return c.lower() if re.fullmatch(r"[0-9a-fA-F]{6}", c) else ""
 
 
+def _recent_done(n=3):
+    with lock:
+        mrs = [m for m in (state.get("review") or {}).get("mrs", []) if m.get("state") in ("merged", "closed")]
+    return sorted(mrs, key=lambda m: -(m.get("merged") or m.get("closed") or m.get("updated") or 0))[:n]
+
+
 def mrs_data(limit=6):
     mrs = _mrs()
     with lock:
@@ -174,6 +180,11 @@ def mrs_data(limit=6):
         rows.append([m["iid"], m["title"], m.get("pipeline") or "", m.get("threads") or 0, m.get("threads_total") or 0, flags, labels, f"{key} · {status}" if key and status else key, agent.get("who", ""), int(agent.get("since") or 0), 1 if agent.get("fix") else 0])
     base = mrs[0]["url"].rsplit("/", 1)[0] + "/" if mrs and mrs[0].get("url", "").startswith("https://") else ""
     head = {"h": _ref(0)[0], "b": base, "n": len(rows), "t": int(time.time())}
+    if not rows:
+        done = _recent_done()
+        if done and done[0].get("url", "").startswith("https://"):
+            head["b"] = done[0]["url"].rsplit("/", 1)[0] + "/"
+        head["r"] = [[m["iid"], m["title"] if len(m["title"]) <= 60 else m["title"][:59].rstrip() + "…", 1 if m["state"] == "merged" else 0, int(m.get("merged") or m.get("closed") or m.get("updated") or 0)] for m in done]
     for keep in range(min(limit, len(rows)), -1, -1):
         for width in (90, 60, 40):
             out = json.dumps(dict(head, l=[[r[0], r[1] if len(r[1]) <= width else r[1][: width - 1].rstrip() + "…", *r[2:]] for r in rows[:keep]]), ensure_ascii=False, separators=(",", ":"))
@@ -299,7 +310,7 @@ def live_loop():
                 log.exception("live widget %s refresh failed", name)
 
 
-register_live("mrs", WIDGETS / "mrs.html", lambda: mrs_data(), lambda: f"<b>Open requests</b> · {len(_mrs())}", mrs_action)
+register_live("mrs", WIDGETS / "mrs.html", lambda: mrs_data(), lambda: f"<b>Open requests</b> · {len(_mrs())}" if _mrs() else "✅ <b>No open requests</b> — all merged or closed", mrs_action)
 register_live("usage", WIDGETS / "usage.html", usage_data, usage_caption)
 
 
@@ -312,7 +323,11 @@ def help_text():
 def cmd_mrs():
     mrs = _mrs()
     if not mrs:
-        return "No open requests.", None
+        done = _recent_done()
+        lines = ["✅ <b>No open requests</b>", "Everything is merged or closed."]
+        if done:
+            lines += ["", "<b>Recently finished</b>"] + [f"{'🟣' if m['state'] == 'merged' else '⚪'} <b>{_ref(m['iid'])}</b> {esc(m['title'][:70])} · {m['state']} {_dur(time.time() - (m.get('merged') or m.get('closed') or m.get('updated') or time.time()))} ago" for m in done]
+        return "\n".join(lines), None
     lines, buttons = ["<b>Open requests</b>"], []
     for m in mrs[:20]:
         th = f" · 💬 {m['threads'] or 0} open of {m['threads_total']}" if m.get("threads_total") else ""
@@ -1115,7 +1130,7 @@ def reply_for(text, message_id=None):
     if cmd in ("/start", "/help"):
         return help_text(), None
     if cmd == "/mrs":
-        return (None, None) if _mrs() and send_live("mrs") else cmd_mrs()
+        return (None, None) if send_live("mrs") else cmd_mrs()
     if cmd == "/mr":
         return cmd_mr(num) if num else ("Usage: /mr 7376", None)
     if cmd == "/sessions":

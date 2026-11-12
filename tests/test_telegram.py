@@ -151,6 +151,18 @@ class TelegramTest(unittest.TestCase):
         self.assertEqual(data["b"], "https://gl/x/-/merge_requests/")
         self.assertEqual(data["l"][0], [7, "Fix totals", "success", 1, 3, 0, [["pm:ok", "8fbc8f", "1f1e24"]], "AD-5 · Review", "Dev Agent", 100, 0])
 
+    def test_mrs_with_nothing_open_still_sends_the_widget_with_recent_merges(self):
+        self.link()
+        with lock:
+            state["review"]["mrs"] = [dict(state["review"]["mrs"][0], iid=i, state="merged", merged=1000 + i) for i in range(1, 6)]
+        data = json.loads(telegram.mrs_data())
+        self.assertEqual((data["n"], data["l"], [r[0] for r in data["r"]]), (0, [], [5, 4, 3]))
+        SENT.clear()
+        telegram.handle_message(message("/mrs"))
+        sent = next(b for m, b in SENT if m == "sendWidget")
+        self.assertIn("No open requests", sent["caption"])
+        self.assertIn("!5", telegram.cmd_mrs()[0])
+
     def test_mrs_widget_fits_and_takes_actions_only_on_its_own_message(self):
         self.link()
         with lock:

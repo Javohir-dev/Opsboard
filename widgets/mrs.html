@@ -21,7 +21,16 @@ body{margin:0;padding:10px 10px 12px;color:var(--tg-theme-text-color);font-famil
 button{flex:1 1 auto;min-width:60px;border:0;border-radius:8px;padding:7px 8px;background:var(--tg-theme-bg-color);color:var(--tg-theme-text-color);font-family:inherit;font-size:13px}
 button.arm{background:var(--tg-theme-destructive-text-color);color:#fff}
 .n{font-size:12px;margin-top:6px;color:var(--tg-theme-hint-color)}
-.e{color:var(--tg-theme-hint-color);padding:6px 2px}
+.e{text-align:center;padding:14px 8px 10px;border-radius:12px;background:var(--tg-theme-secondary-bg-color);margin-bottom:8px}
+.e .ic{display:inline-grid;place-items:center;width:40px;height:40px;border-radius:20px;background:#31b545;color:#fff;font-size:22px;font-weight:700}
+.e b{display:block;margin-top:8px;font-size:15px}
+.e span{display:block;margin-top:2px;font-size:12px;color:var(--tg-theme-hint-color)}
+.rh{font-size:12px;font-weight:600;color:var(--tg-theme-hint-color);margin:4px 2px 4px;text-transform:uppercase;letter-spacing:.04em}
+.rd{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:10px;background:var(--tg-theme-secondary-bg-color);margin-bottom:5px;font-size:13px}
+.rd .k{font-weight:700;color:var(--tg-theme-accent-text-color);white-space:nowrap}
+.rd .x{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rd .w{font-size:11px;color:var(--tg-theme-hint-color);white-space:nowrap}
+.mg{color:#8e5bd8}.cl{color:var(--tg-theme-hint-color)}
 </style>
 <div id="r"></div>
 <script>
@@ -38,6 +47,12 @@ function ask(a,key){
  W.request(a).then(function(x){note[key]=x.result&&x.result!="ok"?x.result:"Started ✓";draw()},function(err){note[key]="Failed: "+(err.code||err.message);draw()});
 }
 function upd(){status="Updating…";draw();W.request("u").then(function(x){status=x.result&&x.result!="ok"?x.result:"";draw()},function(err){status=err.code=="RATE_LIMITED"?"Too fast — wait a moment":"Failed: "+(err.code||err.message);draw()})}
+function ago(t){var s=Math.max(0,(Date.now()/1000|0)-t);return s<3600?Math.max(1,Math.round(s/60))+" min ago":s<86400?Math.floor(s/3600)+" h ago":Math.floor(s/86400)+" d ago"}
+function empty(d){
+ var h='<div class="e"><div class="ic">✓</div><b>No open requests</b><span>Everything is merged or closed</span></div>';
+ if((d.r||[]).length){h+='<div class="rh">Recently finished</div>';d.r.forEach(function(r){h+='<div class="rd" onclick="go(\''+e(d.b?d.b+r[0]:"")+'\')"><span class="k">'+e(d.h+r[0])+'</span><span class="x">'+e(r[1])+'</span><span class="w '+(r[2]?"mg":"cl")+'">'+(r[2]?"merged":"closed")+(r[3]?" · "+ago(r[3]):"")+'</span></div>'})}
+ return h;
+}
 function row(m,d){
  var iid=m[0],f=m[5],pi=PI[m[2]],h="",b=[],ref=d.h+iid;
  h+='<div class="mr"><div onclick="tog('+iid+')"><div class="t">'+e(m[1])+'</div><div class="s"><span>'+e(ref)+'</span>';
@@ -63,9 +78,9 @@ function row(m,d){
 }
 function draw(){
  var d=D(),l=d.l||[],h='<div class="hd"><b>Open requests</b><span class="c">'+(d.n||0)+'</span><span class="g"></span><button onclick="upd()">↻</button></div>';
- h+=l.length?l.map(function(m){return row(m,d)}).join(""):'<div class="e">No open requests</div>';
+ h+=l.length?l.map(function(m){return row(m,d)}).join(""):empty(d);
  if(d.n>l.length)h+='<div class="n">+'+(d.n-l.length)+' more in Opsboard</div>';
- h+='<div class="n">'+(status||("Updated "+(d.t?new Date(d.t*1000).toTimeString().slice(0,5):"")+" · tap a request for actions"))+'</div>';
+ h+='<div class="n">'+(status||("Updated "+(d.t?new Date(d.t*1000).toTimeString().slice(0,5):"")+(l.length?" · tap a request for actions":"")))+'</div>';
  document.getElementById("r").innerHTML=h;
 }
 if(W){W.onEvent("chatDataChanged",function(){note={};draw()});draw();setInterval(draw,30000);W.ready()}
