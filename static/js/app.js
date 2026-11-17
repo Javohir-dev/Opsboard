@@ -192,9 +192,9 @@ document.addEventListener("keydown", e => {
     const next = newNote(text.slice(at), it.indent);
     NOTES.items.splice(i, 0, next); scheduleSave(200); rerenderNotes({ id: next.id, at: 0 }); return;
   }
-  if (e.key === "Tab") { e.preventDefault(); it.indent = Math.max(0, Math.min(4, it.indent + (e.shiftKey ? -1 : 1))); scheduleSave(200); rerenderNotes({ id, at }); return; }
+  if (e.key === "Tab") { e.preventDefault(); if (shiftNote(i, e.shiftKey ? -1 : 1)) { scheduleSave(200); rerenderNotes({ id, at }); } return; }
   if (e.key === "Backspace" && at === 0 && !getSelection().toString()) {
-    if (it.indent > 0) { e.preventDefault(); it.indent--; scheduleSave(200); rerenderNotes({ id, at: 0 }); return; }
+    if (it.indent > 0) { e.preventDefault(); shiftNote(i, -1); scheduleSave(200); rerenderNotes({ id, at: 0 }); return; }
     const prev = vis[vi - 1]; if (!prev) return;
     e.preventDefault();
     const join = prev.text.length; prev.text += text; deleteNoteAt(i);
@@ -308,6 +308,10 @@ document.addEventListener("click", async e => {
   }
   const nd = e.target.closest("[data-ndel]");
   if (nd) { closeMenu(); const i = noteIndex(nd.dataset.ndel); if (i >= 0) deleteNoteAt(i); scheduleSave(200); rerenderNotes(); return; }
+  const nsb = e.target.closest("[data-nsub]");
+  if (nsb) { closeMenu(); addSubtask(nsb.dataset.nsub); return; }
+  const nco = e.target.closest("[data-ncoll]");
+  if (nco) { const it = NOTES.items[noteIndex(nco.dataset.ncoll)]; if (it) { it.collapsed = !it.collapsed; scheduleSave(200); rerenderNotes(); } return; }
   const nm = e.target.closest("[data-nmenu]");
   if (nm) { openNoteMenu(nm); return; }
   const nh = e.target.closest("[data-nhist]");

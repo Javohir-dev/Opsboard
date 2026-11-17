@@ -46,6 +46,8 @@ class NotesTest(unittest.TestCase):
         self.assertEqual(len(n["text"]), 5000)
         self.assertEqual(n["tag"], "")
         self.assertEqual(n["indent"], 4)
+        self.assertFalse(n["collapsed"])
+        self.assertTrue(notes.clean_note({"text": "a", "collapsed": 1})["collapsed"])
         self.assertEqual([h["type"] for h in n["history"]], ["text"])
 
     def test_bad_payload(self):

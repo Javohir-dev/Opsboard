@@ -44,13 +44,41 @@ async function loadNotes() {
   render();
 }
 function editingOverviewNote() { return route().page === "overview" && !!document.activeElement?.closest?.(".ovnotes [data-ntext]"); }
+function noteKids(i) {
+  const it = NOTES.items[i], out = [];
+  if (!it || it.kind !== "item") return out;
+  for (let j = i + 1; j < NOTES.items.length; j++) { const x = NOTES.items[j]; if (x.kind !== "item" || x.indent <= it.indent) break; out.push(x); }
+  return out;
+}
+function noteProgress(i) {
+  const kids = noteKids(i); if (!kids.length) return "";
+  const done = kids.filter(isDone).length, all = done === kids.length;
+  return `<span class="nprog ${all ? "all" : ""}" title="${done} of ${kids.length} subtask(s) done"><span class="nbar"><i style="width:${Math.round(done / kids.length * 100)}%"></i></span>${done}/${kids.length}</span>`;
+}
+function shiftNote(i, delta) {
+  const it = NOTES.items[i], prev = NOTES.items[i - 1];
+  const max = delta > 0 ? Math.min(4, prev && prev.kind === "item" ? prev.indent + 1 : 0) : 4;
+  const next = Math.max(0, Math.min(max, it.indent + delta)), d = next - it.indent;
+  if (!d) return false;
+  noteKids(i).forEach(k => { k.indent = Math.max(0, Math.min(4, k.indent + d)); });
+  it.indent = next; return true;
+}
+function addSubtask(id) {
+  const i = noteIndex(id), it = NOTES.items[i]; if (!it) return;
+  it.collapsed = false;
+  const n = newNote("", Math.min(4, it.indent + 1));
+  NOTES.items.splice(i + 1 + noteKids(i).length, 0, n);
+  scheduleSave(200); rerenderNotes({ id: n.id, at: 0 });
+}
 function setNoteTag(it, tag) {
   if ((it.tag || "") === tag) return;
+  if (tag === "done") noteKids(noteIndex(it.id)).forEach(k => { if (!isDone(k)) setNoteTag(k, "done"); });
   if (tag === "done") { it.prev_tag = it.tag; it.done_at = nowS(); } else it.done_at = 0;
   noteEvent(it, "tag", it.tag || "", tag);
   it.tag = tag; it.done = tag === "done";
 }
 function deleteNoteAt(i) {
+  noteKids(i).forEach(k => { k.indent = Math.max(0, k.indent - 1); });
   const [gone] = NOTES.items.splice(i, 1); if (!gone) return;
   NOTES.deleted.add(gone.id);
   if (gone.kind !== "item" || (!gone.text.trim() && (gone.history || []).length <= 1)) return;
@@ -131,8 +159,11 @@ function visibleNotes() {
   const q = (ui.noteQuery || "").toLowerCase(), showDone = getPref("notesShowDone");
   const f = noteDateFilter(), b = dateBounds(f), field = f.field === "updated" ? "updated" : "created";
   const out = [];
+  let fold = -1;
   NOTES.items.forEach((it, i) => {
-    if (it.kind === "divider") { if (!q && !b) out.push([it, i]); return; }
+    if (it.kind === "divider") { fold = -1; if (!q && !b) out.push([it, i]); return; }
+    if (fold >= 0 && it.indent > fold && !q) return;
+    fold = it.collapsed && !q ? it.indent : -1;
     if (!showDone && isDone(it)) return;
     if (q && !it.text.toLowerCase().includes(q)) return;
     if (b) { const v = it[field] || it.created; if (v < b[0] || v >= b[1]) return; }
@@ -157,15 +188,16 @@ function pageNotes() {
       })()}
       ${finishedToggle("notesShowDone").replace("show done &amp; cancelled", "show done").replace("show done & cancelled", "show done").replace('margin-left: auto', '')}
       <button class="linkbtn ml-auto" data-ntrash="1">Deleted${NOTES.trash.length ? ` (${NOTES.trash.length})` : ""}</button>
-      <span class="muted fs-sm" title="Enter new line · Tab indent · ⌘Enter done · --- divider · paste a Notion checklist to import">Shortcuts ${icon("info", 14)}</span></div>
+      <span class="muted fs-sm" title="Enter new line · Tab makes it a subtask · Shift+Tab back · ⌘Enter done · --- divider · paste a Notion checklist to import">Shortcuts ${icon("info", 14)}</span></div>
     <div class="panel notes" id="notes">
       <button class="nadd ntop" data-nadd="1">+ New note</button>
       ${rows.map(([it]) => it.kind === "divider"
         ? `<div class="nrow ndiv" data-id="${it.id}"><hr><button class="nx" data-ndel="${it.id}" title="Remove divider" aria-label="Remove divider">${icon("x", 14)}</button></div>`
         : `<div class="nrow ${isDone(it) ? "done" : ""}" data-id="${it.id}" style="--ind:${it.indent}">
+            ${noteKids(noteIndex(it.id)).length ? `<button class="ntog" data-ncoll="${it.id}" title="${it.collapsed ? "Show" : "Hide"} subtasks" aria-expanded="${!it.collapsed}">${it.collapsed ? "▸" : "▾"}</button>` : '<span class="ntog"></span>'}
             <button class="ntag ${it.tag ? "t-" + it.tag : "t-none"}" data-ntag="${it.id}" title="Choose a tag">${{ todo: "ToDo", warn: "Warning", done: "Done" }[it.tag] || "+"}<span class="caret">▾</span></button>
             <div class="ntext" contenteditable="plaintext-only" spellcheck="false" data-ntext="${it.id}">${esc(it.text)}</div>
-            <span class="nmeta">${noteKeys(it.text).map(noteKeyChip).join("")}<span class="ndate" title="Created ${esc(fmtDateTime(it.created))}${it.updated && it.updated - it.created > 60 ? " · changed " + esc(fmtDateTime(it.updated)) : ""}">${noteDate(it.created)}</span><button class="kebab nkebab" data-nmenu="${it.id}" title="More" aria-label="More actions">${icon("more", 16)}</button></span>
+            <span class="nmeta">${noteProgress(noteIndex(it.id))}<button class="nsubbtn" data-nsub="${it.id}" title="Add a subtask">+ subtask</button>${noteKeys(it.text).map(noteKeyChip).join("")}<span class="ndate" title="Created ${esc(fmtDateTime(it.created))}${it.updated && it.updated - it.created > 60 ? " · changed " + esc(fmtDateTime(it.updated)) : ""}">${noteDate(it.created)}</span><button class="kebab nkebab" data-nmenu="${it.id}" title="More" aria-label="More actions">${icon("more", 16)}</button></span>
           </div>`).join("")}
     </div>
     ${hiddenDone ? `<div class="muted mt-2 fs-sm">${done} done hidden — turn on “show done” to see them.</div>` : ""}`;
@@ -175,7 +207,7 @@ const TAG_LABEL = { "": "None", todo: "ToDo", warn: "Warning", done: "Done" };
 const tagChip = v => `<span class="ntag ntag-inline t-${v || "none"}">${TAG_LABEL[v] || v}</span>`;
 function openNoteMenu(btn) {
   const id = btn.dataset.nmenu, menu = $("menu");
-  menu.innerHTML = `<button class="mi" data-nhist="${id}">${icon("history", 15)}Show history</button><hr><button class="mi text-bad" data-ndel="${id}">${icon("trash", 15)}Delete</button>`;
+  menu.innerHTML = `<button class="mi" data-nsub="${id}">${icon("plus", 15)}Add subtask</button><button class="mi" data-nhist="${id}">${icon("history", 15)}Show history</button><hr><button class="mi text-bad" data-ndel="${id}">${icon("trash", 15)}Delete</button>`;
   menu.dataset.key = "nmenu:" + id; menu.hidden = false;
   const r = btn.getBoundingClientRect(), h = menu.offsetHeight;
   menu.style.left = Math.max(8, Math.min(innerWidth - menu.offsetWidth - 8, r.right - menu.offsetWidth)) + "px";

@@ -112,7 +112,7 @@ function notesTodoSection() {
   return `<section><h2>ToDo<span class="count">${todo || ""}</span><span class="h2-actions"><label class="minisw m-0" title="Show every note, not only the first ${OVERVIEW_TODO} ToDo"><input type="checkbox" data-pref="overviewNotesAll" ${all ? "checked" : ""}><span class="tog"></span>show all</label><a href="#/notes">Open ToDo →</a></span></h2>
     <div class="panel list ovnotes">${items.map(it => {
       const t = TAG[it.tag];
-      return `<div class="ovnote nrow ${isDone(it) ? "done" : ""}" style="padding-left:${14 + Math.min(it.indent || 0, 4) * 18}px"><button class="ntag ${t ? t[0] : "t-none"}" data-ntag="${it.id}" title="Choose a tag">${t ? t[1] : "+"}<span class="caret">▾</span></button><div class="ntext ovtext" contenteditable="plaintext-only" spellcheck="false" data-ntext="${it.id}">${esc(it.text)}</div>${noteKeys(it.text).map(noteKeyChip).join("")}<span class="muted ovdate">${noteDate(it.created)}</span></div>`;
+      return `<div class="ovnote nrow ${isDone(it) ? "done" : ""}" style="padding-left:${14 + Math.min(it.indent || 0, 4) * 18}px"><button class="ntag ${t ? t[0] : "t-none"}" data-ntag="${it.id}" title="Choose a tag">${t ? t[1] : "+"}<span class="caret">▾</span></button><div class="ntext ovtext" contenteditable="plaintext-only" spellcheck="false" data-ntext="${it.id}">${esc(it.text)}</div>${noteProgress(noteIndex(it.id))}${noteKeys(it.text).map(noteKeyChip).join("")}<span class="muted ovdate">${noteDate(it.created)}</span></div>`;
     }).join("") || `<div class="empty">${all ? "No notes yet." : "Nothing to do."}</div>`}${more > 0 ? `<a class="ovmore" href="#/notes">+${more} more in ToDo →</a>` : ""}</div></section>`;
 }
 function outcomeLine(o) {

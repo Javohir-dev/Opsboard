@@ -44,6 +44,7 @@ def clean_note(it):
         "done": bool(it.get("done")),
         "tag": it.get("tag") if it.get("tag") in ("todo", "warn", "done") else "",
         "indent": max(0, min(4, int(it.get("indent") or 0))),
+        "collapsed": bool(it.get("collapsed")),
         "created": float(it.get("created") or time.time()),
         "updated": float(it.get("updated") or it.get("created") or time.time()),
         "done_at": float(it.get("done_at") or 0),

@@ -298,6 +298,18 @@ kbd { font-family: var(--mono); font-size: var(--fs-xs); background: var(--panel
 .hkrow .then { color: var(--muted); font-size: var(--fs-sm); }
 .nkebab { width: 24px; height: 22px; font-size: var(--fs-lg); opacity: 0; }
 .nrow:hover .nkebab, .nkebab:focus { opacity: 1; }
+.ntog { flex: none; width: 18px; height: 22px; margin-top: 4px; padding: 0; border: 0; border-radius: var(--r-sm); background: none; color: var(--muted); font-size: 14px; line-height: 22px; text-align: center; cursor: pointer; }
+span.ntog { cursor: default; }
+.ntog:hover { color: var(--text); }
+.nprog { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); font-weight: 600; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.nprog .nbar { width: 36px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.nprog .nbar i { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
+.nprog.all { color: var(--ok); }
+.nprog.all .nbar i { background: var(--ok); }
+.nsubbtn { border: 0; background: none; color: var(--muted); font-size: var(--fs-xs); padding: 2px 6px; border-radius: var(--r-sm); cursor: pointer; opacity: 0; white-space: nowrap; }
+.nrow:hover .nsubbtn, .nsubbtn:focus { opacity: 1; }
+.nsubbtn:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+@media (hover: none) { .nsubbtn { opacity: .7; } }
 .datef { display: inline-flex; gap: 6px; align-items: center; }
 .datef select, .datef input[type=date] { font: inherit; font-size: var(--fs-sm); color: var(--text); background-color: var(--panel); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 6px 12px; }
 .datef input[type=date] { color-scheme: light dark; }
