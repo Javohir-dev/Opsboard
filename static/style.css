@@ -298,6 +298,15 @@ kbd { font-family: var(--mono); font-size: var(--fs-xs); background: var(--panel
 .hkrow .then { color: var(--muted); font-size: var(--fs-sm); }
 .nkebab { width: 24px; height: 22px; font-size: var(--fs-lg); opacity: 0; }
 .nrow:hover .nkebab, .nkebab:focus { opacity: 1; }
+.ngrip { flex: none; display: inline-grid; place-items: center; width: 16px; height: 22px; margin: 4px -4px 0 -12px; color: var(--muted); cursor: grab; opacity: 0; touch-action: none; border-radius: var(--r-sm); user-select: none; }
+.nrow:hover .ngrip { opacity: .55; }
+.ngrip:hover { opacity: 1 !important; background: var(--panel2); }
+@media (hover: none) { .ngrip { opacity: .45; } }
+.notes { position: relative; }
+.ndrop { display: none; position: absolute; right: 12px; height: 2px; background: var(--accent); border-radius: 1px; pointer-events: none; z-index: 5; }
+.ndrop::before { content: ""; position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--accent); background: var(--panel); box-sizing: border-box; }
+.nrow.ndragging { opacity: .35; }
+body.ndragbody, body.ndragbody * { cursor: grabbing !important; user-select: none !important; }
 .ntog { flex: none; width: 18px; height: 22px; margin-top: 4px; padding: 0; border: 0; border-radius: var(--r-sm); background: none; color: var(--muted); font-size: 14px; line-height: 22px; text-align: center; cursor: pointer; }
 span.ntog { cursor: default; }
 .ntog:hover { color: var(--text); }

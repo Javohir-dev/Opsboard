@@ -5,7 +5,7 @@ function setPref(k, v) { try { localStorage.setItem("ops." + k, v ? "1" : "0"); 
 function route() { const h = location.hash.replace(/^#\/?/, ""); const [page, arg] = h.split("/"); return { page: page || "overview", arg: decodeURIComponent(arg || "") }; }
 
 function render() {
-  if (!data) return;
+  if (!data || ui.noteDrag) return;
   const ctx = context(), r = route();
   const agentsRunning = ctx.sessions.reduce((a, s) => a + s.running.length, 0);
   const count = {

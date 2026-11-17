@@ -55,6 +55,58 @@ function noteProgress(i) {
   const done = kids.filter(isDone).length, all = done === kids.length;
   return `<span class="nprog ${all ? "all" : ""}" title="${done} of ${kids.length} subtask(s) done"><span class="nbar"><i style="width:${Math.round(done / kids.length * 100)}%"></i></span>${done}/${kids.length}</span>`;
 }
+const GRIP = '<svg viewBox="0 0 10 16" width="10" height="16" fill="currentColor"><circle cx="2.5" cy="3" r="1.4"/><circle cx="7.5" cy="3" r="1.4"/><circle cx="2.5" cy="8" r="1.4"/><circle cx="7.5" cy="8" r="1.4"/><circle cx="2.5" cy="13" r="1.4"/><circle cx="7.5" cy="13" r="1.4"/></svg>';
+const IND_PX = 28;
+function canDragNotes() { return !ui.noteQuery && !dateBounds(noteDateFilter()); }
+function dragTarget(d, x, y) {
+  const rows = [...document.querySelectorAll("#notes .nrow[data-id]")].filter(r => !d.ids.has(r.dataset.id));
+  let before = null;
+  for (const r of rows) { const b = r.getBoundingClientRect(); if (y < b.top + b.height / 2) { before = r; break; } }
+  const prevRow = before ? rows[rows.indexOf(before) - 1] : rows[rows.length - 1];
+  const prev = prevRow && NOTES.items[noteIndex(prevRow.dataset.id)];
+  const max = prev && prev.kind === "item" ? Math.min(4, prev.indent + 1) : 0;
+  const indent = Math.max(0, Math.min(max, d.indent + Math.round((x - d.x) / IND_PX)));
+  const ref = before || prevRow, rb = ref ? ref.getBoundingClientRect() : d.box.getBoundingClientRect();
+  return { before: before?.dataset.id || null, indent, top: before ? rb.top : rb.bottom };
+}
+function startNoteDrag(grip, e) {
+  const id = grip.dataset.ngrip, i = noteIndex(id), it = NOTES.items[i]; if (!it) return;
+  const box = $("notes"), ids = new Set([id, ...noteKids(i).map(k => k.id)]);
+  const line = document.createElement("div"); line.className = "ndrop"; box.appendChild(line);
+  ui.noteDrag = { id, ids, x: e.clientX, y: e.clientY, indent: it.indent, box, line, target: null, moved: false };
+  box.querySelectorAll(".nrow[data-id]").forEach(r => { if (ids.has(r.dataset.id)) r.classList.add("ndragging"); });
+  document.body.classList.add("ndragbody");
+  try { grip.setPointerCapture(e.pointerId); } catch (x) {}
+}
+function moveNoteDrag(e) {
+  const d = ui.noteDrag; if (!d) return;
+  if (!d.moved && Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y) < 4) return;
+  d.moved = true;
+  const t = d.target = dragTarget(d, e.clientX, e.clientY), b = d.box.getBoundingClientRect();
+  if (d.base == null) { const r = d.box.querySelector(".nrow[data-id] .ntag"), it = r && NOTES.items[noteIndex(r.closest(".nrow").dataset.id)]; d.base = r ? r.getBoundingClientRect().left - b.left - (it?.indent || 0) * IND_PX : 40; }
+  d.line.style.top = (t.top - b.top - 1) + "px";
+  d.line.style.left = (d.base + t.indent * IND_PX) + "px";
+  d.line.style.display = "block";
+}
+function endNoteDrag(cancel) {
+  const d = ui.noteDrag; if (!d) return;
+  d.line.remove(); document.body.classList.remove("ndragbody");
+  d.box.querySelectorAll(".ndragging").forEach(r => r.classList.remove("ndragging"));
+  ui.noteDrag = null;
+  const t = d.target;
+  if (cancel || !d.moved || !t) { render(); return; }
+  const i = noteIndex(d.id), moving = NOTES.items.splice(i, 1 + noteKids(i).length);
+  const delta = t.indent - moving[0].indent;
+  moving.forEach(m => { m.indent = Math.max(0, Math.min(4, m.indent + delta)); });
+  const at = t.before ? noteIndex(t.before) : NOTES.items.length;
+  NOTES.items.splice(at < 0 ? NOTES.items.length : at, 0, ...moving);
+  scheduleSave(200); rerenderNotes();
+}
+document.addEventListener("pointerdown", e => { const g = e.target.closest?.("[data-ngrip]"); if (g && e.button === 0) { e.preventDefault(); startNoteDrag(g, e); } });
+document.addEventListener("pointermove", moveNoteDrag);
+document.addEventListener("pointerup", () => endNoteDrag(false));
+document.addEventListener("pointercancel", () => endNoteDrag(true));
+document.addEventListener("keydown", e => { if (e.key === "Escape" && ui.noteDrag) endNoteDrag(true); });
 function shiftNote(i, delta) {
   const it = NOTES.items[i], prev = NOTES.items[i - 1];
   const max = delta > 0 ? Math.min(4, prev && prev.kind === "item" ? prev.indent + 1 : 0) : 4;
@@ -194,6 +246,7 @@ function pageNotes() {
       ${rows.map(([it]) => it.kind === "divider"
         ? `<div class="nrow ndiv" data-id="${it.id}"><hr><button class="nx" data-ndel="${it.id}" title="Remove divider" aria-label="Remove divider">${icon("x", 14)}</button></div>`
         : `<div class="nrow ${isDone(it) ? "done" : ""}" data-id="${it.id}" style="--ind:${it.indent}">
+            ${canDragNotes() ? `<span class="ngrip" data-ngrip="${it.id}" title="Drag to move · drag right to make it a subtask" aria-hidden="true">${GRIP}</span>` : ""}
             ${noteKids(noteIndex(it.id)).length ? `<button class="ntog" data-ncoll="${it.id}" title="${it.collapsed ? "Show" : "Hide"} subtasks" aria-expanded="${!it.collapsed}">${it.collapsed ? "▸" : "▾"}</button>` : '<span class="ntog"></span>'}
             <button class="ntag ${it.tag ? "t-" + it.tag : "t-none"}" data-ntag="${it.id}" title="Choose a tag">${{ todo: "ToDo", warn: "Warning", done: "Done" }[it.tag] || "+"}<span class="caret">▾</span></button>
             <div class="ntext" contenteditable="plaintext-only" spellcheck="false" data-ntext="${it.id}">${esc(it.text)}</div>
