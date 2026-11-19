@@ -21,10 +21,22 @@ MAIN = "main"
 _usage = {}
 _probe_lock = threading.Lock()
 _full = {"warned": False}
+_refreshing = {"on": False}
 
 
 def secret_key(aid):
     return f"claude.account.{aid}"
+
+
+def enabled(aid):
+    return aid not in (cfg.get("claude.disabled") or [])
+
+
+def set_enabled(aid, on):
+    if aid != MAIN and not any(a["id"] == aid for a in accounts()):
+        raise ValueError("unknown account")
+    off = [x for x in cfg.get("claude.disabled") or [] if x != aid] + ([] if on else [aid])
+    cfg.set("claude.disabled", off or None, "user", "Accounts page")
 
 
 def accounts():
@@ -156,7 +168,7 @@ def pick(current, now=None):
     for aid in pool:
         u = usage(aid)
         lv = level(u, now)
-        if aid != current and lv is not None and lv < below and now - (u.get("at") or 0) < FRESH:
+        if aid != current and enabled(aid) and lv is not None and lv < below and now - (u.get("at") or 0) < FRESH:
             cands.append((lv, aid))
     return min(cands)[1] if cands else None
 
@@ -200,14 +212,11 @@ def public():
     rows = []
     for aid in [MAIN] + [a["id"] for a in accounts()]:
         u = usage(aid)
-        rows.append({"id": aid, "label": label(aid), "active": aid == current, "windows": u.get("windows") or {}, "at": u.get("at") or 0, "error": u.get("error") or "", "level": level(u, now), "masked": cfg.masked(cfg.secret(secret_key(aid))) if aid != MAIN else ""})
-    return {"active": current, "accounts": rows, "busy": busy(), "settings": str(SETTINGS).replace(str(Path.home()), "~", 1)}
+        rows.append({"id": aid, "label": label(aid), "active": aid == current, "enabled": enabled(aid), "windows": u.get("windows") or {}, "at": u.get("at") or 0, "error": u.get("error") or "", "level": level(u, now), "masked": cfg.masked(cfg.secret(secret_key(aid))) if aid != MAIN else ""})
+    return {"active": current, "accounts": rows, "busy": busy(), "refreshing": _refreshing["on"], "settings": str(SETTINGS).replace(str(Path.home()), "~", 1)}
 
 
 def collect():
-    if not accounts():
-        put("claude_accounts", {})
-        return
     current = active_id()
     now = time.time()
     if _probe_lock.acquire(blocking=False):
@@ -246,15 +255,34 @@ def add(name, token):
 
 
 def remove(aid):
+    if not any(a["id"] == aid for a in accounts()):
+        raise ValueError("unknown account")
     if active_id() == aid:
-        raise ValueError("switch to another account first")
+        switch(MAIN)
+    set_enabled(aid, True)
     cfg.set("claude.accounts", [a for a in accounts() if a["id"] != aid] or None, "user", "Settings page")
     cfg.set_secret(secret_key(aid), "")
     _usage.pop(aid, None)
     put("claude_accounts", public())
 
 
-def refresh(aid):
-    if aid != MAIN:
-        _usage[aid] = probe(aid)
+def refresh_all():
+    """Every account at once, in the background; the page shows a spinner until it is done."""
+    if _refreshing["on"]:
+        return
+    _refreshing["on"] = True
     put("claude_accounts", public())
+
+    def run():
+        try:
+            import system
+
+            system.collect_claude_usage()
+            with _probe_lock:
+                for a in accounts():
+                    _usage[a["id"]] = probe(a["id"])
+        finally:
+            _refreshing["on"] = False
+            put("claude_accounts", public())
+
+    threading.Thread(target=run, daemon=True, name="claude-accounts-refresh").start()

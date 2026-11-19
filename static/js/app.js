@@ -17,19 +17,19 @@ function render() {
     worktrees: (data.worktrees || []).length,
   };
   const groups = [
-    ["", [["overview", "Overview"], ["sessions", "Sessions"], ["tasks", tasksPage()], ["mrs", mrsPage()], ["notes", "ToDo"]]],
+    ["", [["overview", "Overview"], ["sessions", "Sessions"], ["tasks", tasksPage()], ["mrs", mrsPage()], ["notes", "ToDo"], ["accounts", "Claude accounts"]]],
     ["Infrastructure", [["docker", "Docker"], ["postgres", "Postgres"], ["worktrees", "Worktrees"], ["processes", "Processes"]]],
     ["", [["settings", "Settings"]]],
   ];
   const missing = setupMissing();
   const locked = missing.length > 0;
-  if (locked && r.page !== "settings" && r.page !== "notes") { location.hash = "#/settings"; return; }
+  if (locked && !["settings", "notes", "accounts"].includes(r.page)) { location.hash = "#/settings"; return; }
   const active = r.page === "s" ? "sessions" : r.page === "mr" ? "mrs" : r.page;
   const navItem = ([k, label]) => {
     const combo = (hotkeys().find(h => h.page === k) || {}).combo;
     const n = count[k] ? `<span class="n">${count[k]}</span>` : "";
     const busy = k === "sessions" && agentsRunning ? `<span class="n busy" title="${esc(plural(agentsRunning, "agent"))} running">${icon("agent", 12)}${agentsRunning}</span>` : "";
-    if (locked && k !== "settings" && k !== "notes") return `<span class="navi lock" title="Finish the required settings first">${icon(k, 16)}<span class="lbl">${label}</span></span>`;
+    if (locked && !["settings", "notes", "accounts"].includes(k)) return `<span class="navi lock" title="Finish the required settings first">${icon(k, 16)}<span class="lbl">${label}</span></span>`;
     return `<a href="#/${k === "overview" ? "" : k}" class="navi ${active === k ? "on" : ""}" ${active === k ? 'aria-current="page"' : ""} title="${esc(label + (combo ? " · " + combo : ""))}">${icon(k, 16)}<span class="lbl">${label}</span>${busy}${n}</a>`;
   };
   patch($("nav"), groups.map(([title, items], gi) => `<div class="navgroup ${gi === groups.length - 1 ? "last" : ""}">${title ? `<div class="navtitle">${title}</div>` : ""}${items.map(navItem).join("")}</div>`).join(""));
@@ -48,13 +48,13 @@ function render() {
   const stale = !using && cu.fetched && now() - cu.fetched > (live ? 180 : 600) ? `<div class="reset" title="Claude Code refreshes these numbers when you open Account & Usage or run /usage">updated ${ago(cu.fetched)}</div>` : "";
   const liveNote = !using && cu.live_error ? `<div class="reset text-warn" title="${esc(cu.live_error)}">Live usage: ${esc(cu.live_error)}</div>` : "";
   const ca = data.claude_accounts || {};
-  const accRows = (ca.accounts || []).length > 1 ? `<div class="uaccs">${ca.accounts.map(a => `<a href="#/settings" class="uaccrow ${a.active ? "on" : ""}" title="${esc(a.error || (a.at ? "updated " + ago(a.at) : ""))}"><span class="uaccn" translate="no">${a.active ? "● " : ""}${esc(a.label)}</span><b style="color:${a.level == null ? "inherit" : a.level >= 95 ? "var(--bad)" : a.level >= 80 ? "var(--warn)" : "inherit"}">${a.level == null ? "—" : a.level + "%"}</b></a>`).join("")}</div>` : "";
+  const accRows = (ca.accounts || []).length > 1 ? `<div class="uaccs">${ca.accounts.map(a => `<a href="#/accounts" class="uaccrow ${a.active ? "on" : ""}" title="${esc(a.error || (a.at ? "updated " + ago(a.at) : ""))}"><span class="uaccn" translate="no">${a.active ? "● " : ""}${esc(a.label)}</span><b style="color:${a.level == null ? "inherit" : a.level >= 95 ? "var(--bad)" : a.level >= 80 ? "var(--warn)" : "inherit"}">${a.level == null ? "—" : a.level + "%"}</b></a>`).join("")}</div>` : "";
   const m = data.mac || {};
   const meter = (label, value, p) => `<div class="meter"><div class="mrow"><span>${label}</span><b>${value}</b></div><div class="mbar"><span style="width:${Math.min(100, p || 0)}%;background:${color(p || 0)}"></span></div></div>`;
   const machine = `${meter("CPU", `${(m.cpu ?? 0).toFixed(0)}%`, m.cpu)}${meter("RAM", `${bytes(m.mem_used)} / ${bytes(m.mem_total, 0)}`, pct(m.mem_used, m.mem_total))}${m.swap_total ? meter("Swap", bytes(m.swap_used), pct(m.swap_used, m.swap_total)) : ""}`;
   patch($("hstats"), `${showUsage() ? `${usage ? `<div class="utitle">Claude usage${live ? `<span class="ulive" title="Updated every minute from Anthropic">live</span>` : ""}</div>${using ? `<div class="uacct"><span class="uemail" translate="no">${esc(using.label)}</span><span class="uorg">setup token</span></div>` : cu.account?.email ? `<div class="uacct" title="${esc([cu.account.email, cu.account.org, cu.account.plan].filter(Boolean).join(" · "))}"><span class="uemail" translate="no">${esc(cu.account.email)}</span>${cu.account.org || cu.account.plan ? `<span class="uorg" translate="no">${esc([cu.account.org, cu.account.plan].filter(Boolean).join(" · "))}</span>` : ""}</div>` : ""}${usage}${stale}${liveNote}${accRows}` : cu.account?.email ? `<div class="utitle">Claude usage</div><div class="reset" title="Claude Code saves your plan limits when it shows them">Run /usage in Claude Code once to show your limits here</div>${liveNote}` : ""}` : machine}${errs.length ? `<div class="err fs-sm" title="${esc(errs.map(e => e.join(": ")).join("\n"))}">${errs.length} collector error(s)</div>` : ""}${data.version?.update ? `<a class="badge warn" href="#/settings" title="Run opsboard update">${esc(data.version.latest)} available</a>` : ""}`);
   $("ver").textContent = data.version?.current ? "v" + data.version.current : "";
-  const pages = { overview: pageOverview, sessions: pageSessions, s: c => pageSession(c, r.arg), docker: pageDocker, postgres: pagePostgres, tasks: c => (hasJira() ? pageJira(c) : pageTasks(c)), mrs: pageMrs, mr: c => pageMr(c, r.arg), worktrees: pageWorktrees, processes: pageProcesses, settings: pageSettings, notes: pageNotes };
+  const pages = { overview: pageOverview, sessions: pageSessions, s: c => pageSession(c, r.arg), docker: pageDocker, postgres: pagePostgres, tasks: c => (hasJira() ? pageJira(c) : pageTasks(c)), mrs: pageMrs, mr: c => pageMr(c, r.arg), worktrees: pageWorktrees, processes: pageProcesses, settings: pageSettings, notes: pageNotes, accounts: pageAccounts };
   const view = (pages[r.page] || pageOverview)(ctx);
   if (ui.forcePatch || view !== ui.lastView) { ui.lastView = view; patch($("view"), view); }
   ui.forcePatch = false;
@@ -130,7 +130,7 @@ async function tick() {
     if (!ui.booted) {
       ui.booted = true;
       if (data.config?.["ui.theme"]?.source === "user") applyTheme();
-      if (!conf("project.root") && !["settings", "notes"].includes(route().page)) location.hash = "#/settings";
+      if (!conf("project.root") && !["settings", "notes", "accounts"].includes(route().page)) location.hash = "#/settings";
       if (route().page === "settings") loadDoctor();
     }
     render();
@@ -280,24 +280,6 @@ document.addEventListener("click", async e => {
   if (rs) {
     const key = rs.dataset.reset || rs.dataset.confirm;
     saveSetting(key, rs.dataset.reset ? null : conf(key), "msg-f-" + key.replace(/\W/g, "-"));
-    return;
-  }
-  const acc = e.target.closest("[data-acc]");
-  if (acc) {
-    const action = acc.dataset.acc, msg = $("msg-acc");
-    if (action === "switch" && data.claude_accounts?.busy && !confirm(t("A Claude session is working right now. Switch anyway? Sessions read the new account from their settings."))) return;
-    if (action === "remove" && !confirm(t("Remove this account and its token?"))) return;
-    const body = action === "add" ? { action, label: $("acc-label").value.trim(), token: $("acc-token").value.trim() } : { action, id: acc.dataset.accId };
-    const say = (cls, text) => { ui.accMsg = { cls, text }; msg.className = "fmsg " + cls; msg.textContent = text; };
-    acc.disabled = true; say("muted", action === "add" || action === "refresh" ? t("Asking Claude…") : t("Saving…"));
-    let r;
-    try { r = await (await fetch("/api/claude-accounts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json(); }
-    catch (x) { r = { ok: false, error: String(x) }; }
-    acc.disabled = false;
-    if (!r.ok) { say("err", r.error); return; }
-    say("okmsg", { add: t("Added"), remove: t("Removed"), switch: t("New sessions use this account"), refresh: t("Updated") }[action]);
-    if (action === "add") { $("acc-label").value = ""; $("acc-token").value = ""; }
-    data.claude_accounts = r.claude_accounts; ui.forcePatch = true; rerenderSettings();
     return;
   }
   const st = e.target.closest("[data-save-token]");

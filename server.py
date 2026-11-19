@@ -371,7 +371,9 @@ class Handler(BaseHTTPRequestHandler):
                         raise ValueError("unknown account")
                     claudeaccounts.switch(aid)
                 elif action == "refresh":
-                    claudeaccounts.refresh(aid)
+                    claudeaccounts.refresh_all()
+                elif action == "enable":
+                    claudeaccounts.set_enabled(aid, bool(body.get("on")))
                 else:
                     raise ValueError("unknown action")
                 put("claude_accounts", claudeaccounts.public())

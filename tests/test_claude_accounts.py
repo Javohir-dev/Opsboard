@@ -45,7 +45,7 @@ class ClaudeAccountsTest(unittest.TestCase):
     def tearDown(self):
         for a in ca.accounts():
             cfg.set_secret(ca.secret_key(a["id"]), "")
-        for key in ("claude.bin", "claude.accounts", "claude.auto_switch"):
+        for key in ("claude.bin", "claude.accounts", "claude.auto_switch", "claude.disabled"):
             cfg.set(key, None, "user")
 
     def test_parse_probe_reads_both_windows_in_percent(self):
@@ -110,6 +110,23 @@ class ClaudeAccountsTest(unittest.TestCase):
         ca._full["warned"] = False
         self.assertIsNone(ca.auto_switch())
         self.assertEqual(notify.load(), [])
+
+    def test_disabled_account_is_never_a_target_and_deleting_the_one_in_use_goes_back_to_login(self):
+        work, spare = ca.add("Work", GOOD), ca.add("Spare", SPARE)
+        ca.switch(work)
+        ca.set_enabled(spare, False)
+        self.assertFalse(ca.enabled(spare))
+        self.assertIsNone(ca.auto_switch())
+        self.assertEqual(ca.active_id(), work)
+        ca.set_enabled(spare, True)
+        ca._full["warned"] = False
+        self.assertEqual(ca.auto_switch(), spare)
+        ca.remove(spare)
+        self.assertEqual(ca.active_id(), ca.MAIN)
+        self.assertNotIn(ca.ENV_KEY, json.loads(ca.SETTINGS.read_text())["env"])
+        self.assertEqual(cfg.secret(ca.secret_key(spare)), "")
+        with self.assertRaises(ValueError):
+            ca.set_enabled("nope", False)
 
     def test_unknown_token_in_settings_is_never_overwritten(self):
         ca.add("Spare", SPARE)
