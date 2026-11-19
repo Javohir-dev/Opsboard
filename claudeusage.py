@@ -9,7 +9,7 @@ from urllib import error, request
 API = os.environ.get("OPS_ANTHROPIC_URL", "https://api.anthropic.com").rstrip("/")
 KEYCHAIN_SERVICE = "Claude Code-credentials"
 CREDENTIALS_FILE = Path(os.environ.get("OPS_CLAUDE_CREDENTIALS", Path.home() / ".claude" / ".credentials.json"))
-MIN_INTERVAL, MAX_INTERVAL = 60, 900
+MIN_INTERVAL, MAX_INTERVAL, RATE_LIMITED = 600, 3600, 1800
 
 _token = {"value": None, "expires": 0.0}
 _status = {"next": 0.0, "interval": MIN_INTERVAL, "error": ""}
@@ -71,7 +71,7 @@ def fetch():
         if exc.code in (401, 403):
             _token.update(value=None, expires=0)
         if exc.code == 429:
-            _status["interval"] = min(MAX_INTERVAL, _status["interval"] * 2)
+            _status["interval"] = min(MAX_INTERVAL, max(RATE_LIMITED, _status["interval"] * 2))
         problem = f"usage request failed (HTTP {exc.code})"
         _status.update(next=time.time() + _status["interval"], error=problem)
         return None, problem

@@ -489,7 +489,7 @@ def cmd_usage():
         lines.append(f"{dot} <b>{esc(lim['label'])}</b> · {'—' if past else str(pct) + '%'}\n<code>{_bar(pct)}</code>" + (f"\n{_until(lim['resets_at'])}" if lim.get("resets_at") else "") + "\n")
     lines.append("")
     if usage.get("source") == "live":
-        lines.append("⚡ live — updated every minute")
+        lines.append("⚡ live — updated every 10 minutes")
     else:
         age = time.time() - (usage.get("fetched") or 0)
         lines.append(f"🗂 from Claude Code's cache, updated {_dur(age)} ago" + ("" if live_on else " · turn on Live Claude usage in Settings for fresh numbers"))
