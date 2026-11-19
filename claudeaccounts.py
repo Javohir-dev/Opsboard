@@ -112,9 +112,12 @@ def parse_probe(lines):
             uni = info.get("unifiedWindows") or {}
             windows = {
                 k: {"percent": round(float((uni.get(k) or {}).get("utilization") or 0) * 100), "resets_at": int((uni.get(k) or {}).get("resetsAt") or 0), "status": (uni.get(k) or {}).get("status") or ""}
-                for k in ("five_hour", "seven_day")
-                if k in uni
+                for k in uni
+                if k in ("five_hour", "seven_day") or (k.startswith("seven_day_") and "overage" not in k)
             }
+            for k, w in windows.items():
+                if k not in ("five_hour", "seven_day"):
+                    w["label"] = k[len("seven_day_") :].replace("_", " ").title()
             if not windows and info.get("rateLimitType") in ("five_hour", "seven_day"):
                 windows = {info["rateLimitType"]: {"percent": 100 if info.get("status") == "rejected" else 0, "resets_at": int(info.get("resetsAt") or 0), "status": info.get("status") or ""}}
         elif msg.get("type") == "result" and msg.get("is_error") and not windows:
@@ -157,8 +160,13 @@ def main_usage():
     windows = {}
     for lim in cu.get("limits") or []:
         k = {"session": "five_hour", "weekly_all": "seven_day"}.get(lim.get("kind"))
+        name = str(lim.get("label") or "")
+        if not k and lim.get("kind") == "weekly_scoped" and name.startswith("Weekly "):
+            k = "seven_day_" + name[len("Weekly ") :].lower().replace(" ", "_")
         if k:
             windows[k] = {"percent": int(lim.get("percent") or 0), "resets_at": int(lim.get("resets_at") or 0), "status": lim.get("severity") or ""}
+            if k.startswith("seven_day_"):
+                windows[k]["label"] = name[len("Weekly ") :]
     if not windows:
         return {"error": cu.get("live_error") or ("" if cfg.get("claude.live_usage") else "Live Claude usage is off"), "at": 0}
     return {"windows": windows, "at": cu.get("fetched") or 0}
@@ -214,7 +222,7 @@ def dedupe():
 
 def level(u, now=None):
     now = now or time.time()
-    vals = [w["percent"] for w in (u.get("windows") or {}).values() if not (w.get("resets_at") and w["resets_at"] < now)]
+    vals = [w["percent"] for k, w in (u.get("windows") or {}).items() if k in ("five_hour", "seven_day") and not (w.get("resets_at") and w["resets_at"] < now)]
     return max(vals) if vals else (0 if u.get("windows") else None)
 
 
@@ -314,9 +322,15 @@ def public():
     current = active_id()
     now = time.time()
     rows = []
+    login = main_usage()
+    with lock:
+        plan = ((state.get("claude_usage") or {}).get("account") or {}).get("plan") or ""
     for aid in pool():
         u = usage(aid)
-        rows.append({"id": aid, "label": label(aid), "active": aid == current, "enabled": enabled(aid), "windows": u.get("windows") or {}, "at": u.get("at") or 0, "error": u.get("error") or "", "level": level(u, now), "masked": cfg.masked(cfg.secret(secret_key(aid))) if aid != MAIN else "", "login": aid == twin()})
+        windows = dict(u.get("windows") or {})
+        if aid in (MAIN, twin()):
+            windows.update({k: w for k, w in (login.get("windows") or {}).items() if k.startswith("seven_day_") and k not in windows})
+        rows.append({"id": aid, "label": label(aid), "active": aid == current, "enabled": enabled(aid), "windows": windows, "plan": plan if aid in (MAIN, twin()) else "", "at": u.get("at") or 0, "error": u.get("error") or "", "level": level(u, now), "masked": cfg.masked(cfg.secret(secret_key(aid))) if aid != MAIN else "", "login": aid == twin()})
     prop = {k: _proposal[k] for k in ("pid", "level", "to_level", "at")} if _proposal else None
     if prop:
         prop.update(src=label(_proposal["src"]), dst=label(_proposal["dst"]))

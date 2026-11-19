@@ -4,6 +4,24 @@ function accMeter(label, w) {
   const past = w.resets_at && w.resets_at < now(), p = past ? 0 : w.percent;
   return `<div class="meter accm"><div class="mrow"><span>${label}</span><b style="color:${p >= 80 ? accColor(p) : "inherit"}">${p}%</b></div><div class="mbar"><span style="width:${Math.min(100, p)}%;background:${accColor(p)}"></span></div><div class="reset" title="${w.resets_at ? esc(fmtDateTime(w.resets_at)) : ""}">${past ? "reset" : w.resets_at ? "resets in " + dur(Math.max(0, w.resets_at - now())) : ""}</div></div>`;
 }
+function accResets(ts) {
+  if (!ts) return "";
+  const d = new Date(ts * 1000), today = new Date();
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  if (ts < now()) return "Reset — refreshing";
+  return d.toDateString() === today.toDateString() ? `Resets at ${time}` : `Resets ${d.toLocaleDateString("en-US", { weekday: "short" })} ${time}`;
+}
+function accRow(title, w) {
+  const past = w && w.resets_at && w.resets_at < now(), p = !w || past ? 0 : w.percent;
+  const tone = p >= 95 ? "bad" : p >= 80 ? "warn" : "";
+  return `<div class="ulrow"><div class="ulname"><div class="ult">${esc(title)}</div><div class="ulr" title="${w?.resets_at ? esc(fmtDateTime(w.resets_at)) : ""}">${w ? accResets(w.resets_at) : "No data yet"}</div></div>
+    <div class="ulbar ${tone}" role="progressbar" aria-valuenow="${p}" aria-valuemin="0" aria-valuemax="100" aria-label="${esc(title)}"><span style="width:${Math.min(100, p)}%"></span></div><div class="ulp">${w ? p + "% used" : "—"}</div></div>`;
+}
+function accLimits(a) {
+  const w = a.windows || {};
+  const scoped = Object.entries(w).filter(([k]) => k.startsWith("seven_day_")).sort(([x], [y]) => x.localeCompare(y));
+  return `<div class="ulim">${accRow("Current session", w.five_hour)}<div class="ulhead">Weekly limits</div>${accRow("All models", w.seven_day)}${scoped.map(([, x]) => accRow(x.label || "Model", x)).join("")}</div>`;
+}
 function accFoot(a) {
   if (a.error) return `<span class="err" title="${esc(a.error)}">${esc(a.error.slice(0, 70))}</span>`;
   return a.at ? `updated ${ago(a.at)}` : "not checked yet";
@@ -23,16 +41,15 @@ function accSub(a) {
 function pageAccounts() {
   const ca = data.claude_accounts || {};
   const rows = ca.accounts || [];
-  const cards = rows.map(a => `<div role="button" tabindex="0" class="panel acccard ${a.active ? "on" : ""} ${a.enabled ? "" : "off"}" data-acc-open="${esc(a.id)}">
-      <div class="acchead"><b translate="no">${esc(a.label)}</b>${accBadges(a)}</div>
+  const cards = rows.map(a => `<div role="button" tabindex="0" class="panel acccard ${a.active ? "on" : ""} ${a.enabled ? "" : "off"}" data-acc-open="${esc(a.id)}" aria-label="${esc(a.label)} — open">
+      <div class="acctop"><div class="acchead"><b translate="no">${esc(a.label)}</b>${a.plan ? `<span class="accplan">${esc(a.plan)}</span>` : ""}${accBadges(a)}</div><span class="muted fs-sm">${accFoot(a)}</span></div>
       <div class="muted fs-sm">${accSub(a)}</div>
-      ${accMeter("Session (5hr)", a.windows?.five_hour)}${accMeter("Weekly (7 day)", a.windows?.seven_day)}
-      <div class="accfoot muted fs-sm">${accFoot(a)}</div></div>`).join("");
+      ${accLimits(a)}</div>`).join("");
   const auto = conf("claude.auto_switch");
   return `<div class="pagehead"><h1>Claude accounts</h1><span class="sub">${auto ? `Above ${esc(conf("claude.switch_at"))}% asks to switch to an account below ${esc(conf("claude.switch_to"))}%` : "Automatic switching is off"}${ca.active === "other" ? ` · <span class="err">${esc(ca.settings)} holds a token Opsboard does not know — automatic switching is paused</span>` : ""}</span>
       <span class="h2-actions"><button class="iconbtn ${ca.refreshing ? "spin" : ""}" data-acc-refresh title="Check every account now" aria-label="Refresh">${icon("refresh", 15)}</button><button class="btn-primary" data-acc-add>${icon("plus", 14)} Add account</button></span></div>
     ${accProposal()}
-    <section><div class="accgrid">${cards || '<div class="muted">Loading…</div>'}</div></section>
+    <section><div class="acclistv">${cards || '<div class="muted">Loading…</div>'}</div></section>
     <section><h2>Automatic switching</h2><div class="panel form">
       ${field("claude.auto_switch", "Switch automatically", { type: "toggle", help: `When the account in use passes the limit below, Opsboard asks — here, in the sidebar and in Telegram — whether to move to the account with the most room, and switches when you say yes. It writes <code>CLAUDE_CODE_OAUTH_TOKEN</code> into <code>${esc(ca.settings || "~/.claude/settings.json")}</code>, which every new Claude Code session reads — VS Code included.` })}
       ${field("claude.switch_at", "Switch when above", { type: "number", help: "Percent of the 5-hour or the weekly limit, whichever is higher." })}
@@ -79,9 +96,9 @@ function openAccDetail(id, fresh = true) {
   const foot = accUi.del
     ? `<div class="accfootbar danger"><span class="grow">${a.active ? "It is in use — new sessions go back to Claude Code's own login." : "The token is removed from this Mac."} Delete <b translate="no">${esc(a.label)}</b>?</span><button type="button" data-acc-del-cancel>Cancel</button><button type="button" class="btn-danger" data-acc-delete>Delete</button></div>`
     : `<div class="accfootbar">${a.id !== "main" ? `<button type="button" class="linkbtn danger" data-acc-del-ask>${icon("trash", 14)} Delete</button>` : ""}<span class="grow"></span>${a.active ? '<span class="muted fs-sm">New sessions use this account</span>' : `${data.claude_accounts?.busy ? '<span class="muted fs-sm" title="Sessions read the account from their settings">A session is working</span>' : ""}<button type="button" class="btn-primary" data-acc-use>Use now</button>`}</div>`;
-  d.innerHTML = `<div class="accdlg-head"><div class="grow">${title}<div class="acchead">${accBadges(a)}<span class="muted fs-sm">${accSub(a)}</span></div></div>
+  d.innerHTML = `<div class="accdlg-head"><div class="grow">${title}<div class="acchead">${a.plan ? `<span class="accplan">${esc(a.plan)}</span>` : ""}${accBadges(a)}<span class="muted fs-sm">${accSub(a)}</span></div></div>
       <button type="button" class="iconbtn ghost" data-acc-close title="Close (Esc)" aria-label="Close">${icon("x", 16)}</button></div>
-    <div class="accdlg-body"><div class="accdlg-lims">${accMeter("Session (5hr)", a.windows?.five_hour)}${accMeter("Weekly (7 day)", a.windows?.seven_day)}</div><div class="muted fs-sm">${accFoot(a)}</div></div>
+    <div class="accdlg-body">${accLimits(a)}<div class="muted fs-sm">${accFoot(a)}</div></div>
     <label class="sw accdlg-sw"><span>Automatic switching<span class="d">${a.enabled ? "Opsboard may offer this account when the one in use runs low." : "Off — Opsboard never offers this account."}</span></span><input type="checkbox" data-acc-enable ${a.enabled ? "checked" : ""}><span class="tog"></span></label>
     <div class="msg" id="accMsg" role="status" aria-live="polite"></div>${foot}`;
   translateTree(d);
