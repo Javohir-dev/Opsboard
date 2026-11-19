@@ -173,6 +173,9 @@ class ClaudeAccountsTest(unittest.TestCase):
         self.assertEqual(ca.pool(), [me])
         self.assertEqual(ca.active_id(), me)
         self.assertTrue(ca.public()["accounts"][0]["login"])
+        ca.switch(me)
+        self.assertNotIn(ca.ENV_KEY, json.loads(ca.SETTINGS.read_text()).get("env", {}))
+        self.assertEqual(ca.active_id(), me)
         spare = ca.add("Spare", SPARE)
         with self.assertRaises(ValueError) as err:
             ca.add("Spare 2", SPARE[:-1] + "x")

@@ -78,7 +78,7 @@ def switch(aid):
     """Claude Code reads env from its user settings for every new session — VS Code included."""
     data = _read_settings()
     env = dict(data.get("env") or {})
-    if aid == MAIN:
+    if aid == MAIN or (aid and aid == twin()):
         env.pop(ENV_KEY, None)
     else:
         token = cfg.secret(secret_key(aid)) if any(a["id"] == aid for a in accounts()) else ""
