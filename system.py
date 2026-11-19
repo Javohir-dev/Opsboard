@@ -224,7 +224,7 @@ def claude_usage(live=True):
         model = (((item.get("scope") or {}).get("model") or {}).get("display_name")) or ""
         label = USAGE_LABELS.get(item.get("kind")) or (f"Weekly {model}" if model else str(item.get("kind", "")).replace("_", " ").capitalize())
         limits.append(
-            {"label": label, "percent": item.get("percent") or 0, "severity": item.get("severity") or "normal", "resets_at": epoch(item.get("resets_at") or ""), "active": bool(item.get("is_active"))}
+            {"label": label, "kind": item.get("kind") or "", "percent": item.get("percent") or 0, "severity": item.get("severity") or "normal", "resets_at": epoch(item.get("resets_at") or ""), "active": bool(item.get("is_active"))}
         )
     account = {"email": acct.get("emailAddress") or "", "org": acct.get("organizationName") or "", "plan": plan}
     return {"limits": limits, "fetched": fetched, "account": account, "source": source, "live_error": live_error}

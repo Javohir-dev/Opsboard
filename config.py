@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import threading
 from pathlib import Path
 
@@ -41,6 +42,10 @@ DEFAULTS = {
     "claude.reply_language": "thread",
     "claude.fix_skill": "",
     "claude.live_usage": True,
+    "claude.accounts": [],
+    "claude.auto_switch": True,
+    "claude.switch_at": 80,
+    "claude.switch_to": 60,
     "notify.sound": True,
     "notify.battery_low": 15,
     "telegram.chat_id": "",
@@ -161,7 +166,7 @@ def secret(key):
 
 
 def set_secret(key, value):
-    if key not in SECRETS:
+    if key not in SECRETS and not re.fullmatch(r"claude\.account\.[0-9a-f]{8}", key):
         raise ValueError(f"unknown secret {key}")
     with _lock:
         _secrets.pop(key, None)

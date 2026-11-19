@@ -17,7 +17,7 @@ INIT_MAX_AGE = 3600
 SESSION_TTL = 12 * 3600
 COOKIE = "ops_tg"
 OPEN_PATHS = ("/", "/index.html", "/tg/auth")
-BLOCKED = ("/api/settings", "/api/gitlab-account", "/api/github-account", "/api/jira-account", "/api/telegram-account", "/api/telegram", "/api/pick-folder")
+BLOCKED = ("/api/settings", "/api/gitlab-account", "/api/github-account", "/api/jira-account", "/api/telegram-account", "/api/telegram", "/api/pick-folder", "/api/claude-accounts")
 TUNNEL_URL = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
 AUTH_PER_MINUTE = 20
 

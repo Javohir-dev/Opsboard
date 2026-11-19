@@ -112,7 +112,7 @@ function pageSettings() {
         return `<div class="check ${c.ok === true ? "ok" : c.ok === false ? "bad" : "skip"}" title="${esc(c.detail)}" data-goto="${a.section}" ${a.focus ? `data-focus="${a.focus}"` : ""} role="button" tabindex="0"><span class="dot ${c.ok === true ? "ok" : c.ok === false ? "bad" : ""}"></span><b>${CHECK_LABEL[c.id] || c.id}</b><button class="checkact ${c.ok === false ? "bad" : ""}" ${a.attr}>${a.label}</button><span class="muted">${esc(c.detail)}</span></div>`;
       }).join("") : '<div class="muted">Checking…</div>'}</div>
       <div class="fmsg mt-2" id="msg-detect"></div>${setupMissing().length ? "" : setupBox(false)}</section>
-    <div class="setgrid"><nav class="setnav" aria-label="Settings sections">${[["sec-you", "You"], ["sec-gitlab", "Code host"], ["sec-jira", "Tasks"], ["sec-workspace", "Workspace"], ["sec-claude", "Claude"], ["sec-telegram", "Telegram"], ["sec-keys", "Keyboard shortcuts"], ["sec-adv", "Advanced"]].map(([id, l]) => `<a href="#/settings" data-goto-btn="${id}">${l}</a>`).join("")}</nav><div class="setbody">
+    <div class="setgrid"><nav class="setnav" aria-label="Settings sections">${[["sec-you", "You"], ["sec-gitlab", "Code host"], ["sec-jira", "Tasks"], ["sec-workspace", "Workspace"], ["sec-claude", "Claude"], ["sec-accounts", "Claude accounts"], ["sec-telegram", "Telegram"], ["sec-keys", "Keyboard shortcuts"], ["sec-adv", "Advanced"]].map(([id, l]) => `<a href="#/settings" data-goto-btn="${id}">${l}</a>`).join("")}</nav><div class="setbody">
     <section id="sec-you"><h2>You</h2><div class="panel form">
       ${field("project.root", "Project folder", { type: "folder", placeholder: "Click to choose your project folder", help: "The checkout you work in. Everything else is detected from here." })}
       ${field("ui.theme", "Theme", { type: "select", options: [["system", "System"], ["light", "Light"], ["dark", "Dark"]] })}
@@ -159,6 +159,7 @@ function pageSettings() {
       ${field("claude.reply_language", "Reply language", { type: "select", options: [["thread", "Same as the review thread"], ["uz", "Uzbek"], ["ru", "Russian"], ["en", "English"]], help: "Passed to the fix skill as <code>OPS_REPLY_LANGUAGE</code> for its thread replies." })}
       ${field("claude.live_usage", "Live Claude usage", { type: "toggle", help: "Your plan limits in the sidebar, asked from Anthropic every minute with Claude Code's own sign-in. Off: no limits at all — the sidebar shows CPU, RAM and swap instead, and Overview leaves out the machine tiles. The token is read from the Keychain (macOS asks once — choose <i>Always Allow</i>), kept in memory only and never renewed here." })}
     </div></section>
+    ${claudeAccountsSection()}
     ${telegramSection()}
     <section id="sec-keys"><h2>Keyboard shortcuts<span class="h2-actions"><span class="fmsg" id="msg-hk"></span><button class="linkbtn" data-hk-reset="1">Reset to defaults</button></span></h2><div class="panel form">
       <div class="frow"><div class="flabel"><div>How it works</div><div class="fhelp">Click a field and press the keys. A sequence like <code>g t</code> means: press <kbd>g</kbd>, then <kbd>t</kbd>. Backspace clears. Plain keys are ignored while you type in a field; shortcuts with <code>alt</code>/<code>ctrl</code>/<code>cmd</code> work everywhere. Press <kbd>?</kbd> to see them all.</div></div><div class="fctl"></div></div>
@@ -169,6 +170,31 @@ function pageSettings() {
       ${field("server.port", "Port", { type: "number", help: "Takes effect after <code>opsboard restart</code>." })}
       <div class="frow"><div class="flabel"><div>Version</div><div class="fhelp">Start at login: <code>opsboard autostart on</code>.</div></div><div class="fctl"><div class="ro">${esc(data.version?.current || "")}${data.version?.update ? ` <span class="badge warn">${esc(data.version.latest)} available</span> — run <code>opsboard update</code>` : ""}</div></div></div>
     </div></section></div></div>`;
+}
+function accWin(w) {
+  if (!w) return '<span class="muted">—</span>';
+  const past = w.resets_at && w.resets_at < now(), p = past ? 0 : w.percent;
+  return `<span class="accwin" title="${w.resets_at ? esc("resets " + fmtDateTime(w.resets_at)) : ""}"><b style="color:${p >= 95 ? "var(--bad)" : p >= 80 ? "var(--warn)" : "inherit"}">${p}%</b>${w.resets_at && !past ? `<span class="muted"> · ${dur(Math.max(0, w.resets_at - now()))}</span>` : ""}</span>`;
+}
+function claudeAccountsSection() {
+  const ca = data.claude_accounts || {};
+  const rows = ca.accounts || [];
+  const list = rows.length ? rows.map(a => `<div class="accrow ${a.active ? "on" : ""}"><div class="accname"><b>${esc(a.label)}</b>${a.active ? '<span class="badge ok">in use</span>' : ""}<span class="muted fs-sm">${a.id === "main" ? "Claude Code's /login" : esc(a.masked)}</span></div>
+      <div class="acclim"><span class="muted fs-sm">5 h</span>${accWin(a.windows.five_hour)}</div><div class="acclim"><span class="muted fs-sm">7 days</span>${accWin(a.windows.seven_day)}</div>
+      <div class="accact">${a.error ? `<span class="err fs-sm" title="${esc(a.error)}">${esc(a.error.slice(0, 60))}</span>` : a.at ? `<span class="muted fs-sm">${ago(a.at)}</span>` : ""}
+      ${a.id !== "main" ? `<button class="linkbtn" data-acc="refresh" data-acc-id="${esc(a.id)}">Check</button>` : ""}
+      ${a.active ? "" : `<button class="fixbtn" data-acc="switch" data-acc-id="${esc(a.id)}">Use</button>`}
+      ${a.id !== "main" && !a.active ? `<button class="linkbtn" data-acc="remove" data-acc-id="${esc(a.id)}">Remove</button>` : ""}</div></div>`).join("") : "";
+  return `<section id="sec-accounts"><h2>Claude accounts<span class="h2-actions"><span class="fmsg ${ui.accMsg?.cls || ""}" id="msg-acc">${esc(ui.accMsg?.text || "")}</span></span></h2><div class="panel form">
+    ${ca.active === "other" ? `<div class="fhelp err">${esc(ca.settings)} holds a token Opsboard does not know — automatic switching is paused until you pick an account here.</div>` : ""}
+    ${list ? `<div class="acclist">${list}</div>` : ""}
+    <div class="frow"><div class="flabel"><div>Add an account</div><div class="fhelp">Sign in to the other account in a browser, run <code>claude setup-token</code> in a terminal and paste the token here. It is stored in ${esc(data.config?._secret_store || "config.json")}. Limits are read with one tiny Haiku request — every 3 min for the account in use, every 15 min for the rest.</div></div>
+      <div class="fctl"><input id="acc-label" type="text" placeholder="Name, e.g. Work Max" spellcheck="false"><input id="acc-token" type="password" autocomplete="off" placeholder="sk-ant-oat01-…" class="mt-1" style="margin-top:4px">
+      <div class="fmeta"><button class="btn-primary" data-acc="add">Test &amp; add</button></div></div></div>
+    ${field("claude.auto_switch", "Switch automatically", { type: "toggle", help: `When the account in use passes the limit below and no Claude session is working, Opsboard moves to the account with the most room. Switching writes <code>CLAUDE_CODE_OAUTH_TOKEN</code> into <code>${esc(ca.settings || "~/.claude/settings.json")}</code>, which every new Claude Code session reads — VS Code included. <i>Claude Code login</i> removes it again.` })}
+    ${field("claude.switch_at", "Switch when above", { type: "number", help: "Percent of the 5-hour or the weekly limit, whichever is higher." })}
+    ${field("claude.switch_to", "Only to an account below", { type: "number", help: "Percent; an account with fresher than 30 min numbers." })}
+  </div></section>`;
 }
 async function loadDoctor() {
   try { ui.doctor = await (await fetch("/api/doctor")).json(); } catch (e) {}

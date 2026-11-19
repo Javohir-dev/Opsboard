@@ -36,19 +36,23 @@ function render() {
   const errs = Object.entries(data).filter(([k]) => k.startsWith("error_"));
   const cu = data.claude_usage || {};
   const usageColor = l => l.severity === "critical" || l.percent >= 95 ? "var(--bad)" : l.severity === "warning" || l.percent >= 80 ? "var(--warn)" : "var(--usage)";
-  const usage = (cu.limits || []).map(l => {
+  const using = (data.claude_accounts?.accounts || []).find(a => a.active && a.id !== "main");
+  const lims = using ? [["Session (5hr)", using.windows.five_hour], ["Weekly (7 day)", using.windows.seven_day]].filter(x => x[1]).map(([label, w]) => ({ label, percent: w.percent, resets_at: w.resets_at, severity: "" })) : cu.limits || [];
+  const usage = lims.map(l => {
     const past = l.resets_at && l.resets_at < now();
     const head = `<div class="mrow"><span>${esc(l.label)}</span><b>${past ? "—" : l.percent + "%"}</b></div><div class="mbar"><span style="width:${past ? 0 : Math.min(100, l.percent)}%;background:${usageColor(l)}"></span></div>`;
     const foot = past ? `<div class="reset" title="Claude Code refreshes these numbers when you open Account & Usage or run /usage">Reset — open /usage to refresh</div>` : l.resets_at ? `<div class="reset" title="${esc(fmtDateTime(l.resets_at))}">Resets in ${dur(Math.max(0, l.resets_at - now()))}</div>` : "";
     return `<div class="meter ${past ? "stale" : ""}">${head}${foot}</div>`;
   }).join("");
-  const live = cu.source === "live";
-  const stale = cu.fetched && now() - cu.fetched > (live ? 180 : 600) ? `<div class="reset" title="Claude Code refreshes these numbers when you open Account & Usage or run /usage">updated ${ago(cu.fetched)}</div>` : "";
-  const liveNote = cu.live_error ? `<div class="reset text-warn" title="${esc(cu.live_error)}">Live usage: ${esc(cu.live_error)}</div>` : "";
+  const live = using ? false : cu.source === "live";
+  const stale = !using && cu.fetched && now() - cu.fetched > (live ? 180 : 600) ? `<div class="reset" title="Claude Code refreshes these numbers when you open Account & Usage or run /usage">updated ${ago(cu.fetched)}</div>` : "";
+  const liveNote = !using && cu.live_error ? `<div class="reset text-warn" title="${esc(cu.live_error)}">Live usage: ${esc(cu.live_error)}</div>` : "";
+  const ca = data.claude_accounts || {};
+  const accRows = (ca.accounts || []).length > 1 ? `<div class="uaccs">${ca.accounts.map(a => `<a href="#/settings" class="uaccrow ${a.active ? "on" : ""}" title="${esc(a.error || (a.at ? "updated " + ago(a.at) : ""))}"><span class="uaccn" translate="no">${a.active ? "● " : ""}${esc(a.label)}</span><b style="color:${a.level == null ? "inherit" : a.level >= 95 ? "var(--bad)" : a.level >= 80 ? "var(--warn)" : "inherit"}">${a.level == null ? "—" : a.level + "%"}</b></a>`).join("")}</div>` : "";
   const m = data.mac || {};
   const meter = (label, value, p) => `<div class="meter"><div class="mrow"><span>${label}</span><b>${value}</b></div><div class="mbar"><span style="width:${Math.min(100, p || 0)}%;background:${color(p || 0)}"></span></div></div>`;
   const machine = `${meter("CPU", `${(m.cpu ?? 0).toFixed(0)}%`, m.cpu)}${meter("RAM", `${bytes(m.mem_used)} / ${bytes(m.mem_total, 0)}`, pct(m.mem_used, m.mem_total))}${m.swap_total ? meter("Swap", bytes(m.swap_used), pct(m.swap_used, m.swap_total)) : ""}`;
-  patch($("hstats"), `${showUsage() ? `${usage ? `<div class="utitle">Claude usage${live ? `<span class="ulive" title="Updated every minute from Anthropic">live</span>` : ""}</div>${cu.account?.email ? `<div class="uacct" title="${esc([cu.account.email, cu.account.org, cu.account.plan].filter(Boolean).join(" · "))}"><span class="uemail" translate="no">${esc(cu.account.email)}</span>${cu.account.org || cu.account.plan ? `<span class="uorg" translate="no">${esc([cu.account.org, cu.account.plan].filter(Boolean).join(" · "))}</span>` : ""}</div>` : ""}${usage}${stale}${liveNote}` : cu.account?.email ? `<div class="utitle">Claude usage</div><div class="reset" title="Claude Code saves your plan limits when it shows them">Run /usage in Claude Code once to show your limits here</div>${liveNote}` : ""}` : machine}${errs.length ? `<div class="err fs-sm" title="${esc(errs.map(e => e.join(": ")).join("\n"))}">${errs.length} collector error(s)</div>` : ""}${data.version?.update ? `<a class="badge warn" href="#/settings" title="Run opsboard update">${esc(data.version.latest)} available</a>` : ""}`);
+  patch($("hstats"), `${showUsage() ? `${usage ? `<div class="utitle">Claude usage${live ? `<span class="ulive" title="Updated every minute from Anthropic">live</span>` : ""}</div>${using ? `<div class="uacct"><span class="uemail" translate="no">${esc(using.label)}</span><span class="uorg">setup token</span></div>` : cu.account?.email ? `<div class="uacct" title="${esc([cu.account.email, cu.account.org, cu.account.plan].filter(Boolean).join(" · "))}"><span class="uemail" translate="no">${esc(cu.account.email)}</span>${cu.account.org || cu.account.plan ? `<span class="uorg" translate="no">${esc([cu.account.org, cu.account.plan].filter(Boolean).join(" · "))}</span>` : ""}</div>` : ""}${usage}${stale}${liveNote}${accRows}` : cu.account?.email ? `<div class="utitle">Claude usage</div><div class="reset" title="Claude Code saves your plan limits when it shows them">Run /usage in Claude Code once to show your limits here</div>${liveNote}` : ""}` : machine}${errs.length ? `<div class="err fs-sm" title="${esc(errs.map(e => e.join(": ")).join("\n"))}">${errs.length} collector error(s)</div>` : ""}${data.version?.update ? `<a class="badge warn" href="#/settings" title="Run opsboard update">${esc(data.version.latest)} available</a>` : ""}`);
   $("ver").textContent = data.version?.current ? "v" + data.version.current : "";
   const pages = { overview: pageOverview, sessions: pageSessions, s: c => pageSession(c, r.arg), docker: pageDocker, postgres: pagePostgres, tasks: c => (hasJira() ? pageJira(c) : pageTasks(c)), mrs: pageMrs, mr: c => pageMr(c, r.arg), worktrees: pageWorktrees, processes: pageProcesses, settings: pageSettings, notes: pageNotes };
   const view = (pages[r.page] || pageOverview)(ctx);
@@ -276,6 +280,24 @@ document.addEventListener("click", async e => {
   if (rs) {
     const key = rs.dataset.reset || rs.dataset.confirm;
     saveSetting(key, rs.dataset.reset ? null : conf(key), "msg-f-" + key.replace(/\W/g, "-"));
+    return;
+  }
+  const acc = e.target.closest("[data-acc]");
+  if (acc) {
+    const action = acc.dataset.acc, msg = $("msg-acc");
+    if (action === "switch" && data.claude_accounts?.busy && !confirm(t("A Claude session is working right now. Switch anyway? Sessions read the new account from their settings."))) return;
+    if (action === "remove" && !confirm(t("Remove this account and its token?"))) return;
+    const body = action === "add" ? { action, label: $("acc-label").value.trim(), token: $("acc-token").value.trim() } : { action, id: acc.dataset.accId };
+    const say = (cls, text) => { ui.accMsg = { cls, text }; msg.className = "fmsg " + cls; msg.textContent = text; };
+    acc.disabled = true; say("muted", action === "add" || action === "refresh" ? t("Asking Claude…") : t("Saving…"));
+    let r;
+    try { r = await (await fetch("/api/claude-accounts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json(); }
+    catch (x) { r = { ok: false, error: String(x) }; }
+    acc.disabled = false;
+    if (!r.ok) { say("err", r.error); return; }
+    say("okmsg", { add: t("Added"), remove: t("Removed"), switch: t("New sessions use this account"), refresh: t("Updated") }[action]);
+    if (action === "add") { $("acc-label").value = ""; $("acc-token").value = ""; }
+    data.claude_accounts = r.claude_accounts; ui.forcePatch = true; rerenderSettings();
     return;
   }
   const st = e.target.closest("[data-save-token]");

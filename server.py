@@ -12,6 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib import error, parse
 
+import claudeaccounts
 import config as cfg
 import demo
 import detect
@@ -21,7 +22,7 @@ import stackprofile as profile
 import telegram
 import webapp
 import worktrees
-from core import DATA, HERE, gitlab_url, lock, log, loop, run, setup_logging, state
+from core import DATA, HERE, gitlab_url, lock, log, loop, put, run, setup_logging, state
 from notes import load_marks, load_notes, notes_lock, save_notes, set_mark
 from providers import github, review_host, tracker
 from providers import gitlab as gitlab_provider
@@ -292,6 +293,10 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("not a skill name")
                 if key == "claude.reply_language" and value not in (None, "thread", "uz", "ru", "en"):
                     raise ValueError("unknown reply language")
+                if key in ("claude.switch_at", "claude.switch_to") and value is not None:
+                    value = int(value)
+                    if not 10 <= value <= 100:
+                        raise ValueError("use a percentage between 10 and 100")
                 if key in ("server.port", "refresh.tasks_seconds", "notify.battery_low") and value is not None:
                     value = int(value)
                     if not (1024 <= value <= 65535 if key == "server.port" else 0 <= value <= 95 if key == "notify.battery_low" else 30 <= value <= 3600):
@@ -351,6 +356,27 @@ class Handler(BaseHTTPRequestHandler):
             except error.HTTPError as exc:
                 out = {"ok": False, "error": f"GitHub rejected this token ({exc.code})"}
             except (error.URLError, ValueError, KeyError, OSError) as exc:
+                out = {"ok": False, "error": str(exc)[:200]}
+            self.send(json.dumps(out), "application/json")
+        elif self.path.startswith("/api/claude-accounts"):
+            try:
+                body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 10000)) or b"{}")
+                action, aid = body.get("action"), str(body.get("id") or "")
+                if action == "add":
+                    claudeaccounts.add(body.get("label"), body.get("token"))
+                elif action == "remove":
+                    claudeaccounts.remove(aid)
+                elif action == "switch":
+                    if aid != claudeaccounts.MAIN and not any(a["id"] == aid for a in claudeaccounts.accounts()):
+                        raise ValueError("unknown account")
+                    claudeaccounts.switch(aid)
+                elif action == "refresh":
+                    claudeaccounts.refresh(aid)
+                else:
+                    raise ValueError("unknown action")
+                put("claude_accounts", claudeaccounts.public())
+                out = {"ok": True, "claude_accounts": claudeaccounts.public()}
+            except (ValueError, OSError) as exc:
                 out = {"ok": False, "error": str(exc)[:200]}
             self.send(json.dumps(out), "application/json")
         elif self.path.startswith("/api/telegram-account"):
@@ -565,6 +591,7 @@ def main():
         (30, collect_worktrees),
         (6 * 3600, collect_version),
         (30, collect_claude_usage),
+        (30, claudeaccounts.collect),
     ):
         loop(interval, fn)
     threading.Thread(target=lambda: detect.apply(detect.detect_all()[0]), daemon=True).start()

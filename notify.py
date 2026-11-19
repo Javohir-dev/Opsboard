@@ -189,8 +189,18 @@ def battery(info):
     return _publish({"id": uuid.uuid4().hex[:12], "kind": "battery", "level": level, "minutes": battery_minutes(info), "status": "battery", "at": time.time(), "read": False}, "kind", bad=True)
 
 
+def claude_account(item):
+    item.update(id=uuid.uuid4().hex[:12], status=item["kind"], at=time.time(), read=False)
+    return _publish(item, "kind", bad=item["kind"] == "claude_full")
+
+
 def text(item):
     o = item.get("outcome") or {}
+    if item.get("kind") == "claude_switch":
+        to = f" ({item['to_level']}%)" if item.get("to_level") is not None else ""
+        return f"Claude account → {item.get('to')}", f"{item.get('from')} reached {item.get('level')}% — new sessions use {item.get('to')}{to}"
+    if item.get("kind") == "claude_full":
+        return f"Claude limit · {item.get('from')} at {item.get('level')}%", "No other account is below the switch threshold — add one or wait for a reset"
     ref = f"!{item['iid']}" if item.get("iid") else item.get("name", "")
     if item.get("kind") == "battery":
         mins = item.get("minutes")

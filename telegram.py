@@ -14,6 +14,7 @@ from pathlib import Path
 from urllib import error, request
 
 import config as cfg
+import notify
 from core import DATA, claude_bin, lock, log, project_root, state
 
 API = os.environ.get("OPS_TELEGRAM_API", "https://api.telegram.org").rstrip("/")
@@ -608,6 +609,11 @@ def on_notify(item):
                 "ru": "🪫 <b>Батарея {n}%</b>\n{left}\nПодключите Mac к зарядке.",
             }
             send(words[lang].format(n=item.get("level"), left=left).replace("\n\n", "\n"))
+        return
+    if item.get("kind") in ("claude_switch", "claude_full"):
+        if cfg.get("telegram.notify"):
+            head, body = notify.text(item)
+            send(f"{'🔀' if item['kind'] == 'claude_switch' else '⛽'} <b>{esc(head)}</b>\n{esc(body)}")
         return
     if item.get("kind") == "merged":
         if cfg.get("telegram.notify"):
