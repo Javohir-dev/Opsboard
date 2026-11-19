@@ -1242,7 +1242,7 @@ dialog.accdlg .accadd{padding-bottom:0;display:flex;flex-direction:column;gap:2p
 .ambar{position:relative;height:6px;border-radius:3px;background:var(--panel2)}
 .ambar span{display:block;height:100%;border-radius:3px;background:#5b7cfa;transition:width .4s}
 .ambar.warn span{background:#f5a524}.ambar.bad span{background:#ef5a5a}
-.ambar i{position:absolute;top:-2px;width:1px;height:10px;background:var(--muted);opacity:.55}
+.ambar i{position:absolute;top:0;width:1px;height:100%;background:var(--muted);opacity:.55}
 .ambar i.sw{background:#c98a2c;opacity:.9}
 .ambar.load span{width:35%;background:var(--line);animation:accload 1.2s ease-in-out infinite}
 @keyframes accload{50%{opacity:.4}}
@@ -1252,7 +1252,7 @@ dialog.accdlg .accadd{padding-bottom:0;display:flex;flex-direction:column;gap:2p
 .accempty{padding:20px}
 .acclegend{display:flex;flex-wrap:wrap;gap:16px;align-items:center;font-size:12px;margin-top:14px}
 .acclegend .grow{flex:1}
-.acclegend .lg{display:inline-block;width:1px;height:10px;background:var(--muted);margin-right:6px;vertical-align:middle}
+.acclegend .lg{display:inline-block;width:1px;height:6px;background:var(--muted);margin-right:6px;vertical-align:middle}
 .acclegend .lg.sw{background:#c98a2c}
 .acclegend code{font-size:11px}
 .acctoast{position:fixed;right:32px;bottom:28px;z-index:40;display:flex;align-items:center;gap:14px;padding:12px 14px 12px 16px;border-radius:10px;border:1px solid var(--line);background:var(--panel);box-shadow:0 12px 32px rgba(0,0,0,.35);font-size:13px}
