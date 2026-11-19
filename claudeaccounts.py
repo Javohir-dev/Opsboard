@@ -228,7 +228,7 @@ def login_begin(email="", aid=None, terminal=True):
         raise ValueError("unknown account")
     slot = uuid.uuid4().hex[:8]
     logins.slot_dir(slot).mkdir(parents=True, exist_ok=True)
-    cmd = f"CLAUDE_CONFIG_DIR={shlex.quote(str(logins.slot_dir(slot)))} {shlex.quote(claude_bin())} auth login" + (f" --email {shlex.quote(email)}" if email else "")
+    cmd = f"CLAUDE_CONFIG_DIR={shlex.quote(str(logins.slot_dir(slot)))} {shlex.quote(claude_bin())} auth login --claudeai" + (f" --email {shlex.quote(email)}" if email else "")
     opened = False
     if terminal and sys.platform == "darwin" and not os.environ.get("OPS_NO_OS_NOTIFY"):
         try:

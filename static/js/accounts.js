@@ -267,19 +267,19 @@ function openAccConfirm(id) {
   accClosePop();
   const to = accById(id), from = accRows().find(x => x.active);
   if (!to) return;
-  if (!accData().confirm_manual) { accDoSwitch(id); return; }
+  if (!accData().confirm_manual && to.kind !== "token") { accDoSwitch(id); return; }
   const card = (cls, tag, a) => `<div class="accfrom ${cls}"><span class="acctag">${tag}</span><b translate="no">${esc(accShort(a?.label || "—"))}</b><span class="fs-sm">Session ${a?.windows?.five_hour?.percent ?? "—"}% · Weekly ${a?.windows?.seven_day?.percent ?? "—"}%</span></div>`;
   const toLogin = to.id === "main" || to.login, full = to.kind === "login", d = accDialog();
   d.setAttribute("aria-label", "Switch account");
   d.innerHTML = `<div class="accconfirm"><h3>Switch to ${esc(accShort(to.label))}?</h3>
-      <p class="muted">${full ? "Every Claude Code session moves to this account — VS Code included, running ones within about half a minute. Usage stays visible in Claude Code." : "New Claude Code sessions, VS Code included, will use this account. Sessions already running keep the current one until restarted, and Claude Code cannot show usage with a setup token."}</p>
+      <p class="muted">${full ? "Every Claude Code session moves to this account — VS Code included, running ones within about half a minute. Usage stays visible in Claude Code." : "This account is connected with a setup token. Sign in with Claude once and every session moves with it, with usage and the right account name in Claude Code. With the token only new sessions move, and Claude Code shows neither usage nor this account's name."}</p>
       <div class="accfromto">${card("", "From", from)}${icon("chevron", 20)}${card("to", "To", to)}</div>
       <div class="muted fs-sm">${full ? "Replaces Claude Code's sign-in in the Keychain — the current one is saved first" : `${toLogin ? "Removes" : "Writes"} <code>CLAUDE_CODE_OAUTH_TOKEN</code> ${toLogin ? "from" : "to"} <code>${esc(accData().settings || "~/.claude/settings.json")}</code>`}</div>
       <div class="msg" id="accMsg" role="status"></div>
-      <div class="accconfirmfoot"><label class="fs-sm muted"><input type="checkbox" id="accNoAsk">Don't ask for manual switches</label><span class="grow"></span><button type="button" data-acc-close>Cancel</button><button type="button" class="btn-primary" data-acc-switch-go="${esc(id)}">Switch</button></div></div>`;
+      <div class="accconfirmfoot"><label class="fs-sm muted"><input type="checkbox" id="accNoAsk">Don't ask for manual switches</label><span class="grow"></span><button type="button" data-acc-close>Cancel</button>${to.kind === "token" ? `<button type="button" data-acc-switch-go="${esc(id)}">Use the token anyway</button><button type="button" class="btn-primary" data-acc-signin="${esc(id)}">Sign in with Claude…</button>` : `<button type="button" class="btn-primary" data-acc-switch-go="${esc(id)}">Switch</button>`}</div></div>`;
   translateTree(d);
   if (!d.open) d.showModal();
-  d.querySelector("[data-acc-switch-go]").focus();
+  d.querySelector(".btn-primary").focus();
 }
 function accToast(to, prev) {
   const at = Date.now();
