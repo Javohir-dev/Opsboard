@@ -1165,3 +1165,5 @@ dialog.accdlg .sw{margin-top:8px}
 .accpropbtns{display:flex;gap:8px;align-items:center}
 .hstats .accprop{margin:10px 0 0;padding:8px 10px;flex-direction:column;align-items:stretch;gap:6px;font-size:var(--fs-sm)}
 .hstats .accpropbtns{justify-content:space-between}
+dialog.accdlg .accrename{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+dialog.accdlg .accrename input{flex:1;font-weight:650;font-size:var(--fs-lg)}

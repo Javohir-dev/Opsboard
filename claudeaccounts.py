@@ -58,13 +58,19 @@ def _read_settings():
     return data
 
 
+def twin():
+    """The setup-token account that is the same subscription as Claude Code's login; the login is then shown as that account."""
+    t = cfg.get("claude.main_twin") or ""
+    return t if any(a["id"] == t for a in accounts()) else ""
+
+
 def active_id():
     try:
         token = str((_read_settings().get("env") or {}).get(ENV_KEY) or "")
     except ValueError:
         return "other"
     if not token:
-        return MAIN
+        return twin() or MAIN
     return next((a["id"] for a in accounts() if cfg.secret(secret_key(a["id"])) == token), "other")
 
 
@@ -175,7 +181,7 @@ def same(a, b):
 
 
 def pool():
-    return [MAIN] + [a["id"] for a in accounts()]
+    return ([] if twin() else [MAIN]) + [a["id"] for a in accounts()]
 
 
 def duplicate_of(result, skip=()):
@@ -192,21 +198,17 @@ def duplicate_of(result, skip=()):
 
 
 def dedupe():
-    """Keep one of two accounts that are the same subscription: the Claude Code login, else the one added first."""
-    ids = pool()
-    for i, keep in enumerate(ids):
-        for extra in ids[i + 1 :]:
-            if extra == MAIN or not same(usage(keep), usage(extra)):
-                continue
-            _usage[keep], _usage[extra] = probe(keep), probe(extra)
-            if not same(_usage[keep], _usage[extra]):
-                continue
-            if active_id() == extra:
-                switch(keep)
-            gone = label(extra)
-            remove(extra)
-            notify.claude_account({"kind": "claude_duplicate", "from": gone, "to": label(keep)})
-            return extra
+    """Never deletes anything: when a setup-token account turns out to be the login's subscription, the login is hidden behind it."""
+    if twin() or not main_token():
+        return None
+    for a in accounts():
+        if not same(usage(MAIN), usage(a["id"])):
+            continue
+        _usage[MAIN], _usage[a["id"]] = probe(MAIN), probe(a["id"])
+        if same(_usage[MAIN], _usage[a["id"]]):
+            cfg.set("claude.main_twin", a["id"], "auto", "same limit windows")
+            notify.claude_account({"kind": "claude_duplicate", "from": "Claude Code login", "to": label(a["id"])})
+            return a["id"]
     return None
 
 
@@ -226,9 +228,9 @@ def busy():
 def pick(current, now=None):
     now = now or time.time()
     below = int(cfg.get("claude.switch_to") or 60)
-    pool = [MAIN] + [a["id"] for a in accounts()]
+    ids = pool()
     cands = []
-    for aid in pool:
+    for aid in ids:
         u = usage(aid)
         lv = level(u, now)
         if aid != current and enabled(aid) and lv is not None and lv < below and now - (u.get("at") or 0) < FRESH:
@@ -312,9 +314,9 @@ def public():
     current = active_id()
     now = time.time()
     rows = []
-    for aid in [MAIN] + [a["id"] for a in accounts()]:
+    for aid in pool():
         u = usage(aid)
-        rows.append({"id": aid, "label": label(aid), "active": aid == current, "enabled": enabled(aid), "windows": u.get("windows") or {}, "at": u.get("at") or 0, "error": u.get("error") or "", "level": level(u, now), "masked": cfg.masked(cfg.secret(secret_key(aid))) if aid != MAIN else ""})
+        rows.append({"id": aid, "label": label(aid), "active": aid == current, "enabled": enabled(aid), "windows": u.get("windows") or {}, "at": u.get("at") or 0, "error": u.get("error") or "", "level": level(u, now), "masked": cfg.masked(cfg.secret(secret_key(aid))) if aid != MAIN else "", "login": aid == twin()})
     prop = {k: _proposal[k] for k in ("pid", "level", "to_level", "at")} if _proposal else None
     if prop:
         prop.update(src=label(_proposal["src"]), dst=label(_proposal["dst"]))
@@ -354,15 +356,28 @@ def add(name, token):
     if not result.get("windows"):
         raise ValueError(f"Claude did not accept this token: {result.get('error')}")
     with _probe_lock:
-        twin = duplicate_of(result)
-    if twin:
-        raise ValueError(f"This account is already added as «{label(twin)}»")
+        dup = duplicate_of(result)
+    if dup and dup != MAIN:
+        raise ValueError(f"This account is already added as «{label(dup)}»")
     aid = uuid.uuid4().hex[:8]
     cfg.set_secret(secret_key(aid), token)
     _usage[aid] = result
+    if dup == MAIN:
+        cfg.set("claude.main_twin", aid, "auto", "same limit windows")
     cfg.set("claude.accounts", accounts() + [{"id": aid, "label": name}], "user", "Settings page")
     put("claude_accounts", public())
     return aid
+
+
+def rename(aid, name):
+    name = str(name or "").strip()[:40]
+    if not name:
+        raise ValueError("give the account a name")
+    if not any(a["id"] == aid for a in accounts()):
+        raise ValueError("unknown account")
+    if any(a["id"] != aid and a.get("label", "").lower() == name.lower() for a in accounts()):
+        raise ValueError(f"an account named «{name}» is already added")
+    cfg.set("claude.accounts", [dict(a, label=name) if a["id"] == aid else a for a in accounts()], "user", "Accounts page")
 
 
 def remove(aid):
@@ -370,6 +385,8 @@ def remove(aid):
         raise ValueError("unknown account")
     if active_id() == aid:
         switch(MAIN)
+    if cfg.get("claude.main_twin") == aid:
+        cfg.set("claude.main_twin", None, "auto")
     set_enabled(aid, True)
     cfg.set("claude.accounts", [a for a in accounts() if a["id"] != aid] or None, "user", "Settings page")
     cfg.set_secret(secret_key(aid), "")

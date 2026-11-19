@@ -17,12 +17,15 @@ function accProposal() {
   return `<div class="accprop"><div><b>Switch to <span translate="no">${esc(p.dst)}</span>?</b><div class="muted fs-sm"><span translate="no">${esc(p.src)}</span> is at ${esc(p.level)}%${p.to_level != null ? ` · <span translate="no">${esc(p.dst)}</span> ${esc(p.to_level)}%` : ""}</div></div>
     <div class="accpropbtns"><button class="btn-primary" data-acc-decide="1" data-pid="${esc(p.pid)}">Switch</button><button class="linkbtn" data-acc-decide="0" data-pid="${esc(p.pid)}">Not now</button></div></div>`;
 }
+function accSub(a) {
+  return a.id === "main" ? "Claude Code's own /login" : "setup token " + esc(a.masked) + (a.login ? " · also your Claude Code login" : "");
+}
 function pageAccounts() {
   const ca = data.claude_accounts || {};
   const rows = ca.accounts || [];
   const cards = rows.map(a => `<div role="button" tabindex="0" class="panel acccard ${a.active ? "on" : ""} ${a.enabled ? "" : "off"}" data-acc-open="${esc(a.id)}">
       <div class="acchead"><b translate="no">${esc(a.label)}</b>${accBadges(a)}</div>
-      <div class="muted fs-sm">${a.id === "main" ? "Claude Code's own /login" : "setup token " + esc(a.masked)}</div>
+      <div class="muted fs-sm">${accSub(a)}</div>
       ${accMeter("Session (5hr)", a.windows?.five_hour)}${accMeter("Weekly (7 day)", a.windows?.seven_day)}
       <div class="accfoot muted fs-sm">${accFoot(a)}</div></div>`).join("");
   const auto = conf("claude.auto_switch");
@@ -56,7 +59,8 @@ function openAccDetail(id) {
   const a = (data.claude_accounts?.accounts || []).find(x => x.id === id);
   if (!a) return;
   accDialog().dataset.acc = id;
-  accDialog().innerHTML = `<h3 translate="no">${esc(a.label)}</h3><div class="acchead">${accBadges(a)}<span class="muted fs-sm">${a.id === "main" ? "Claude Code's own /login" : "setup token " + esc(a.masked)}</span></div>
+  const nameRow = a.id === "main" ? `<h3 translate="no">${esc(a.label)}</h3>` : `<div class="accrename"><input id="accRename" type="text" value="${esc(a.label)}" maxlength="40" spellcheck="false" autocomplete="off" aria-label="Name"><button type="button" class="fixbtn" data-acc-rename>Save name</button></div>`;
+  accDialog().innerHTML = `${nameRow}<div class="acchead">${accBadges(a)}<span class="muted fs-sm">${accSub(a)}</span></div>
     <div class="accdlgm">${accMeter("Session (5hr)", a.windows?.five_hour)}${accMeter("Weekly (7 day)", a.windows?.seven_day)}<div class="muted fs-sm">${accFoot(a)}</div></div>
     <label class="sw"><span>Automatic switching<span class="d">${a.enabled ? "Opsboard may move to this account when the one in use runs out." : "Off — Opsboard never moves to this account by itself."}</span></span><input type="checkbox" data-acc-enable ${a.enabled ? "checked" : ""}><span class="tog"></span></label>
     <div class="row"><span class="msg" id="accMsg"></span>${a.id !== "main" ? `<button type="button" class="btn-danger" data-acc-delete>Delete</button>` : ""}<button type="button" data-acc-close>Close</button>${a.active ? "" : `<button type="button" class="btn-primary" data-acc-use>Use now</button>`}</div>`;
@@ -101,6 +105,15 @@ document.addEventListener("click", async e => {
     accDone(r); openAccDetail(id); accSay("okmsg", t("New sessions use this account"));
     return;
   }
+  const rn = e.target.closest("[data-acc-rename]");
+  if (rn) {
+    rn.disabled = true;
+    const r = await accPost({ action: "rename", id, label: $("accRename").value.trim() });
+    rn.disabled = false;
+    if (!r.ok) { accSay("err", r.error); return; }
+    accDone(r); openAccDetail(id); accSay("okmsg", t("Name saved"));
+    return;
+  }
   const del = e.target.closest("[data-acc-delete]");
   if (del) {
     const a = (data.claude_accounts?.accounts || []).find(x => x.id === id) || {};
@@ -122,5 +135,6 @@ document.addEventListener("change", async e => {
 document.addEventListener("keydown", e => {
   const card = e.target.closest?.("[data-acc-open]");
   if (card && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openAccDetail(card.dataset.accOpen); return; }
+  if (e.key === "Enter" && e.target.id === "accRename") { e.preventDefault(); $("accdlg").querySelector("[data-acc-rename]")?.click(); return; }
   if (e.key === "Enter" && $("accdlg")?.open && e.target.closest("#accName, #accToken")) { e.preventDefault(); $("accdlg").querySelector("[data-acc-save]")?.click(); }
 });

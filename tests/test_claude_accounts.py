@@ -53,6 +53,10 @@ class ClaudeAccountsTest(unittest.TestCase):
             cfg.set_secret(ca.secret_key(a["id"]), "")
         for key in ("claude.bin", "claude.accounts", "claude.auto_switch", "claude.disabled"):
             cfg.set(key, None, "user")
+        for key in ("claude.main_twin",):
+            cfg.set(key, None, "auto")
+        for key in ():
+            cfg.set(key, None, "user")
 
     def test_parse_probe_reads_both_windows_in_percent(self):
         line = json.dumps({"type": "rate_limit_event", "rate_limit_info": {"unifiedWindows": {"five_hour": {"utilization": 0.01, "resetsAt": 1795081800, "status": "allowed"}, "seven_day": {"utilization": 0.45, "resetsAt": 1795226400}}}})
@@ -162,30 +166,44 @@ class ClaudeAccountsTest(unittest.TestCase):
         claudeusage.CREDENTIALS_FILE.write_text(json.dumps({"claudeAiOauth": {"accessToken": token, "expiresAt": (time.time() + 3600) * 1000}}))
         claudeusage.reset()
 
-    def test_the_same_subscription_cannot_be_added_twice(self):
+    def test_the_login_twin_is_kept_as_a_token_and_a_second_token_is_refused(self):
         self.login_as(GOOD)
-        with self.assertRaises(ValueError) as err:
-            ca.add("Me again", "sk-ant-oat01-" + "d" * 40)
-        self.assertIn("«Claude Code login»", str(err.exception))
+        me = ca.add("Me", "sk-ant-oat01-" + "d" * 40)
+        self.assertEqual(cfg.get("claude.main_twin"), me)
+        self.assertEqual(ca.pool(), [me])
+        self.assertEqual(ca.active_id(), me)
+        self.assertTrue(ca.public()["accounts"][0]["login"])
         spare = ca.add("Spare", SPARE)
         with self.assertRaises(ValueError) as err:
             ca.add("Spare 2", SPARE[:-1] + "x")
         self.assertIn("«Spare»", str(err.exception))
         with self.assertRaises(ValueError):
             ca.add("spare", FULL)
-        self.assertEqual([a["id"] for a in ca.accounts()], [spare])
-        self.assertEqual(ca.usage(ca.MAIN)["windows"]["five_hour"]["percent"], 85)
+        self.assertEqual([a["id"] for a in ca.accounts()], [me, spare])
+        ca.remove(me)
+        self.assertFalse(cfg.get("claude.main_twin"))
+        self.assertEqual(ca.pool(), [ca.MAIN, spare])
 
-    def test_a_duplicate_already_added_is_removed_and_the_login_kept(self):
+    def test_a_twin_found_later_hides_the_login_and_deletes_nothing(self):
         twin = ca.add("Twin", "sk-ant-oat01-" + "d" * 40)
-        ca.switch(twin)
         self.login_as(GOOD)
         ca._usage[ca.MAIN] = ca.probe(ca.MAIN)
         self.assertEqual(ca.dedupe(), twin)
-        self.assertEqual(ca.accounts(), [])
-        self.assertEqual(ca.active_id(), ca.MAIN)
+        self.assertEqual([a["id"] for a in ca.accounts()], [twin])
+        self.assertTrue(cfg.secret(ca.secret_key(twin)))
+        self.assertEqual(ca.active_id(), twin)
         self.assertEqual(notify.load()[0]["kind"], "claude_duplicate")
         self.assertIsNone(ca.dedupe())
+
+    def test_rename(self):
+        work, spare = ca.add("Work", GOOD), ca.add("Spare", SPARE)
+        ca.rename(work, " Office ")
+        self.assertEqual(ca.label(work), "Office")
+        with self.assertRaises(ValueError):
+            ca.rename(work, "spare")
+        with self.assertRaises(ValueError):
+            ca.rename(work, "  ")
+        self.assertEqual(ca.label(spare), "Spare")
 
     def test_unknown_token_in_settings_is_never_overwritten(self):
         ca.add("Spare", SPARE)

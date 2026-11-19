@@ -375,6 +375,8 @@ class Handler(BaseHTTPRequestHandler):
                     claudeaccounts.refresh_all()
                 elif action == "decide":
                     note = claudeaccounts.decide(aid, bool(body.get("yes")), "in Opsboard")
+                elif action == "rename":
+                    claudeaccounts.rename(aid, body.get("label"))
                 elif action == "enable":
                     claudeaccounts.set_enabled(aid, bool(body.get("on")))
                 else:

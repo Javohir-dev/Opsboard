@@ -45,6 +45,7 @@ DEFAULTS = {
     "claude.accounts": [],
     "claude.auto_switch": True,
     "claude.disabled": [],
+    "claude.main_twin": "",
     "claude.switch_at": 80,
     "claude.switch_to": 60,
     "notify.sound": True,
