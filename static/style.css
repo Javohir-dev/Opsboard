@@ -1165,5 +1165,28 @@ dialog.accdlg .sw{margin-top:8px}
 .accpropbtns{display:flex;gap:8px;align-items:center}
 .hstats .accprop{margin:10px 0 0;padding:8px 10px;flex-direction:column;align-items:stretch;gap:6px;font-size:var(--fs-sm)}
 .hstats .accpropbtns{justify-content:space-between}
-dialog.accdlg .accrename{display:flex;gap:8px;align-items:center;margin-bottom:6px}
-dialog.accdlg .accrename input{flex:1;font-weight:650;font-size:var(--fs-lg)}
+dialog.accdlg{width:min(480px,calc(100vw - 32px));padding:0;overflow:hidden}
+.accdlg-head{display:flex;gap:12px;align-items:flex-start;padding:18px 20px 14px;border-bottom:1px solid var(--line)}
+.accname-view{display:flex;align-items:center;gap:6px;min-width:0;margin-bottom:6px}
+.accname-view h3{margin:0!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.accname-view .iconbtn{opacity:.55}
+.accname-view:hover .iconbtn,.accname-view .iconbtn:focus-visible{opacity:1}
+.accname-edit{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+dialog.accdlg .accname-edit input{flex:1;min-width:0;font-weight:650;font-size:var(--fs-lg);padding:5px 10px}
+.iconbtn.ghost{background:transparent;border-color:transparent}
+.iconbtn.ghost:hover{background:var(--panel2);border-color:var(--line);color:var(--text)}
+.iconbtn.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,transparent)}
+.accdlg-body{padding:16px 20px 4px}
+.accdlg-lims{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:10px}
+@media (max-width:460px){.accdlg-lims{grid-template-columns:1fr}}
+dialog.accdlg .accdlg-sw{margin:8px 20px 0;padding:12px 0;border-top:1px solid var(--line)}
+dialog.accdlg .msg{display:block;padding:0 20px;min-height:0;font-size:var(--fs-sm)}
+dialog.accdlg .msg:not(:empty){padding-top:8px}
+.accfootbar{display:flex;align-items:center;gap:10px;padding:14px 20px;margin-top:12px;background:var(--panel2);border-top:1px solid var(--line)}
+.accfootbar.danger{background:color-mix(in srgb,var(--bad) 10%,var(--panel));font-size:var(--fs-sm)}
+.accfootbar .grow{flex:1}
+.linkbtn.danger{color:var(--bad);display:inline-flex;align-items:center;gap:5px}
+dialog.accdlg .accadd label:first-child{margin-top:0}
+dialog.accdlg .accadd{padding-bottom:0;display:flex;flex-direction:column;gap:2px}
+.accdlg-head>.grow{flex:1;min-width:0}
+.accdlg-head>.iconbtn{flex:none;margin:-2px -6px 0 0}

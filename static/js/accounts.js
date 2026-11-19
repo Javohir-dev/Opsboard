@@ -41,31 +41,52 @@ function pageAccounts() {
 }
 function accDialog() {
   let d = $("accdlg");
-  if (!d) { d = document.createElement("dialog"); d.id = "accdlg"; d.className = "acct accdlg"; document.body.appendChild(d); }
+  if (!d) {
+    d = document.createElement("dialog"); d.id = "accdlg"; d.className = "acct accdlg"; document.body.appendChild(d);
+    d.addEventListener("cancel", e => { if (accUi.edit || accUi.del) { e.preventDefault(); accUi.edit = accUi.del = false; openAccDetail(d.dataset.acc, false); } });
+    d.addEventListener("click", e => { if (e.target === d) d.close(); });
+  }
   return d;
 }
 function accSay(cls, text) { const m = $("accMsg"); if (m) { m.className = "msg " + cls; m.textContent = text; } }
 function openAccAdd() {
-  accDialog().innerHTML = `<h3>Add a Claude account</h3>
-    <div class="muted fs-sm">Sign in to that account at claude.ai, run <code>claude setup-token</code> in a terminal and paste the token it prints. Opsboard checks it with Claude and keeps it in ${esc(data.config?._secret_store || "config.json")}.</div>
-    <label>Name<input id="accName" type="text" placeholder="e.g. Work Max" maxlength="40" spellcheck="false" autocomplete="off"></label>
-    <label>Token<input id="accToken" type="password" placeholder="sk-ant-oat01-…" autocomplete="off" spellcheck="false"></label>
-    <div class="row"><span class="msg" id="accMsg"></span><button type="button" data-acc-close>Cancel</button><button type="button" class="btn-primary" data-acc-save>Save</button></div>`;
+  accUi.edit = accUi.del = false;
+  accDialog().dataset.acc = "";
+  accDialog().innerHTML = `<div class="accdlg-head"><div class="grow"><h3>Add a Claude account</h3><div class="muted fs-sm">Sign in to that account at claude.ai, run <code>claude setup-token</code> in a terminal and paste the token it prints.</div></div>
+      <button type="button" class="iconbtn ghost" data-acc-close title="Close (Esc)" aria-label="Close">${icon("x", 16)}</button></div>
+    <form class="accdlg-body accadd" data-acc-add-form>
+      <label>Name<input id="accName" type="text" placeholder="e.g. Work Max" maxlength="40" spellcheck="false" autocomplete="off" required></label>
+      <label>Token<input id="accToken" type="password" placeholder="sk-ant-oat01-…" autocomplete="off" spellcheck="false" required></label>
+      <div class="muted fs-sm">Checked with Claude, then kept in ${esc(data.config?._secret_store || "config.json")}.</div>
+    </form>
+    <div class="msg" id="accMsg" role="status" aria-live="polite"></div>
+    <div class="accfootbar"><span class="grow"></span><button type="button" data-acc-close>Cancel</button><button type="button" class="btn-primary" data-acc-save>Save</button></div>`;
   translateTree(accDialog());
   accDialog().showModal();
   $("accName").focus();
 }
-function openAccDetail(id) {
+const accUi = { edit: false, del: false };
+function openAccDetail(id, fresh = true) {
   const a = (data.claude_accounts?.accounts || []).find(x => x.id === id);
-  if (!a) return;
-  accDialog().dataset.acc = id;
-  const nameRow = a.id === "main" ? `<h3 translate="no">${esc(a.label)}</h3>` : `<div class="accrename"><input id="accRename" type="text" value="${esc(a.label)}" maxlength="40" spellcheck="false" autocomplete="off" aria-label="Name"><button type="button" class="fixbtn" data-acc-rename>Save name</button></div>`;
-  accDialog().innerHTML = `${nameRow}<div class="acchead">${accBadges(a)}<span class="muted fs-sm">${accSub(a)}</span></div>
-    <div class="accdlgm">${accMeter("Session (5hr)", a.windows?.five_hour)}${accMeter("Weekly (7 day)", a.windows?.seven_day)}<div class="muted fs-sm">${accFoot(a)}</div></div>
-    <label class="sw"><span>Automatic switching<span class="d">${a.enabled ? "Opsboard may move to this account when the one in use runs out." : "Off — Opsboard never moves to this account by itself."}</span></span><input type="checkbox" data-acc-enable ${a.enabled ? "checked" : ""}><span class="tog"></span></label>
-    <div class="row"><span class="msg" id="accMsg"></span>${a.id !== "main" ? `<button type="button" class="btn-danger" data-acc-delete>Delete</button>` : ""}<button type="button" data-acc-close>Close</button>${a.active ? "" : `<button type="button" class="btn-primary" data-acc-use>Use now</button>`}</div>`;
-  translateTree(accDialog());
-  if (!accDialog().open) accDialog().showModal();
+  if (!a) { if (accDialog().open) accDialog().close(); return; }
+  if (fresh) { accUi.edit = false; accUi.del = false; }
+  const d = accDialog();
+  d.dataset.acc = id;
+  const title = accUi.edit
+    ? `<form class="accname-edit" data-acc-rename-form><input id="accRename" type="text" value="${esc(a.label)}" maxlength="40" spellcheck="false" autocomplete="off" aria-label="Account name" required>
+        <button type="submit" class="iconbtn ok" title="Save (Enter)" aria-label="Save">${icon("check", 15)}</button><button type="button" class="iconbtn" data-acc-edit-cancel title="Cancel (Esc)" aria-label="Cancel">${icon("x", 15)}</button></form>`
+    : `<div class="accname-view"><h3 translate="no" title="${esc(a.label)}">${esc(a.label)}</h3>${a.id !== "main" ? `<button type="button" class="iconbtn ghost" data-acc-edit title="Rename" aria-label="Rename">${icon("pencil", 14)}</button>` : ""}</div>`;
+  const foot = accUi.del
+    ? `<div class="accfootbar danger"><span class="grow">${a.active ? "It is in use — new sessions go back to Claude Code's own login." : "The token is removed from this Mac."} Delete <b translate="no">${esc(a.label)}</b>?</span><button type="button" data-acc-del-cancel>Cancel</button><button type="button" class="btn-danger" data-acc-delete>Delete</button></div>`
+    : `<div class="accfootbar">${a.id !== "main" ? `<button type="button" class="linkbtn danger" data-acc-del-ask>${icon("trash", 14)} Delete</button>` : ""}<span class="grow"></span>${a.active ? '<span class="muted fs-sm">New sessions use this account</span>' : `${data.claude_accounts?.busy ? '<span class="muted fs-sm" title="Sessions read the account from their settings">A session is working</span>' : ""}<button type="button" class="btn-primary" data-acc-use>Use now</button>`}</div>`;
+  d.innerHTML = `<div class="accdlg-head"><div class="grow">${title}<div class="acchead">${accBadges(a)}<span class="muted fs-sm">${accSub(a)}</span></div></div>
+      <button type="button" class="iconbtn ghost" data-acc-close title="Close (Esc)" aria-label="Close">${icon("x", 16)}</button></div>
+    <div class="accdlg-body"><div class="accdlg-lims">${accMeter("Session (5hr)", a.windows?.five_hour)}${accMeter("Weekly (7 day)", a.windows?.seven_day)}</div><div class="muted fs-sm">${accFoot(a)}</div></div>
+    <label class="sw accdlg-sw"><span>Automatic switching<span class="d">${a.enabled ? "Opsboard may offer this account when the one in use runs low." : "Off — Opsboard never offers this account."}</span></span><input type="checkbox" data-acc-enable ${a.enabled ? "checked" : ""}><span class="tog"></span></label>
+    <div class="msg" id="accMsg" role="status" aria-live="polite"></div>${foot}`;
+  translateTree(d);
+  if (!d.open) d.showModal();
+  if (accUi.edit) { const i = $("accRename"); i.focus(); i.select(); }
 }
 async function accPost(body) {
   try { return await (await fetch("/api/claude-accounts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json(); }
@@ -98,26 +119,18 @@ document.addEventListener("click", async e => {
   const id = accDialog().dataset.acc;
   const use = e.target.closest("[data-acc-use]");
   if (use) {
-    if (data.claude_accounts?.busy && !confirm(t("A Claude session is working right now. Switch anyway?"))) return;
     use.disabled = true;
     const r = await accPost({ action: "switch", id });
     if (!r.ok) { use.disabled = false; accSay("err", r.error); return; }
-    accDone(r); openAccDetail(id); accSay("okmsg", t("New sessions use this account"));
+    accDone(r); openAccDetail(id, false);
     return;
   }
-  const rn = e.target.closest("[data-acc-rename]");
-  if (rn) {
-    rn.disabled = true;
-    const r = await accPost({ action: "rename", id, label: $("accRename").value.trim() });
-    rn.disabled = false;
-    if (!r.ok) { accSay("err", r.error); return; }
-    accDone(r); openAccDetail(id); accSay("okmsg", t("Name saved"));
-    return;
-  }
+  if (e.target.closest("[data-acc-edit]")) { accUi.edit = true; openAccDetail(id, false); return; }
+  if (e.target.closest("[data-acc-edit-cancel]")) { accUi.edit = false; openAccDetail(id, false); return; }
+  if (e.target.closest("[data-acc-del-ask]")) { accUi.del = true; openAccDetail(id, false); return; }
+  if (e.target.closest("[data-acc-del-cancel]")) { accUi.del = false; openAccDetail(id, false); return; }
   const del = e.target.closest("[data-acc-delete]");
   if (del) {
-    const a = (data.claude_accounts?.accounts || []).find(x => x.id === id) || {};
-    if (!confirm(a.active ? t("This account is in use. Delete it and go back to Claude Code's own login?") : t("Delete this account and its token?"))) return;
     del.disabled = true;
     const r = await accPost({ action: "remove", id });
     if (!r.ok) { del.disabled = false; accSay("err", r.error); return; }
@@ -130,11 +143,21 @@ document.addEventListener("change", async e => {
   const id = accDialog().dataset.acc;
   const r = await accPost({ action: "enable", id, on: en.checked });
   if (!r.ok) { en.checked = !en.checked; accSay("err", r.error); return; }
-  accDone(r); openAccDetail(id);
+  accDone(r); openAccDetail(id, false);
+});
+document.addEventListener("submit", async e => {
+  if (e.target.closest("[data-acc-add-form]")) { e.preventDefault(); $("accdlg").querySelector("[data-acc-save]")?.click(); return; }
+  const f = e.target.closest("[data-acc-rename-form]");
+  if (!f) return;
+  e.preventDefault();
+  const id = accDialog().dataset.acc, name = $("accRename").value.trim();
+  const r = await accPost({ action: "rename", id, label: name });
+  if (!r.ok) { accSay("err", r.error); $("accRename").focus(); return; }
+  accUi.edit = false; accDone(r); openAccDetail(id, false);
 });
 document.addEventListener("keydown", e => {
   const card = e.target.closest?.("[data-acc-open]");
   if (card && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openAccDetail(card.dataset.accOpen); return; }
-  if (e.key === "Enter" && e.target.id === "accRename") { e.preventDefault(); $("accdlg").querySelector("[data-acc-rename]")?.click(); return; }
-  if (e.key === "Enter" && $("accdlg")?.open && e.target.closest("#accName, #accToken")) { e.preventDefault(); $("accdlg").querySelector("[data-acc-save]")?.click(); }
+  if (e.key === "Enter" && e.target.closest?.("#accName, #accToken")) { e.preventDefault(); $("accdlg").querySelector("[data-acc-save]")?.click(); }
+  if (e.key === "Escape" && $("accdlg")?.open && (accUi.edit || accUi.del)) { e.preventDefault(); accUi.edit = accUi.del = false; openAccDetail(accDialog().dataset.acc, false); return; }
 });
