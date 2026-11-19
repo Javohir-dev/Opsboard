@@ -11,6 +11,12 @@ function accFoot(a) {
 function accBadges(a) {
   return `${a.active ? '<span class="badge ok">in use</span>' : ""}${a.enabled ? "" : '<span class="badge idle" title="Automatic switching never moves to this account">auto-switch off</span>'}`;
 }
+function accProposal() {
+  const p = data.claude_accounts?.proposal;
+  if (!p) return "";
+  return `<div class="accprop"><div><b>Switch to <span translate="no">${esc(p.dst)}</span>?</b><div class="muted fs-sm"><span translate="no">${esc(p.src)}</span> is at ${esc(p.level)}%${p.to_level != null ? ` · <span translate="no">${esc(p.dst)}</span> ${esc(p.to_level)}%` : ""}</div></div>
+    <div class="accpropbtns"><button class="btn-primary" data-acc-decide="1" data-pid="${esc(p.pid)}">Switch</button><button class="linkbtn" data-acc-decide="0" data-pid="${esc(p.pid)}">Not now</button></div></div>`;
+}
 function pageAccounts() {
   const ca = data.claude_accounts || {};
   const rows = ca.accounts || [];
@@ -20,11 +26,12 @@ function pageAccounts() {
       ${accMeter("Session (5hr)", a.windows?.five_hour)}${accMeter("Weekly (7 day)", a.windows?.seven_day)}
       <div class="accfoot muted fs-sm">${accFoot(a)}</div></div>`).join("");
   const auto = conf("claude.auto_switch");
-  return `<div class="pagehead"><h1>Claude accounts</h1><span class="sub">${auto ? `Switches automatically above ${esc(conf("claude.switch_at"))}% to an account below ${esc(conf("claude.switch_to"))}%, when no session is working` : "Automatic switching is off"}${ca.active === "other" ? ` · <span class="err">${esc(ca.settings)} holds a token Opsboard does not know — automatic switching is paused</span>` : ""}</span>
+  return `<div class="pagehead"><h1>Claude accounts</h1><span class="sub">${auto ? `Above ${esc(conf("claude.switch_at"))}% asks to switch to an account below ${esc(conf("claude.switch_to"))}%` : "Automatic switching is off"}${ca.active === "other" ? ` · <span class="err">${esc(ca.settings)} holds a token Opsboard does not know — automatic switching is paused</span>` : ""}</span>
       <span class="h2-actions"><button class="iconbtn ${ca.refreshing ? "spin" : ""}" data-acc-refresh title="Check every account now" aria-label="Refresh">${icon("refresh", 15)}</button><button class="btn-primary" data-acc-add>${icon("plus", 14)} Add account</button></span></div>
+    ${accProposal()}
     <section><div class="accgrid">${cards || '<div class="muted">Loading…</div>'}</div></section>
     <section><h2>Automatic switching</h2><div class="panel form">
-      ${field("claude.auto_switch", "Switch automatically", { type: "toggle", help: `When the account in use passes the limit below and no Claude session is working, Opsboard moves to the account with the most room. It writes <code>CLAUDE_CODE_OAUTH_TOKEN</code> into <code>${esc(ca.settings || "~/.claude/settings.json")}</code>, which every new Claude Code session reads — VS Code included.` })}
+      ${field("claude.auto_switch", "Switch automatically", { type: "toggle", help: `When the account in use passes the limit below, Opsboard asks — here, in the sidebar and in Telegram — whether to move to the account with the most room, and switches when you say yes. It writes <code>CLAUDE_CODE_OAUTH_TOKEN</code> into <code>${esc(ca.settings || "~/.claude/settings.json")}</code>, which every new Claude Code session reads — VS Code included.` })}
       ${field("claude.switch_at", "Switch when above", { type: "number", help: "Percent of the 5-hour or the weekly limit, whichever is higher." })}
       ${field("claude.switch_to", "Only to an account below", { type: "number", help: "Percent, with numbers fresher than 30 minutes. Limits are checked every 3 min for the account in use and every 15 min for the rest — one tiny Haiku request each." })}
     </div></section>`;
@@ -63,6 +70,13 @@ async function accPost(body) {
 function accDone(r) { data.claude_accounts = r.claude_accounts; ui.forcePatch = true; render(); }
 document.addEventListener("click", async e => {
   if (e.target.closest("[data-acc-add]")) { openAccAdd(); return; }
+  const dc = e.target.closest("[data-acc-decide]");
+  if (dc) {
+    dc.disabled = true;
+    const r = await accPost({ action: "decide", id: dc.dataset.pid, yes: dc.dataset.accDecide === "1" });
+    if (r.ok) { accDone(r); if (r.note) alert(r.note); } else { dc.disabled = false; alert(r.error); }
+    return;
+  }
   const op = e.target.closest("[data-acc-open]");
   if (op) { openAccDetail(op.dataset.accOpen); return; }
   if (e.target.closest("[data-acc-close]")) { accDialog().close(); return; }

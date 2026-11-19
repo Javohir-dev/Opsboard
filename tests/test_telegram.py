@@ -397,6 +397,27 @@ class TelegramTest(unittest.TestCase):
             launch.assert_not_called()
         cfg.set("claude.fix_skill", None, "user")
 
+    def test_switch_proposal_buttons_decide_and_the_message_shows_the_result(self):
+        import claudeaccounts
+
+        cfg.set("telegram.chat_id", "111", "user")
+        claudeaccounts._proposal.update(pid="p1", src="main", dst="main", level=91, to_level=10, at=time.time(), msg=None)
+        telegram.on_notify({"kind": "claude_propose", "pid": "p1", "from": "Work", "to": "Spare", "level": 91, "to_level": 10})
+        sent = [b for m, b in SENT if m == "sendMessage"][-1]
+        self.assertIn("Switch Claude account to Spare?", sent["text"])
+        self.assertEqual([b["callback_data"] for b in sent["reply_markup"]["inline_keyboard"][0]], ["cacc:y:p1", "cacc:n:p1"])
+        self.assertTrue(claudeaccounts._proposal.get("msg"))
+        telegram.handle_callback({"id": "q", "data": "cacc:n:p1", "message": {"message_id": 5, "chat": {"id": 999}}})
+        self.assertEqual(claudeaccounts._proposal.get("pid"), "p1")
+        with mock.patch("claudeaccounts.switch") as sw:
+            telegram.handle_callback({"id": "q", "data": "cacc:n:p1", "message": {"message_id": 5, "chat": {"id": 111}}})
+            sw.assert_not_called()
+        self.assertEqual(claudeaccounts._proposal, {})
+        self.assertGreater(claudeaccounts._snooze["until"], time.time())
+        claudeaccounts._snooze["until"] = 0
+        time.sleep(0.3)
+        self.assertIn("Stayed on", [b for m, b in SENT if m == "editMessageText"][-1]["text"])
+
     def test_token_never_in_public_state(self):
         self.assertNotIn("x" * 35, json.dumps(telegram.public()))
 

@@ -1161,3 +1161,7 @@ dialog.accdlg .sw{margin-top:8px}
 .mt-1{margin-top:4px}
 .pagehead .h2-actions{margin-left:auto;display:flex;gap:8px;align-items:center}
 .accm .reset{font-size:var(--fs-sm);color:var(--muted);margin-top:2px}
+.accprop{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 14px;margin-bottom:16px;border:1px solid var(--warn);border-radius:var(--r-md);background:color-mix(in srgb,var(--warn) 10%,transparent)}
+.accpropbtns{display:flex;gap:8px;align-items:center}
+.hstats .accprop{margin:10px 0 0;padding:8px 10px;flex-direction:column;align-items:stretch;gap:6px;font-size:var(--fs-sm)}
+.hstats .accpropbtns{justify-content:space-between}

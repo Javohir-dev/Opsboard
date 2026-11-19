@@ -201,6 +201,9 @@ def text(item):
         return f"Claude account → {item.get('to')}", f"{item.get('from')} reached {item.get('level')}% — new sessions use {item.get('to')}{to}"
     if item.get("kind") == "claude_duplicate":
         return f"Duplicate Claude account removed · {item.get('from')}", f"It is the same subscription as {item.get('to')} — kept that one"
+    if item.get("kind") == "claude_propose":
+        to = f" ({item['to_level']}%)" if item.get("to_level") is not None else ""
+        return f"Switch Claude account to {item.get('to')}?", f"{item.get('from')} is at {item.get('level')}% — {item.get('to')} has room{to}. Confirm in Opsboard or Telegram." + (" A session is working right now." if item.get("busy") else "")
     if item.get("kind") == "claude_full":
         return f"Claude limit · {item.get('from')} at {item.get('level')}%", "No other account is below the switch threshold — add one or wait for a reset"
     ref = f"!{item['iid']}" if item.get("iid") else item.get("name", "")

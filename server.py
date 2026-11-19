@@ -362,6 +362,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 body = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 10000)) or b"{}")
                 action, aid = body.get("action"), str(body.get("id") or "")
+                note = ""
                 if action == "add":
                     claudeaccounts.add(body.get("label"), body.get("token"))
                 elif action == "remove":
@@ -372,12 +373,14 @@ class Handler(BaseHTTPRequestHandler):
                     claudeaccounts.switch(aid)
                 elif action == "refresh":
                     claudeaccounts.refresh_all()
+                elif action == "decide":
+                    note = claudeaccounts.decide(aid, bool(body.get("yes")), "in Opsboard")
                 elif action == "enable":
                     claudeaccounts.set_enabled(aid, bool(body.get("on")))
                 else:
                     raise ValueError("unknown action")
                 put("claude_accounts", claudeaccounts.public())
-                out = {"ok": True, "claude_accounts": claudeaccounts.public()}
+                out = {"ok": True, "claude_accounts": claudeaccounts.public(), "note": note}
             except (ValueError, OSError) as exc:
                 out = {"ok": False, "error": str(exc)[:200]}
             self.send(json.dumps(out), "application/json")

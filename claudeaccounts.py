@@ -23,6 +23,10 @@ _usage = {}
 _probe_lock = threading.Lock()
 _full = {"warned": False}
 _refreshing = {"on": False}
+_proposal = {}
+_snooze = {"until": 0.0}
+PROPOSAL_TTL, SNOOZE = 1800, 3600
+DECIDED = []
 
 
 def secret_key(aid):
@@ -236,20 +240,33 @@ def label(aid):
     return "Claude Code login" if aid == MAIN else next((a.get("label") or aid for a in accounts() if a["id"] == aid), aid)
 
 
+def measured(aid, now=None):
+    """Numbers Opsboard took itself through Claude Code in the last 30 minutes — never Claude Code's cache."""
+    u = _usage.get(aid) or {}
+    return u if u.get("windows") and (now or time.time()) - (u.get("at") or 0) < FRESH else None
+
+
 def auto_switch():
+    """Asks before switching: a proposal in the dashboard and in Telegram, carried out only on a yes."""
+    now = time.time()
+    if _proposal and now - _proposal["at"] > PROPOSAL_TTL:
+        _proposal.clear()
     if not cfg.get("claude.auto_switch") or not accounts():
         return None
     current = active_id()
-    if current == "other":
+    u = measured(current, now) if current != "other" else None
+    if not u:
         return None
-    lv = level(usage(current))
-    if lv is None or lv < int(cfg.get("claude.switch_at") or 80):
+    lv = level(u, now)
+    if lv < int(cfg.get("claude.switch_at") or 80):
         _full["warned"] = False
+        if _proposal:
+            _proposal.clear()
         return None
-    if busy():
+    if _proposal or now < _snooze["until"]:
         return None
-    target = pick(current)
-    if target and target != MAIN:
+    target = pick(current, now)
+    if target:
         _usage[target] = probe(target)
         fresh = level(_usage[target])
         if fresh is None or fresh >= int(cfg.get("claude.switch_to") or 60):
@@ -259,10 +276,36 @@ def auto_switch():
             _full["warned"] = True
             notify.claude_account({"kind": "claude_full", "from": label(current), "level": lv})
         return None
-    switch(target)
-    _full["warned"] = False
-    notify.claude_account({"kind": "claude_switch", "from": label(current), "to": label(target), "level": lv, "to_level": level(usage(target))})
-    return target
+    _proposal.update(pid=uuid.uuid4().hex[:10], src=current, dst=target, level=lv, to_level=level(usage(target)), at=now, msg=None)
+    notify.claude_account({"kind": "claude_propose", "pid": _proposal["pid"], "from": label(current), "to": label(target), "level": lv, "to_level": _proposal["to_level"], "busy": busy()})
+    return _proposal["pid"]
+
+
+def decide(pid, yes, where="Opsboard"):
+    """The answer to a switch proposal, from the dashboard or Telegram. Returns what happened, in one line."""
+    if not _proposal or _proposal.get("pid") != pid:
+        return "This question is no longer open."
+    p = dict(_proposal)
+    _proposal.clear()
+    if not yes:
+        _snooze["until"] = time.time() + SNOOZE
+        result = f"Stayed on {label(p['src'])} — asks again in an hour if it is still above the limit."
+    elif p["dst"] != MAIN and not any(a["id"] == p["dst"] for a in accounts()):
+        result = "That account was removed meanwhile — nothing changed."
+    else:
+        switch(p["dst"])
+        _full["warned"] = False
+        notify.claude_account({"kind": "claude_switch", "from": label(p["src"]), "to": label(p["dst"]), "level": p["level"], "to_level": p["to_level"]})
+        result = f"Switched to {label(p['dst'])} ({where})."
+    for hook in DECIDED:
+        threading.Thread(target=hook, args=(p, result), daemon=True).start()
+    put("claude_accounts", public())
+    return result
+
+
+def remember_message(pid, message_id):
+    if _proposal.get("pid") == pid:
+        _proposal["msg"] = message_id
 
 
 def public():
@@ -272,7 +315,10 @@ def public():
     for aid in [MAIN] + [a["id"] for a in accounts()]:
         u = usage(aid)
         rows.append({"id": aid, "label": label(aid), "active": aid == current, "enabled": enabled(aid), "windows": u.get("windows") or {}, "at": u.get("at") or 0, "error": u.get("error") or "", "level": level(u, now), "masked": cfg.masked(cfg.secret(secret_key(aid))) if aid != MAIN else ""})
-    return {"active": current, "accounts": rows, "busy": busy(), "refreshing": _refreshing["on"], "settings": str(SETTINGS).replace(str(Path.home()), "~", 1)}
+    prop = {k: _proposal[k] for k in ("pid", "level", "to_level", "at")} if _proposal else None
+    if prop:
+        prop.update(src=label(_proposal["src"]), dst=label(_proposal["dst"]))
+    return {"active": current, "proposal": prop, "accounts": rows, "busy": busy(), "refreshing": _refreshing["on"], "settings": str(SETTINGS).replace(str(Path.home()), "~", 1)}
 
 
 def collect():

@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 from urllib import error, request
 
+import claudeaccounts
 import config as cfg
 import notify
 from core import DATA, claude_bin, lock, log, project_root, state
@@ -610,6 +611,14 @@ def on_notify(item):
             }
             send(words[lang].format(n=item.get("level"), left=left).replace("\n\n", "\n"))
         return
+    if item.get("kind") == "claude_propose":
+        head, body = notify.text(item)
+        msg = send(f"🔀 <b>{esc(head)}</b>\n{esc(body)}", [[{"text": "✅ Switch", "callback_data": f"cacc:y:{item['pid']}"}, {"text": "✖ Not now", "callback_data": f"cacc:n:{item['pid']}"}]])
+        if msg:
+            claudeaccounts.remember_message(item["pid"], msg["message_id"])
+        return
+    if item.get("kind") == "claude_switch":
+        return
     if item.get("kind") in ("claude_switch", "claude_full", "claude_duplicate"):
         if cfg.get("telegram.notify"):
             head, body = notify.text(item)
@@ -1186,6 +1195,18 @@ def handle_message(msg):
         send(text_out, buttons)
 
 
+def _proposal_decided(p, result):
+    if p.get("msg"):
+        edit(p["msg"], f"🔀 <b>{esc(p_label(p))}</b>\n{esc(result)}")
+
+
+def p_label(p):
+    return f"{claudeaccounts.label(p['src'])} → {claudeaccounts.label(p['dst'])}"
+
+
+claudeaccounts.DECIDED.append(_proposal_decided)
+
+
 def handle_callback(cq):
     msg = cq.get("message") or {}
     if not chat_id() or (msg.get("chat") or {}).get("id") != chat_id():
@@ -1194,6 +1215,12 @@ def handle_callback(cq):
     note = ""
     if kind == "mr" and rest.isdigit():
         send(*cmd_mr(int(rest)))
+    elif kind == "cacc":
+        answer, _, pid = rest.partition(":")
+        try:
+            note = claudeaccounts.decide(pid, answer == "y", "from Telegram")
+        except (ValueError, OSError) as exc:
+            note = str(exc)[:190]
     elif kind == "fix":
         iid, _, flags = rest.partition(":")
         try:

@@ -39,6 +39,8 @@ class ClaudeAccountsTest(unittest.TestCase):
         ca.SETTINGS.write_text(json.dumps({"model": "opus", "env": {"KEEP": "1"}}))
         ca._usage.clear()
         ca._full["warned"] = False
+        ca._proposal.clear()
+        ca._snooze["until"] = 0
         with lock:
             state["sessions"], state["runs"], state["claude_usage"] = [], [], {}
         notify.clear()
@@ -87,20 +89,43 @@ class ClaudeAccountsTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             ca.switch("nope")
 
-    def test_auto_switch_moves_to_the_emptiest_account_only_when_idle(self):
+    def test_auto_switch_asks_first_and_switches_only_on_yes(self):
         work, spare, _ = ca.add("Work", GOOD), ca.add("Spare", SPARE), ca.add("Half", FULL)
         ca.switch(work)
         with lock:
             state["sessions"] = [{"status": "busy"}]
-        self.assertIsNone(ca.auto_switch())
+        pid = ca.auto_switch()
+        self.assertTrue(pid)
         self.assertEqual(ca.active_id(), work)
-        with lock:
-            state["sessions"] = [{"status": "idle"}]
-        self.assertEqual(ca.auto_switch(), spare)
-        self.assertEqual(ca.active_id(), spare)
         item = notify.load()[0]
-        self.assertEqual(item["kind"], "claude_switch")
+        self.assertEqual(item["kind"], "claude_propose")
         self.assertIn("Spare", item["head"])
+        self.assertIn("session is working", item["body"])
+        self.assertIsNone(ca.auto_switch())
+        self.assertEqual(ca.public()["proposal"]["dst"], "Spare")
+        self.assertIn("no longer open", ca.decide("other", True))
+        self.assertIn("Switched to Spare", ca.decide(pid, True))
+        self.assertEqual(ca.active_id(), spare)
+        self.assertEqual(notify.load()[0]["kind"], "claude_switch")
+        self.assertIsNone(ca.public()["proposal"])
+
+    def test_not_now_keeps_the_account_and_waits_an_hour(self):
+        work, _ = ca.add("Work", GOOD), ca.add("Spare", SPARE)
+        ca.switch(work)
+        pid = ca.auto_switch()
+        self.assertIn("Stayed on Work", ca.decide(pid, False))
+        self.assertEqual(ca.active_id(), work)
+        self.assertIsNone(ca.auto_switch())
+        ca._snooze["until"] = 0
+        self.assertTrue(ca.auto_switch())
+
+    def test_cached_numbers_never_start_a_switch(self):
+        ca.add("Spare", SPARE)
+        with lock:
+            state["claude_usage"] = {"limits": [{"kind": "weekly_all", "percent": 92, "resets_at": 4102444800}], "fetched": time.time()}
+        self.assertEqual(ca.level(ca.usage(ca.MAIN)), 92)
+        self.assertIsNone(ca.auto_switch())
+        self.assertEqual(notify.load(), [])
 
     def test_no_account_below_the_threshold_warns_once(self):
         work, half = ca.add("Work", GOOD), ca.add("Half", FULL)
@@ -124,7 +149,8 @@ class ClaudeAccountsTest(unittest.TestCase):
         self.assertEqual(ca.active_id(), work)
         ca.set_enabled(spare, True)
         ca._full["warned"] = False
-        self.assertEqual(ca.auto_switch(), spare)
+        ca.decide(ca.auto_switch(), True)
+        self.assertEqual(ca.active_id(), spare)
         ca.remove(spare)
         self.assertEqual(ca.active_id(), ca.MAIN)
         self.assertNotIn(ca.ENV_KEY, json.loads(ca.SETTINGS.read_text())["env"])
