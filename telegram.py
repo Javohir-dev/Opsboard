@@ -610,7 +610,7 @@ def on_notify(item):
             }
             send(words[lang].format(n=item.get("level"), left=left).replace("\n\n", "\n"))
         return
-    if item.get("kind") in ("claude_switch", "claude_full"):
+    if item.get("kind") in ("claude_switch", "claude_full", "claude_duplicate"):
         if cfg.get("telegram.notify"):
             head, body = notify.text(item)
             send(f"{'🔀' if item['kind'] == 'claude_switch' else '⛽'} <b>{esc(head)}</b>\n{esc(body)}")

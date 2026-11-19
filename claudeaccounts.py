@@ -7,6 +7,7 @@ import time
 import uuid
 from pathlib import Path
 
+import claudeusage
 import config as cfg
 import notify
 from core import DATA, claude_bin, lock, log, put, state
@@ -111,10 +112,20 @@ def parse_probe(lines):
     return windows, error
 
 
+def main_token():
+    if not cfg.get("claude.live_usage"):
+        return None
+    return claudeusage.token()[0]
+
+
 def probe(aid):
-    token = cfg.secret(secret_key(aid))
+    token = main_token() if aid == MAIN else cfg.secret(secret_key(aid))
     if not token:
-        return {"error": "no token saved", "at": time.time()}
+        return {"error": "no token saved" if aid != MAIN else "", "at": time.time()}
+    return probe_token(token)
+
+
+def probe_token(token):
     PROBE_HOME.mkdir(parents=True, exist_ok=True)
     env = {k: v for k, v in os.environ.items() if not k.startswith(("ANTHROPIC_", "CLAUDE_CODE_", "CLAUDE_CONFIG_DIR"))}
     env.update({ENV_KEY: token, "CLAUDE_CONFIG_DIR": str(PROBE_HOME)})
@@ -144,7 +155,55 @@ def main_usage():
 
 
 def usage(aid):
-    return main_usage() if aid == MAIN else _usage.get(aid) or {}
+    if aid == MAIN:
+        own = _usage.get(MAIN) or {}
+        return own if own.get("windows") else main_usage()
+    return _usage.get(aid) or {}
+
+
+def same(a, b):
+    """One subscription behind two tokens: both limit windows reset at the same second and are used alike."""
+    wa, wb = (a or {}).get("windows") or {}, (b or {}).get("windows") or {}
+    shared = [k for k in ("five_hour", "seven_day") if k in wa and k in wb]
+    if not shared or any(not wa[k].get("resets_at") for k in shared):
+        return False
+    return all(wa[k]["resets_at"] == wb[k]["resets_at"] and abs(wa[k]["percent"] - wb[k]["percent"]) <= 1 for k in shared)
+
+
+def pool():
+    return [MAIN] + [a["id"] for a in accounts()]
+
+
+def duplicate_of(result, skip=()):
+    """The account that turns out to be the same subscription, probed again now so the numbers are taken together."""
+    for aid in pool():
+        if aid in skip:
+            continue
+        if aid == MAIN and not main_token():
+            continue
+        _usage[aid] = probe(aid)
+        if same(result, _usage[aid]):
+            return aid
+    return None
+
+
+def dedupe():
+    """Keep one of two accounts that are the same subscription: the Claude Code login, else the one added first."""
+    ids = pool()
+    for i, keep in enumerate(ids):
+        for extra in ids[i + 1 :]:
+            if extra == MAIN or not same(usage(keep), usage(extra)):
+                continue
+            _usage[keep], _usage[extra] = probe(keep), probe(extra)
+            if not same(_usage[keep], _usage[extra]):
+                continue
+            if active_id() == extra:
+                switch(keep)
+            gone = label(extra)
+            remove(extra)
+            notify.claude_account({"kind": "claude_duplicate", "from": gone, "to": label(keep)})
+            return extra
+    return None
 
 
 def level(u, now=None):
@@ -221,10 +280,11 @@ def collect():
     now = time.time()
     if _probe_lock.acquire(blocking=False):
         try:
-            for a in accounts():
-                due = ACTIVE_EVERY if a["id"] == current else IDLE_EVERY
-                if now - (_usage.get(a["id"]) or {}).get("at", 0) >= due:
-                    _usage[a["id"]] = probe(a["id"])
+            for aid in pool() if accounts() else []:
+                due = ACTIVE_EVERY if aid == current else IDLE_EVERY
+                if now - (_usage.get(aid) or {}).get("at", 0) >= due:
+                    _usage[aid] = probe(aid)
+            dedupe()
         finally:
             _probe_lock.release()
     try:
@@ -242,12 +302,17 @@ def add(name, token):
         raise ValueError("this does not look like a token from claude setup-token")
     if any(cfg.secret(secret_key(a["id"])) == token for a in accounts()):
         raise ValueError("this token is already added")
+    if any(a.get("label", "").lower() == name.lower() for a in accounts()):
+        raise ValueError(f"an account named «{name}» is already added")
+    result = probe_token(token)
+    if not result.get("windows"):
+        raise ValueError(f"Claude did not accept this token: {result.get('error')}")
+    with _probe_lock:
+        twin = duplicate_of(result)
+    if twin:
+        raise ValueError(f"This account is already added as «{label(twin)}»")
     aid = uuid.uuid4().hex[:8]
     cfg.set_secret(secret_key(aid), token)
-    result = probe(aid)
-    if not result.get("windows"):
-        cfg.set_secret(secret_key(aid), "")
-        raise ValueError(f"Claude did not accept this token: {result.get('error')}")
     _usage[aid] = result
     cfg.set("claude.accounts", accounts() + [{"id": aid, "label": name}], "user", "Settings page")
     put("claude_accounts", public())
@@ -279,8 +344,9 @@ def refresh_all():
 
             system.collect_claude_usage()
             with _probe_lock:
-                for a in accounts():
-                    _usage[a["id"]] = probe(a["id"])
+                for aid in pool():
+                    _usage[aid] = probe(aid)
+                dedupe()
         finally:
             _refreshing["on"] = False
             put("claude_accounts", public())

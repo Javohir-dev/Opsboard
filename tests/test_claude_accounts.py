@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 import claudeaccounts as ca
+import claudeusage
 import config as cfg
 import notify
 from core import DATA, lock, state
@@ -16,7 +17,7 @@ FULL = "sk-ant-oat01-" + "c" * 40
 FAKE = """#!/bin/sh
 echo "$CLAUDE_CONFIG_DIR $*" >> "{log}"
 case "$CLAUDE_CODE_OAUTH_TOKEN" in
-  *aaaa*) u5=0.85 ;;
+  *aaaa*|*dddd*) u5=0.85 ;;
   *bbbb*) u5=0.30 ;;
   *cccc*) u5=0.70 ;;
   *) echo '{{"type":"result","is_error":true,"result":"Failed to authenticate. API Error: 401"}}'; exit 1 ;;
@@ -41,8 +42,11 @@ class ClaudeAccountsTest(unittest.TestCase):
         with lock:
             state["sessions"], state["runs"], state["claude_usage"] = [], [], {}
         notify.clear()
+        claudeusage.reset()
 
     def tearDown(self):
+        claudeusage.CREDENTIALS_FILE.unlink(missing_ok=True)
+        claudeusage.reset()
         for a in ca.accounts():
             cfg.set_secret(ca.secret_key(a["id"]), "")
         for key in ("claude.bin", "claude.accounts", "claude.auto_switch", "claude.disabled"):
@@ -127,6 +131,35 @@ class ClaudeAccountsTest(unittest.TestCase):
         self.assertEqual(cfg.secret(ca.secret_key(spare)), "")
         with self.assertRaises(ValueError):
             ca.set_enabled("nope", False)
+
+    def login_as(self, token):
+        claudeusage.CREDENTIALS_FILE.write_text(json.dumps({"claudeAiOauth": {"accessToken": token, "expiresAt": (time.time() + 3600) * 1000}}))
+        claudeusage.reset()
+
+    def test_the_same_subscription_cannot_be_added_twice(self):
+        self.login_as(GOOD)
+        with self.assertRaises(ValueError) as err:
+            ca.add("Me again", "sk-ant-oat01-" + "d" * 40)
+        self.assertIn("«Claude Code login»", str(err.exception))
+        spare = ca.add("Spare", SPARE)
+        with self.assertRaises(ValueError) as err:
+            ca.add("Spare 2", SPARE[:-1] + "x")
+        self.assertIn("«Spare»", str(err.exception))
+        with self.assertRaises(ValueError):
+            ca.add("spare", FULL)
+        self.assertEqual([a["id"] for a in ca.accounts()], [spare])
+        self.assertEqual(ca.usage(ca.MAIN)["windows"]["five_hour"]["percent"], 85)
+
+    def test_a_duplicate_already_added_is_removed_and_the_login_kept(self):
+        twin = ca.add("Twin", "sk-ant-oat01-" + "d" * 40)
+        ca.switch(twin)
+        self.login_as(GOOD)
+        ca._usage[ca.MAIN] = ca.probe(ca.MAIN)
+        self.assertEqual(ca.dedupe(), twin)
+        self.assertEqual(ca.accounts(), [])
+        self.assertEqual(ca.active_id(), ca.MAIN)
+        self.assertEqual(notify.load()[0]["kind"], "claude_duplicate")
+        self.assertIsNone(ca.dedupe())
 
     def test_unknown_token_in_settings_is_never_overwritten(self):
         ca.add("Spare", SPARE)

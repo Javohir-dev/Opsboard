@@ -33,3 +33,4 @@ tests/e2e/node_modules/
 opsboard.log*
 profile.local.json
 ops-dash.log*
+claude-probe/
