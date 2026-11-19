@@ -612,9 +612,10 @@ def on_notify(item):
             send(words[lang].format(n=item.get("level"), left=left).replace("\n\n", "\n"))
         return
     if item.get("kind") == "claude_propose":
-        send_proposal(item)
+        if "telegram" in (cfg.get("claude.ask_in") or []):
+            send_proposal(item)
         return
-    if item.get("kind") == "claude_switch":
+    if item.get("kind") == "claude_switch" and item.get("how") != "automatically":
         return
     if item.get("kind") in ("claude_switch", "claude_full", "claude_duplicate"):
         if cfg.get("telegram.notify"):

@@ -51,7 +51,7 @@ class ClaudeAccountsTest(unittest.TestCase):
         claudeusage.reset()
         for a in ca.accounts():
             cfg.set_secret(ca.secret_key(a["id"]), "")
-        for key in ("claude.bin", "claude.accounts", "claude.auto_switch", "claude.disabled"):
+        for key in ("claude.bin", "claude.accounts", "claude.auto_switch", "claude.disabled", "claude.switch_mode", "claude.watch", "claude.ask_in", "claude.when_none", "claude.switch_at", "claude.switch_to", "claude.confirm_manual"):
             cfg.set(key, None, "user")
         for key in ("claude.main_twin", "claude.main_twin_login"):
             cfg.set(key, None, "auto")
@@ -111,6 +111,13 @@ class ClaudeAccountsTest(unittest.TestCase):
         self.assertIn("Switched to Spare", ca.decide(pid, True))
         self.assertEqual(ca.active_id(), spare)
         self.assertEqual(notify.load()[0]["kind"], "claude_switch")
+        self.assertIsNone(ca.public()["proposal"])
+
+    def test_switching_by_hand_closes_the_open_question(self):
+        work, spare = ca.add("Work", GOOD), ca.add("Spare", SPARE)
+        ca.switch(work)
+        self.assertTrue(ca.auto_switch())
+        ca.switch(spare)
         self.assertIsNone(ca.public()["proposal"])
 
     def test_not_now_keeps_the_account_and_waits_an_hour(self):
@@ -209,6 +216,70 @@ class ClaudeAccountsTest(unittest.TestCase):
         self.assertEqual(ca.twin(), "")
         self.assertEqual(ca.pool(), [ca.MAIN, me])
         self.assertEqual(ca.active_id(), ca.MAIN)
+
+    def test_order_puts_use_first_ahead_and_last_resort_behind(self):
+        work = ca.add("Work", GOOD)
+        spare, half = ca.add("Spare", SPARE), ca.add("Half", FULL)
+        ca.switch(work)
+        cfg.set("claude.switch_to", 75, "user")
+        self.assertEqual(ca.pick(work), spare)
+        ca.update(spare, order="last")
+        self.assertEqual(ca.pick(work), half)
+        ca.update(half, order="last")
+        ca.update(spare, order="first")
+        self.assertEqual(ca.pick(work), spare)
+        self.assertEqual(next(r for r in ca.public()["accounts"] if r["id"] == spare)["order"], "first")
+        with self.assertRaises(ValueError):
+            ca.update(spare, order="sometimes")
+
+    def test_when_none_is_below_target_it_can_suggest_the_most_room(self):
+        work, half = ca.add("Work", GOOD), ca.add("Half", FULL)
+        ca.switch(work)
+        self.assertIsNone(ca.auto_switch())
+        self.assertEqual(notify.load()[0]["kind"], "claude_full")
+        cfg.set("claude.when_none", "suggest", "user")
+        ca._full["warned"] = False
+        self.assertTrue(ca.auto_switch())
+        self.assertEqual(ca.public()["proposal"]["dst"], "Half")
+
+    def test_switch_without_asking_switches_and_only_notifies(self):
+        work, spare = ca.add("Work", GOOD), ca.add("Spare", SPARE)
+        ca.switch(work)
+        cfg.set("claude.switch_mode", "auto", "user")
+        self.assertEqual(ca.auto_switch(), spare)
+        self.assertEqual(ca.active_id(), spare)
+        item = notify.load()[0]
+        self.assertEqual((item["kind"], item["how"]), ("claude_switch", "automatically"))
+        self.assertNotIn("claude_propose", [x["kind"] for x in notify.load()])
+
+    def test_rules_are_validated(self):
+        ok = {"mode": "ask", "switch_at": 85, "switch_to": 50, "watch": ["five_hour", "fable"], "ask_in": ["telegram", "nope"], "when_none": "suggest"}
+        ca.save_rules(ok)
+        self.assertEqual((cfg.get("claude.switch_at"), cfg.get("claude.switch_to"), cfg.get("claude.ask_in")), (85, 50, ["telegram"]))
+        for bad in ({"switch_at": 50, "switch_to": 60}, {"watch": []}, {"mode": "maybe"}, {"switch_to": 5}):
+            with self.assertRaises(ValueError):
+                ca.save_rules({**ok, **bad})
+
+    def test_watched_limits_decide_the_level(self):
+        u = {"windows": {"five_hour": {"percent": 10, "resets_at": 0}, "seven_day": {"percent": 30, "resets_at": 0}, "seven_day_fable": {"percent": 90, "resets_at": 0}}}
+        self.assertEqual(ca.level(u), 30)
+        cfg.set("claude.watch", ["five_hour", "fable"], "user")
+        self.assertEqual(ca.level(u), 90)
+
+    def test_add_options_check_and_replacing_a_token(self):
+        with self.assertRaises(ValueError):
+            ca.check("sk-ant-oat01-" + "z" * 40)
+        self.assertEqual(ca.check(SPARE)["windows"]["five_hour"]["percent"], 30)
+        spare = ca.add("", SPARE, include=False, switch_now=True)
+        self.assertTrue(ca.label(spare).startswith("Account ••••"))
+        self.assertFalse(ca.enabled(spare))
+        self.assertEqual(ca.active_id(), spare)
+        self.assertTrue(ca.public()["accounts"][-1]["added"])
+        with self.assertRaises(ValueError):
+            ca.update(spare, token=GOOD)
+        ca.update(spare, token=SPARE[:-1] + "q")
+        self.assertEqual(cfg.secret(ca.secret_key(spare)), SPARE[:-1] + "q")
+        self.assertEqual(json.loads(ca.SETTINGS.read_text())["env"][ca.ENV_KEY], SPARE[:-1] + "q")
 
     def test_rename(self):
         work, spare = ca.add("Work", GOOD), ca.add("Spare", SPARE)

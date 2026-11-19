@@ -25,7 +25,8 @@ _full = {"warned": False}
 _refreshing = {"on": False}
 _proposal = {}
 _snooze = {"until": 0.0}
-PROPOSAL_TTL, SNOOZE = 1800, 3600
+PROPOSAL_TTL, SNOOZE = 1800, 1800
+ORDER = {"first": 0, "normal": 1, "last": 2}
 DECIDED = []
 
 
@@ -115,6 +116,7 @@ def switch(aid):
         json.dump(data, fh, indent=2, ensure_ascii=False)
         fh.write("\n")
     os.replace(tmp, SETTINGS)
+    _proposal.clear()
     log.info("claude account: switched to %s", aid)
 
 
@@ -239,9 +241,14 @@ def dedupe():
     return None
 
 
+def watched(key):
+    watch = cfg.get("claude.watch") or ["five_hour", "seven_day"]
+    return key in watch or ("fable" in watch and key.startswith("seven_day_"))
+
+
 def level(u, now=None):
     now = now or time.time()
-    vals = [w["percent"] for k, w in (u.get("windows") or {}).items() if k in ("five_hour", "seven_day") and not (w.get("resets_at") and w["resets_at"] < now)]
+    vals = [w["percent"] for k, w in (u.get("windows") or {}).items() if watched(k) and not (w.get("resets_at") and w["resets_at"] < now)]
     return max(vals) if vals else (0 if u.get("windows") else None)
 
 
@@ -252,17 +259,21 @@ def busy():
     return any(s.get("status") == "busy" for s in sessions) or any(r.get("status") == "running" for r in runs)
 
 
-def pick(current, now=None):
+def order_of(aid):
+    return next((a.get("order") or "normal" for a in accounts() if a["id"] == aid), "normal")
+
+
+def pick(current, now=None, below=None):
+    """Among accounts in auto-switch with fresh numbers under the target: Use first, then Normal, then Last resort; most room first."""
     now = now or time.time()
-    below = int(cfg.get("claude.switch_to") or 60)
-    ids = pool()
+    below = int(cfg.get("claude.switch_to") or 60) if below is None else below
     cands = []
-    for aid in ids:
+    for aid in pool():
         u = usage(aid)
         lv = level(u, now)
         if aid != current and enabled(aid) and lv is not None and lv < below and now - (u.get("at") or 0) < FRESH:
-            cands.append((lv, aid))
-    return min(cands)[1] if cands else None
+            cands.append((ORDER.get(order_of(aid), 1), lv, aid))
+    return min(cands)[2] if cands else None
 
 
 def label(aid):
@@ -300,13 +311,20 @@ def auto_switch():
         fresh = level(_usage[target])
         if fresh is None or fresh >= int(cfg.get("claude.switch_to") or 60):
             target = pick(current)
+    if not target and cfg.get("claude.when_none") == "suggest":
+        target = pick(current, now, below=lv)
     if not target:
         if not _full["warned"]:
             _full["warned"] = True
             notify.claude_account({"kind": "claude_full", "from": label(current), "level": lv})
         return None
     _proposal.update(pid=uuid.uuid4().hex[:10], src=current, dst=target, level=lv, to_level=level(usage(target)), at=now, msg=None)
-    notify.claude_account(proposal_item())
+    if cfg.get("claude.switch_mode") == "auto":
+        decide(_proposal["pid"], True, "automatically")
+        return target
+    item = notify.claude_account(proposal_item())
+    if "desktop" in (cfg.get("claude.ask_in") or []):
+        notify.os_notify(*notify.text(item))
     return _proposal["pid"]
 
 
@@ -329,18 +347,35 @@ def decide(pid, yes, where="Opsboard"):
     _proposal.clear()
     if not yes:
         _snooze["until"] = time.time() + SNOOZE
-        result = f"Stayed on {label(p['src'])} — asks again in an hour if it is still above the limit."
+        result = f"Stayed on {label(p['src'])} — asks again in 30 minutes if it is still above the limit."
     elif p["dst"] != MAIN and not any(a["id"] == p["dst"] for a in accounts()):
         result = "That account was removed meanwhile — nothing changed."
     else:
         switch(p["dst"])
         _full["warned"] = False
-        notify.claude_account({"kind": "claude_switch", "from": label(p["src"]), "to": label(p["dst"]), "level": p["level"], "to_level": p["to_level"]})
+        notify.claude_account({"kind": "claude_switch", "from": label(p["src"]), "to": label(p["dst"]), "level": p["level"], "to_level": p["to_level"], "how": where, "src_id": p["src"]})
         result = f"Switched to {label(p['dst'])} ({where})."
     for hook in DECIDED:
         threading.Thread(target=hook, args=(p, result), daemon=True).start()
     put("claude_accounts", public())
     return result
+
+
+def save_rules(body):
+    mode, when = body.get("mode"), body.get("when_none")
+    watch = [w for w in body.get("watch") or [] if w in ("five_hour", "seven_day", "fable")]
+    ask = [w for w in body.get("ask_in") or [] if w in ("sidebar", "telegram", "desktop")]
+    at, to = int(body.get("switch_at")), int(body.get("switch_to"))
+    if mode not in ("ask", "auto") or when not in ("suggest", "stay"):
+        raise ValueError("unknown rule")
+    if not watch:
+        raise ValueError("watch at least one limit")
+    if not (10 <= to < at <= 100):
+        raise ValueError("the target must be below the trigger, both between 10 and 100")
+    for key, value in (("claude.switch_mode", mode), ("claude.watch", watch), ("claude.ask_in", ask), ("claude.when_none", when), ("claude.switch_at", at), ("claude.switch_to", to)):
+        cfg.set(key, value, "user", "Accounts page")
+    if "auto_switch" in body:
+        cfg.set("claude.auto_switch", bool(body["auto_switch"]), "user", "Accounts page")
 
 
 def remember_message(pid, message_id):
@@ -360,11 +395,14 @@ def public():
         windows = dict(u.get("windows") or {})
         if aid in (MAIN, twin()):
             windows.update({k: w for k, w in (login.get("windows") or {}).items() if k.startswith("seven_day_") and k not in windows})
-        rows.append({"id": aid, "label": label(aid), "active": aid == current, "enabled": enabled(aid), "windows": windows, "plan": plan if aid in (MAIN, twin()) else "", "at": u.get("at") or 0, "error": u.get("error") or "", "level": level(u, now), "masked": cfg.masked(cfg.secret(secret_key(aid))) if aid != MAIN else "", "login": aid == twin()})
+        rows.append({"id": aid, "label": label(aid), "active": aid == current, "enabled": enabled(aid), "windows": windows, "plan": plan if aid in (MAIN, twin()) else "", "at": u.get("at") or 0, "error": u.get("error") or "", "level": level(u, now), "masked": cfg.masked(cfg.secret(secret_key(aid))) if aid != MAIN else "", "login": aid == twin(), "added": next((x.get("added") or 0 for x in accounts() if x["id"] == aid), 0), "order": order_of(aid) if aid != MAIN else "normal"})
     prop = {k: _proposal[k] for k in ("pid", "level", "to_level", "at")} if _proposal else None
     if prop:
         prop.update(src=label(_proposal["src"]), dst=label(_proposal["dst"]))
-    return {"active": current, "proposal": prop, "accounts": rows, "busy": busy(), "refreshing": _refreshing["on"], "settings": str(SETTINGS).replace(str(Path.home()), "~", 1)}
+    nxt = pick(current, now)
+    for r in rows:
+        r["next"] = r["id"] == nxt
+    return {"active": current, "mode": cfg.get("claude.switch_mode") or "ask", "ask_in": cfg.get("claude.ask_in") or [], "watch": cfg.get("claude.watch") or [], "when_none": cfg.get("claude.when_none") or "stay", "confirm_manual": bool(cfg.get("claude.confirm_manual")), "proposal": prop, "accounts": rows, "busy": busy(), "refreshing": _refreshing["on"], "settings": str(SETTINGS).replace(str(Path.home()), "~", 1)}
 
 
 def collect():
@@ -386,10 +424,23 @@ def collect():
     put("claude_accounts", public())
 
 
-def add(name, token):
+def check(token):
+    """A token tried without saving it: its limits, or why Claude refused it."""
+    token = str(token or "").strip()
+    if not TOKEN_RE.fullmatch(token):
+        raise ValueError("this does not look like a token from claude setup-token")
+    if any(cfg.secret(secret_key(a["id"])) == token for a in accounts()):
+        raise ValueError("this token is already added")
+    result = probe_token(token)
+    if not result.get("windows"):
+        raise ValueError(f"Claude did not accept this token: {result.get('error')}")
+    return result
+
+
+def add(name, token, include=True, switch_now=False):
     name, token = str(name or "").strip()[:40], str(token or "").strip()
     if not name:
-        raise ValueError("give the account a name")
+        name = f"Account {cfg.masked(token)}"
     if not TOKEN_RE.fullmatch(token):
         raise ValueError("this does not look like a token from claude setup-token")
     if any(cfg.secret(secret_key(a["id"])) == token for a in accounts()):
@@ -408,9 +459,34 @@ def add(name, token):
     _usage[aid] = result
     if dup == MAIN:
         set_twin(aid)
-    cfg.set("claude.accounts", accounts() + [{"id": aid, "label": name}], "user", "Settings page")
+    cfg.set("claude.accounts", accounts() + [{"id": aid, "label": name, "added": int(time.time())}], "user", "Accounts page")
+    if not include:
+        set_enabled(aid, False)
+    if switch_now:
+        switch(aid)
     put("claude_accounts", public())
     return aid
+
+
+def update(aid, name=None, order=None, token=None):
+    """The Edit dialog: name, order when several have room, a new token for the same account."""
+    if not any(a["id"] == aid for a in accounts()):
+        raise ValueError("unknown account")
+    if name is not None:
+        rename(aid, name)
+    if order is not None:
+        if order not in ORDER:
+            raise ValueError("unknown order")
+        cfg.set("claude.accounts", [dict(a, order=order) if a["id"] == aid else a for a in accounts()], "user", "Accounts page")
+    if token:
+        result = check(token)
+        if not same(result, usage(aid)) and (usage(aid).get("windows")):
+            raise ValueError("this token belongs to another account — add it as a new one")
+        in_use = active_id() == aid and twin() != aid
+        cfg.set_secret(secret_key(aid), str(token).strip())
+        _usage[aid] = result
+        if in_use:
+            switch(aid)
 
 
 def rename(aid, name):

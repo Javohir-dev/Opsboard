@@ -364,7 +364,18 @@ class Handler(BaseHTTPRequestHandler):
                 action, aid = body.get("action"), str(body.get("id") or "")
                 note = ""
                 if action == "add":
-                    claudeaccounts.add(body.get("label"), body.get("token"))
+                    claudeaccounts.add(body.get("label"), body.get("token"), body.get("include", True) is not False, bool(body.get("switch_now")))
+                elif action == "check":
+                    r = claudeaccounts.check(body.get("token"))
+                    note = json.dumps(r.get("windows") or {})
+                elif action == "update":
+                    claudeaccounts.update(aid, body.get("label"), body.get("order"), body.get("token") or None)
+                    if "enabled" in body:
+                        claudeaccounts.set_enabled(aid, bool(body.get("enabled")))
+                elif action == "rules":
+                    claudeaccounts.save_rules(body)
+                elif action == "confirm_manual":
+                    cfg.set("claude.confirm_manual", bool(body.get("on")), "user", "Accounts page")
                 elif action == "remove":
                     claudeaccounts.remove(aid)
                 elif action == "switch":
