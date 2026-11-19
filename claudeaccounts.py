@@ -287,8 +287,19 @@ def auto_switch():
             notify.claude_account({"kind": "claude_full", "from": label(current), "level": lv})
         return None
     _proposal.update(pid=uuid.uuid4().hex[:10], src=current, dst=target, level=lv, to_level=level(usage(target)), at=now, msg=None)
-    notify.claude_account({"kind": "claude_propose", "pid": _proposal["pid"], "from": label(current), "to": label(target), "level": lv, "to_level": _proposal["to_level"], "busy": busy()})
+    notify.claude_account(proposal_item())
     return _proposal["pid"]
+
+
+def _brief(aid):
+    w = usage(aid).get("windows") or {}
+    return {k: [w[k]["percent"], w[k].get("resets_at") or 0] for k in ("five_hour", "seven_day") if k in w}
+
+
+def proposal_item():
+    """Everything the bell and Telegram show for the open proposal: both accounts with both windows."""
+    p = _proposal
+    return {"kind": "claude_propose", "pid": p["pid"], "from": label(p["src"]), "to": label(p["dst"]), "level": p["level"], "to_level": p["to_level"], "busy": busy(), "src_w": _brief(p["src"]), "dst_w": _brief(p["dst"]), "switch_at": int(cfg.get("claude.switch_at") or 80)}
 
 
 def decide(pid, yes, where="Opsboard"):

@@ -612,10 +612,7 @@ def on_notify(item):
             send(words[lang].format(n=item.get("level"), left=left).replace("\n\n", "\n"))
         return
     if item.get("kind") == "claude_propose":
-        head, body = notify.text(item)
-        msg = send(f"🔀 <b>{esc(head)}</b>\n{esc(body)}", [[{"text": "✅ Switch", "callback_data": f"cacc:y:{item['pid']}"}, {"text": "✖ Not now", "callback_data": f"cacc:n:{item['pid']}"}]])
-        if msg:
-            claudeaccounts.remember_message(item["pid"], msg["message_id"])
+        send_proposal(item)
         return
     if item.get("kind") == "claude_switch":
         return
@@ -1195,9 +1192,74 @@ def handle_message(msg):
         send(text_out, buttons)
 
 
+PROPOSAL = {
+    "uz": {"title": "Claude akkauntini almashtiraymi?", "now": "Hozir", "to": "Taklif", "s": "5 soat", "w": "Hafta", "why": "{name} limiti {n}% dan oshdi ({lim}% chegara).", "busy": "⚠️ Hozir sessiya ishlayapti — u ham yangi akkauntga o'tadi.", "yes": "✅ {name} ga o'tish", "no": "✖ Qolish", "later": "«Qolish» — 1 soatdan keyin yana so'rayman.", "resets": "tiklanadi", "done": "✅ <b>O'tildi</b> → {name}", "stay": "✖ <b>Qolindi</b> — {name}", "gone": "Bu savol yopilgan."},
+    "en": {"title": "Switch Claude account?", "now": "Now", "to": "Offer", "s": "5 h", "w": "Week", "why": "{name} passed {n}% (limit {lim}%).", "busy": "⚠️ A session is working — it moves to the new account too.", "yes": "✅ Switch to {name}", "no": "✖ Stay", "later": "Stay — I'll ask again in an hour.", "resets": "resets", "done": "✅ <b>Switched</b> → {name}", "stay": "✖ <b>Stayed</b> on {name}", "gone": "This question is closed."},
+    "ru": {"title": "Переключить аккаунт Claude?", "now": "Сейчас", "to": "Предлагаю", "s": "5 ч", "w": "Неделя", "why": "{name} превысил {n}% (порог {lim}%).", "busy": "⚠️ Сейчас работает сессия — она тоже перейдёт.", "yes": "✅ Перейти на {name}", "no": "✖ Остаться", "later": "«Остаться» — спрошу снова через час.", "resets": "сброс", "done": "✅ <b>Переключено</b> → {name}", "stay": "✖ <b>Остались</b> на {name}", "gone": "Вопрос закрыт."},
+}
+DAYS = {"uz": ["Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya"], "en": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], "ru": ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]}
+
+
+def _short(name):
+    return name.split("@")[0] if "@" in name else name
+
+
+def _pbar(p):
+    p = max(0, min(100, int(p)))
+    full = round(p / 10)
+    return ("🟥" if p >= 95 else "🟧" if p >= 80 else "🟩") + " " + "█" * full + "░" * (10 - full)
+
+
+def _when(ts, lang):
+    if not ts:
+        return ""
+    t = time.localtime(ts)
+    return time.strftime("%H:%M", t) if time.strftime("%Y%m%d", t) == time.strftime("%Y%m%d") else f"{DAYS[lang][t.tm_wday]} {time.strftime('%H:%M', t)}"
+
+
+def _windows(w, lang, words):
+    rows = []
+    for key, name in (("five_hour", words["s"]), ("seven_day", words["w"])):
+        if key in w:
+            p, ts = w[key]
+            rows.append(f"{name:<7}{_pbar(p)} {p:>3}%" + (f"  · {words['resets']} {_when(ts, lang)}" if ts else ""))
+    return "\n".join(rows)
+
+
+def proposal_text(item):
+    lang = _bot_lang()
+    words = PROPOSAL[lang]
+    src, dst = item.get("from") or "", item.get("to") or ""
+    parts = [
+        f"🔀 <b>{words['title']}</b>",
+        "<i>" + esc(words["why"].format(name=_short(src), n=item.get("level"), lim=item.get("switch_at") or 80)) + "</i>",
+        "",
+    ]
+    for icon_, word, name, w in (("📍", words["now"], src, item.get("src_w")), ("➡️", words["to"], dst, item.get("dst_w"))):
+        parts.append(f"{icon_} <b>{word}</b> · <code>{esc(name)}</code>")
+        if w:
+            parts.append(f"<pre>{esc(_windows(w, lang, words))}</pre>")
+    if item.get("busy"):
+        parts.append(words["busy"])
+    parts.append(f"<i>{esc(words['later'])}</i>")
+    return "\n".join(parts)
+
+
+def send_proposal(item):
+    words = PROPOSAL[_bot_lang()]
+    buttons = [[{"text": words["yes"].format(name=_short(item.get("to") or "")), "callback_data": f"cacc:y:{item['pid']}"}], [{"text": words["no"], "callback_data": f"cacc:n:{item['pid']}"}]]
+    msg = send(proposal_text(item), buttons)
+    if msg:
+        claudeaccounts.remember_message(item["pid"], msg["message_id"])
+    return msg
+
+
 def _proposal_decided(p, result):
-    if p.get("msg"):
-        edit(p["msg"], f"🔀 <b>{esc(p_label(p))}</b>\n{esc(result)}")
+    if not p.get("msg"):
+        return
+    words = PROPOSAL[_bot_lang()]
+    head = words["done"].format(name=esc(claudeaccounts.label(p["dst"]))) if result.startswith("Switched") else words["stay"].format(name=esc(claudeaccounts.label(p["src"]))) if result.startswith("Stayed") else esc(result)
+    edit(p["msg"], f"🔀 {head}\n<i>{esc(result)}</i>")
 
 
 def p_label(p):
