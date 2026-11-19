@@ -37,7 +37,7 @@ function draw(){
   h+='</div>';
  });
  if(!(d.l||[]).length)h+='<div class="n">No limits yet — run /usage once in Claude Code.</div>';
- h+='<div class="n">'+(msg||(d.s=="live"?"⚡ live · updated "+ago(d.f):"🗂 from Claude Code's cache · "+ago(d.f)))+'</div>';
+ h+='<div class="n">'+(msg||(d.s=="account"?"🔑 setup token · measured "+ago(d.f):d.s=="live"?"⚡ live · updated "+ago(d.f):"🗂 from Claude Code's cache · "+ago(d.f)))+'</div>';
  if(d.x)h+='<div class="x">⚠️ '+e(d.x)+'</div>';
  document.getElementById("r").innerHTML=h;
 }

@@ -284,7 +284,23 @@ def _claude_usage():
         usage = dict(state.get("claude_usage") or {})
     if not (cfg.get("claude.live_usage") and usage.get("limits")):
         usage = system.claude_usage(live=False) or {}
-    return usage
+    return _active_usage() or usage
+
+
+def _active_usage():
+    """Limits of the account new sessions use, when that is a setup-token account and not Claude Code's own sign-in."""
+    import claudeaccounts as ca
+
+    aid = ca.active_id()
+    if aid == ca.MAIN or aid == ca.twin() or ca.signed_in(aid):
+        return None
+    u = ca.usage(aid)
+    names = {"five_hour": "Session (5hr)", "seven_day": "Weekly (7 day)"}
+    limits = [
+        {"label": names.get(k) or f"Weekly {w.get('label') or k}", "kind": k, "percent": int(w.get("percent") or 0), "severity": "critical" if "rejected" in str(w.get("status")) else "warning" if "warning" in str(w.get("status")) else "normal", "resets_at": int(w.get("resets_at") or 0)}
+        for k, w in (u.get("windows") or {}).items()
+    ]
+    return {"limits": limits, "fetched": u.get("at") or 0, "account": {"email": ca.label(aid), "org": "setup token"}, "source": "account", "live_error": u.get("error") or ""}
 
 
 def usage_data():
@@ -470,10 +486,7 @@ def cmd_usage():
     import system
 
     live_on = bool(cfg.get("claude.live_usage"))
-    with lock:
-        usage = dict(state.get("claude_usage") or {})
-    if not (live_on and usage.get("limits")):
-        usage = system.claude_usage(live=False) or {}
+    usage = _claude_usage()
     acct = usage.get("account") or {}
     if not usage.get("limits"):
         hint = "Run /usage once in Claude Code — it saves your limits there." if acct.get("email") else "Claude Code is not signed in on this Mac."
@@ -488,7 +501,9 @@ def cmd_usage():
         dot = "🔴" if pct >= 95 or lim.get("severity") == "critical" else "🟠" if pct >= 80 or lim.get("severity") == "warning" else "🟢"
         lines.append(f"{dot} <b>{esc(lim['label'])}</b> · {'—' if past else str(pct) + '%'}\n<code>{_bar(pct)}</code>" + (f"\n{_until(lim['resets_at'])}" if lim.get("resets_at") else "") + "\n")
     lines.append("")
-    if usage.get("source") == "live":
+    if usage.get("source") == "account":
+        lines.append(f"🔑 measured by Opsboard {_dur(time.time() - (usage.get('fetched') or 0))} ago · Claude Code itself cannot show usage with a setup token")
+    elif usage.get("source") == "live":
         lines.append("⚡ live — updated every 10 minutes")
     else:
         age = time.time() - (usage.get("fetched") or 0)
