@@ -58,10 +58,29 @@ def _read_settings():
     return data
 
 
+def login_email():
+    with lock:
+        email = ((state.get("claude_usage") or {}).get("account") or {}).get("email") or ""
+    if not email:
+        try:
+            email = (json.loads(Path(os.environ.get("OPS_CLAUDE_JSON", Path.home() / ".claude.json")).read_text()).get("oauthAccount") or {}).get("emailAddress") or ""
+        except (OSError, ValueError):
+            email = ""
+    return email.lower()
+
+
+def set_twin(aid):
+    cfg.set("claude.main_twin", aid or None, "auto", "same limit windows")
+    cfg.set("claude.main_twin_login", login_email() if aid else None, "auto", "Claude Code login")
+
+
 def twin():
-    """The setup-token account that is the same subscription as Claude Code's login; the login is then shown as that account."""
+    """The setup-token account that is the same subscription as Claude Code's login — forgotten once you log in to another account."""
     t = cfg.get("claude.main_twin") or ""
-    return t if any(a["id"] == t for a in accounts()) else ""
+    if not t or not any(a["id"] == t for a in accounts()):
+        return ""
+    known, now = (cfg.get("claude.main_twin_login") or "").lower(), login_email()
+    return t if known and known == now else ""
 
 
 def active_id():
@@ -214,7 +233,7 @@ def dedupe():
             continue
         _usage[MAIN], _usage[a["id"]] = probe(MAIN), probe(a["id"])
         if same(_usage[MAIN], _usage[a["id"]]):
-            cfg.set("claude.main_twin", a["id"], "auto", "same limit windows")
+            set_twin(a["id"])
             notify.claude_account({"kind": "claude_duplicate", "from": "Claude Code login", "to": label(a["id"])})
             return a["id"]
     return None
@@ -388,7 +407,7 @@ def add(name, token):
     cfg.set_secret(secret_key(aid), token)
     _usage[aid] = result
     if dup == MAIN:
-        cfg.set("claude.main_twin", aid, "auto", "same limit windows")
+        set_twin(aid)
     cfg.set("claude.accounts", accounts() + [{"id": aid, "label": name}], "user", "Settings page")
     put("claude_accounts", public())
     return aid
@@ -411,7 +430,7 @@ def remove(aid):
     if active_id() == aid:
         switch(MAIN)
     if cfg.get("claude.main_twin") == aid:
-        cfg.set("claude.main_twin", None, "auto")
+        set_twin("")
     set_enabled(aid, True)
     cfg.set("claude.accounts", [a for a in accounts() if a["id"] != aid] or None, "user", "Settings page")
     cfg.set_secret(secret_key(aid), "")

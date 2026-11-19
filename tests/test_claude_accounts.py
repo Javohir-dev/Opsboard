@@ -42,7 +42,7 @@ class ClaudeAccountsTest(unittest.TestCase):
         ca._proposal.clear()
         ca._snooze["until"] = 0
         with lock:
-            state["sessions"], state["runs"], state["claude_usage"] = [], [], {}
+            state["sessions"], state["runs"], state["claude_usage"] = [], [], {"account": {"email": "me@x.uz"}}
         notify.clear()
         claudeusage.reset()
 
@@ -53,7 +53,7 @@ class ClaudeAccountsTest(unittest.TestCase):
             cfg.set_secret(ca.secret_key(a["id"]), "")
         for key in ("claude.bin", "claude.accounts", "claude.auto_switch", "claude.disabled"):
             cfg.set(key, None, "user")
-        for key in ("claude.main_twin",):
+        for key in ("claude.main_twin", "claude.main_twin_login"):
             cfg.set(key, None, "auto")
         for key in ():
             cfg.set(key, None, "user")
@@ -197,6 +197,18 @@ class ClaudeAccountsTest(unittest.TestCase):
         self.assertEqual(ca.active_id(), twin)
         self.assertEqual(notify.load()[0]["kind"], "claude_duplicate")
         self.assertIsNone(ca.dedupe())
+
+    def test_logging_in_to_another_account_forgets_the_twin(self):
+        self.login_as(GOOD)
+        with lock:
+            state["claude_usage"] = {"account": {"email": "me@x.uz"}}
+        me = ca.add("Me", "sk-ant-oat01-" + "d" * 40)
+        self.assertEqual(ca.twin(), me)
+        with lock:
+            state["claude_usage"] = {"account": {"email": "other@x.uz"}}
+        self.assertEqual(ca.twin(), "")
+        self.assertEqual(ca.pool(), [ca.MAIN, me])
+        self.assertEqual(ca.active_id(), ca.MAIN)
 
     def test_rename(self):
         work, spare = ca.add("Work", GOOD), ca.add("Spare", SPARE)
