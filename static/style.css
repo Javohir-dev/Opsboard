@@ -1337,3 +1337,6 @@ dialog.accdlg .accswitch{margin:0;flex-direction:row}
 .accconfirmfoot .grow{flex:1}
 @media (max-width:700px){.acchead2 .h2-actions{margin-left:0}.accrulesask{margin-left:0}.acctoast{left:16px;right:16px}}
 .accpop[hidden]{display:none}
+.accseg.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.accwrap{white-space:normal;word-break:break-all;font-size:12px;padding:8px 0}
+.acccheck.wait svg{animation:spin 1.2s linear infinite}

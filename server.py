@@ -365,6 +365,11 @@ class Handler(BaseHTTPRequestHandler):
                 note = ""
                 if action == "add":
                     claudeaccounts.add(body.get("label"), body.get("token"), body.get("include", True) is not False, bool(body.get("switch_now")))
+                elif action == "login_begin":
+                    note = json.dumps(claudeaccounts.login_begin(body.get("email"), aid or None))
+                elif action == "login_check":
+                    with claudeaccounts._probe_lock:
+                        note = json.dumps(claudeaccounts.login_poll())
                 elif action == "check":
                     r = claudeaccounts.check(body.get("token"))
                     note = json.dumps(r.get("windows") or {})

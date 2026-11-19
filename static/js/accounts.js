@@ -16,7 +16,8 @@ function accAdded(a) { return a.added ? "added " + new Date(a.added * 1000).toLo
 function accFable(w) { return Object.entries(w || {}).find(([k]) => k.startsWith("seven_day_"))?.[1]; }
 function accSub(a) {
   if (a.id === "main") return [a.plan, "Claude Code's own /login"].filter(Boolean).join(" · ");
-  return [a.plan, "Setup token " + a.masked, a.login ? "Claude Code login" : ""].filter(Boolean).join(" · ");
+  if (a.kind === "login") return [a.plan, "Signed in with Claude"].filter(Boolean).join(" · ");
+  return ["Setup token " + a.masked, "sign in to see usage in Claude Code"].join(" · ");
 }
 function accMeterCell(w, loading) {
   if (loading) return `<div class="am"><div class="amtop"><span class="amp muted">Checking…</span></div><div class="ambar load"><span></span></div></div>`;
@@ -82,8 +83,9 @@ function pageAccounts() {
     <div class="acctable" role="table" aria-label="Claude accounts"><div class="acctablein">
       <div class="accrow head" role="row"><span>Account</span><span>Session · 5h</span><span>Weekly · all models</span><span>Weekly · Fable</span><span class="r">Action</span></div>
       ${rows.map(accRow).join("") || '<div class="muted accempty">Loading…</div>'}</div></div>
-    <div class="acclegend muted"><span><i class="lg"></i>${accTo()}% target</span><span><i class="lg sw"></i>${accAt()}% switch point</span><span class="grow"></span><span>Switching writes <code>CLAUDE_CODE_OAUTH_TOKEN</code> to <code>${esc(d.settings || "~/.claude/settings.json")}</code></span></div>
-    ${accUi.toast ? `<div class="acctoast" role="status">${icon("check", 18)}<span>Switched to <b translate="no">${esc(accShort(accUi.toast.to))}</b> · new sessions use it</span>${accUi.toast.prev ? `<button type="button" class="linkbtn" data-acc-undo>Undo</button>` : ""}</div>` : ""}`;
+    <div class="acclegend muted"><span><i class="lg"></i>${accTo()}% target</span><span><i class="lg sw"></i>${accAt()}% switch point</span><span class="grow"></span><span>Signed-in accounts switch Claude Code's own sign-in · setup tokens write <code>CLAUDE_CODE_OAUTH_TOKEN</code> to <code>${esc(d.settings || "~/.claude/settings.json")}</code></span></div>
+    ${accUi.note && !accUi.toast ? `<div class="acctoast" role="status">${icon("check", 18)}<span translate="no">${esc(accUi.note.text)}</span></div>` : ""}
+    ${accUi.toast ? `<div class="acctoast" role="status">${icon("check", 18)}<span>Switched to <b translate="no">${esc(accShort(accUi.toast.to))}</b> · ${accRows().find(x => x.active)?.kind === "login" ? "all sessions follow" : "new sessions use it"}</span>${accUi.toast.prev ? `<button type="button" class="linkbtn" data-acc-undo>Undo</button>` : ""}</div>` : ""}`;
 }
 
 /* popovers: row menu and rules */
@@ -109,10 +111,11 @@ function openAccMenu(btn) {
   accUi.menu = a.id; accUi.rules = false;
   const item = (attr, ic, label, hint = "", cls = "") => `<button type="button" role="menuitem" class="accmi ${cls}" ${attr}>${icon(ic, 16)}<span class="grow">${label}</span>${hint ? `<kbd>${hint}</kbd>` : ""}</button>`;
   p.setAttribute("role", "menu"); p.setAttribute("aria-label", "Actions for " + a.label);
-  p.innerHTML = `<div class="accmihead"><b translate="no">${esc(a.label)}</b><span class="muted fs-sm">${esc([a.id === "main" ? "Claude Code login" : "Setup token " + a.masked, accAdded(a)].filter(Boolean).join(" · "))}</span></div>
+  p.innerHTML = `<div class="accmihead"><b translate="no">${esc(a.label)}</b><span class="muted fs-sm">${esc([a.id === "main" ? "Claude Code login" : a.kind === "login" ? "Signed in with Claude" : "Setup token " + a.masked, accAdded(a)].filter(Boolean).join(" · "))}</span></div>
     ${a.active ? "" : item(`data-acc-switch="${esc(a.id)}"`, "chevron", "Switch to this account")}
     ${item("data-acc-refresh", "refresh", "Refresh usage", "R")}
     ${item(`data-acc-edit="${esc(a.id)}"`, "pencil", "Edit account…", "E")}
+    ${a.kind === "token" ? item(`data-acc-signin="${esc(a.id)}"`, "agent", "Sign in with Claude…") : ""}
     ${item(`data-acc-copy="${esc(a.label)}"`, "copy", "Copy name")}
     <div class="accmisep"></div>
     <label class="accmi"><span class="ic16">${icon("refresh", 16)}</span><span class="grow">Include in auto-switch</span><input type="checkbox" data-acc-include="${esc(a.id)}" ${a.enabled ? "checked" : ""}><span class="tog sm"></span></label>
@@ -156,25 +159,60 @@ function accSay(cls, text, id = "accMsg") { const m = $(id); if (m) { m.classNam
 function accHead(title, sub) {
   return `<div class="accdlg-head"><div class="grow"><h3>${title}</h3>${sub ? `<div class="muted fs-sm" translate="no">${sub}</div>` : ""}</div><button type="button" class="iconbtn ghost" data-acc-close aria-label="Close">${icon("x", 16)}</button></div>`;
 }
-function openAccAdd() {
+function openAccAdd(mode = "signin", forId = "") {
   accClosePop();
-  const d = accDialog();
+  const d = accDialog(), target = forId ? accById(forId) : null;
+  clearInterval(accUi.signTimer);
+  accUi.sign = null;
   d.setAttribute("aria-label", "Add Claude account");
-  d.innerHTML = `${accHead("Add Claude account")}
-    <div class="accdlg-body accform">
-      <div class="accstep"><span class="accsteph">1. Get a setup token</span>
+  const tabs = target ? "" : `<div class="accseg two" role="tablist"><button type="button" role="tab" aria-selected="${mode === "signin"}" class="${mode === "signin" ? "on" : ""}" data-acc-addmode="signin">Sign in with Claude</button><button type="button" role="tab" aria-selected="${mode === "token"}" class="${mode === "token" ? "on" : ""}" data-acc-addmode="token">Setup token</button></div>`;
+  const signin = `<div class="accstep"><span class="muted fs-sm">Full access: limits with Fable, usage inside Claude Code, and every session — running ones too — follows a switch. Claude Code opens your browser; choose the account there.</span></div>
+      <div class="accstep"><label for="accEmail" class="accsteph">Account email <span class="muted">(optional)</span></label><input id="accEmail" type="text" autocomplete="off" spellcheck="false" placeholder="name@company.com" value="${esc(target && target.label.includes("@") ? target.label : "")}"></div>
+      <div id="accSign" class="accstep" hidden></div>
+      <div class="msg" id="accMsg" role="status" aria-live="polite"></div>`;
+  const token = `<div class="accstep"><span class="accsteph">1. Get a setup token</span>
         <div class="acccode"><code class="grow">claude setup-token</code><button type="button" class="accbtn sm" data-acc-copy="claude setup-token">Copy</button></div>
-        <span class="muted fs-sm">Run it in a terminal, sign in with the account you want to add.</span></div>
+        <span class="muted fs-sm">Run it in a terminal, sign in with the account you want to add. A setup token shows limits and can run sessions, but Claude Code cannot show usage with it and running sessions do not follow a switch.</span></div>
       <div class="accstep"><label for="accToken" class="accsteph">2. Paste the token</label>
         <div class="accrowin"><input id="accToken" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-oat01-…"><button type="button" class="accbtn" data-acc-paste>Paste</button></div>
         <div id="accCheck" class="acccheck" hidden></div></div>
       <div class="accstep"><label for="accName" class="accsteph">Label <span class="muted">(optional)</span></label><input id="accName" type="text" maxlength="40" placeholder="e.g. Team · backend" autocomplete="off" spellcheck="false"></div>
       <div class="accchecks"><label><input type="checkbox" id="accInclude" checked>Include in auto-switch</label><label><input type="checkbox" id="accNow">Switch to it now</label></div>
-      <div class="msg" id="accMsg" role="status" aria-live="polite"></div></div>
-    <div class="accfootbar"><span class="muted fs-sm grow">Stored locally · only the last 4 chars are shown</span><button type="button" data-acc-close>Cancel</button><button type="button" class="btn-primary" data-acc-save disabled>Add account</button></div>`;
+      <div class="msg" id="accMsg" role="status" aria-live="polite"></div>`;
+  d.innerHTML = `${accHead(target ? "Sign in with Claude" : "Add Claude account", target ? esc(target.label) : "")}
+    <div class="accdlg-body accform">${tabs}${mode === "signin" ? signin : token}</div>
+    <div class="accfootbar">${mode === "signin" ? `<span class="muted fs-sm grow">The sign-in stays in your Keychain, in Claude Code's own format</span><button type="button" data-acc-close>Cancel</button><button type="button" class="btn-primary" data-acc-signin-go="${esc(forId)}">Open sign-in</button>`
+      : `<span class="muted fs-sm grow">Stored locally · only the last 4 chars are shown</span><button type="button" data-acc-close>Cancel</button><button type="button" class="btn-primary" data-acc-save disabled>Add account</button>`}</div>`;
   translateTree(d);
   if (!d.open) d.showModal();
-  $("accToken").focus();
+  $(mode === "signin" ? "accEmail" : "accToken").focus();
+}
+async function accSignIn(btn) {
+  btn.disabled = true; accSay("muted", t("Starting…"));
+  const r = await accPost({ action: "login_begin", email: $("accEmail").value.trim(), id: btn.dataset.accSigninGo || "" });
+  if (!r.ok) { btn.disabled = false; accSay("err", r.error); return; }
+  const info = JSON.parse(r.note), box = $("accSign"), before = accRows().filter(a => a.kind === "login").map(a => a.id);
+  accUi.sign = info.pid;
+  box.hidden = false;
+  box.innerHTML = `<span class="accsteph">${info.opened ? "Finish in the Terminal window and your browser" : "Run this in a terminal, then finish in your browser"}</span>
+    <div class="acccode"><code class="grow accwrap" translate="no">${esc(info.command)}</code><button type="button" class="accbtn sm" data-acc-copy="${esc(info.command)}">Copy</button></div>
+    <div class="acccheck wait">${icon("refresh", 16)}<span>Waiting for the sign-in…</span></div>`;
+  accSay("", "");
+  btn.textContent = t("Waiting…");
+  clearInterval(accUi.signTimer);
+  accUi.signTimer = setInterval(async () => {
+    if (!accDialog().open || accUi.sign !== info.pid) { clearInterval(accUi.signTimer); return; }
+    const c = await accPost({ action: "login_check" });
+    const done = c.ok ? JSON.parse(c.note || "[]") : [];
+    if (!done.length && (c.claude_accounts?.pending || []).includes(info.pid)) return;
+    clearInterval(accUi.signTimer);
+    if (!done.length) { accSay("err", t("The sign-in was not finished — try again")); btn.disabled = false; btn.textContent = t("Open sign-in"); return; }
+    const a = (c.claude_accounts?.accounts || []).find(x => x.id === done[0]);
+    accDialog().close(); accDone(c);
+    accUi.note = { text: `${before.includes(done[0]) ? "Signed in again to" : "Signed in to"} ${a ? a.label : "the account"}`, at: Date.now() };
+    ui.forcePatch = true; render();
+    setTimeout(() => { accUi.note = null; ui.forcePatch = true; render(); }, 6000);
+  }, 3000);
 }
 let accCheckTimer = null;
 function accCheckToken() {
@@ -207,7 +245,7 @@ function renderAccEdit() {
   if (!a) { d.close(); return; }
   const label = $("accLabel")?.value ?? a.label, enabled = $("accEnabled") ? $("accEnabled").checked : e.enabled;
   const seg = (v, l) => `<button type="button" role="radio" aria-checked="${e.order === v}" class="${e.order === v ? "on" : ""}" data-acc-order="${v}">${l}</button>`;
-  const tokenRow = a.id === "main" ? "" : `<div class="accstep"><span class="accsteph">Setup token</span>
+  const tokenRow = a.id === "main" ? "" : a.kind === "login" ? `<div class="accstep"><span class="accsteph">Claude sign-in</span><div class="acccode"><code translate="no">${esc(a.email || a.label)}</code><span class="muted fs-sm grow">${esc(accAdded(a))}</span><button type="button" class="accbtn sm" data-acc-signin="${esc(a.id)}">Sign in again</button></div></div>` : `<div class="accstep"><span class="accsteph">Setup token</span>
       ${e.replace ? `<div class="accrowin"><input id="accNewToken" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-oat01-…"><button type="button" class="accbtn" data-acc-replace-cancel>Cancel</button></div><span class="muted fs-sm">Run <code>claude setup-token</code> signed in to this same account. It is checked when you save.</span>`
       : `<div class="acccode"><code>${esc(a.masked)}</code><span class="muted fs-sm grow">${esc([accAdded(a), a.error ? "not working" : "valid"].filter(Boolean).join(" · "))}</span><button type="button" class="accbtn sm" data-acc-replace-open>Replace token</button></div>`}</div>`;
   d.setAttribute("aria-label", "Edit account");
@@ -217,7 +255,7 @@ function renderAccEdit() {
       ${tokenRow}
       <div class="accbox"><div class="accboxrow"><div><b>Include in auto-switch</b><div class="muted fs-sm">Opsboard can suggest this account when another fills up</div></div><label class="accswitch"><input type="checkbox" id="accEnabled" ${enabled ? "checked" : ""} aria-label="Include in auto-switch"><span class="tog"></span></label></div>
         ${a.id === "main" ? "" : `<div class="accorder"><span class="muted fs-sm">Order when several have room</span><div class="accseg" role="radiogroup" aria-label="Order">${seg("first", "Use first")}${seg("normal", "Normal")}${seg("last", "Last resort")}</div></div>`}</div>
-      ${a.login || a.id === "main" ? `<div class="accinfo">${icon("info", 16)}<span>This is also your Claude Code login.${a.id === "main" ? "" : " Removing it here keeps you signed in to Claude Code."}</span></div>` : ""}
+      ${a.login || a.id === "main" ? `<div class="accinfo">${icon("info", 16)}<span>${a.kind === "login" ? "Claude Code is signed in to this account now. Switch to another one before removing it." : `This is also your Claude Code login.${a.id === "main" ? "" : " Removing it here keeps you signed in to Claude Code."}`}</span></div>` : ""}
       <div class="msg" id="accMsg" role="status" aria-live="polite"></div></div>
     ${e.del ? `<div class="accfootbar danger"><span class="grow">${a.active ? "It is in use — new sessions go back to Claude Code's own login. " : ""}Remove <b translate="no">${esc(a.label)}</b> and its token?</span><button type="button" data-acc-del-cancel>Cancel</button><button type="button" class="btn-danger" data-acc-del-go>Remove</button></div>`
       : `<div class="accfootbar">${a.id === "main" ? "" : `<button type="button" class="accbtn dangerline" data-acc-del-ask>Remove account</button>`}<span class="grow"></span><button type="button" data-acc-close>Cancel</button><button type="button" class="btn-primary" data-acc-edit-save>Save</button></div>`}`;
@@ -231,12 +269,12 @@ function openAccConfirm(id) {
   if (!to) return;
   if (!accData().confirm_manual) { accDoSwitch(id); return; }
   const card = (cls, tag, a) => `<div class="accfrom ${cls}"><span class="acctag">${tag}</span><b translate="no">${esc(accShort(a?.label || "—"))}</b><span class="fs-sm">Session ${a?.windows?.five_hour?.percent ?? "—"}% · Weekly ${a?.windows?.seven_day?.percent ?? "—"}%</span></div>`;
-  const toLogin = to.id === "main" || to.login, d = accDialog();
+  const toLogin = to.id === "main" || to.login, full = to.kind === "login", d = accDialog();
   d.setAttribute("aria-label", "Switch account");
   d.innerHTML = `<div class="accconfirm"><h3>Switch to ${esc(accShort(to.label))}?</h3>
-      <p class="muted">New Claude Code sessions, VS Code included, will use this account. Sessions already running keep the current one until restarted.</p>
+      <p class="muted">${full ? "Every Claude Code session moves to this account — VS Code included, running ones within about half a minute. Usage stays visible in Claude Code." : "New Claude Code sessions, VS Code included, will use this account. Sessions already running keep the current one until restarted, and Claude Code cannot show usage with a setup token."}</p>
       <div class="accfromto">${card("", "From", from)}${icon("chevron", 20)}${card("to", "To", to)}</div>
-      <div class="muted fs-sm">${toLogin ? "Removes" : "Writes"} <code>CLAUDE_CODE_OAUTH_TOKEN</code> ${toLogin ? "from" : "to"} <code>${esc(accData().settings || "~/.claude/settings.json")}</code></div>
+      <div class="muted fs-sm">${full ? "Replaces Claude Code's sign-in in the Keychain — the current one is saved first" : `${toLogin ? "Removes" : "Writes"} <code>CLAUDE_CODE_OAUTH_TOKEN</code> ${toLogin ? "from" : "to"} <code>${esc(accData().settings || "~/.claude/settings.json")}</code>`}</div>
       <div class="msg" id="accMsg" role="status"></div>
       <div class="accconfirmfoot"><label class="fs-sm muted"><input type="checkbox" id="accNoAsk">Don't ask for manual switches</label><span class="grow"></span><button type="button" data-acc-close>Cancel</button><button type="button" class="btn-primary" data-acc-switch-go="${esc(id)}">Switch</button></div></div>`;
   translateTree(d);
@@ -276,6 +314,12 @@ document.addEventListener("click", async e => {
   if (rb) { if (accUi.rules) accClosePop(); else openAccRules(rb); return; }
   if (t0.closest("[data-acc-popclose]")) { accClosePop(); return; }
   if (t0.closest("[data-acc-add]")) { openAccAdd(); return; }
+  const am = t0.closest("[data-acc-addmode]");
+  if (am) { openAccAdd(am.dataset.accAddmode); return; }
+  const si = t0.closest("[data-acc-signin]");
+  if (si) { openAccAdd("signin", si.dataset.accSignin); return; }
+  const sg = t0.closest("[data-acc-signin-go]");
+  if (sg) { accSignIn(sg); return; }
   if (t0.closest("[data-acc-close]")) { accDialog().close(); return; }
   const cp = t0.closest("[data-acc-copy]");
   if (cp) {

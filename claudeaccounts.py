@@ -2,11 +2,13 @@ import json
 import os
 import re
 import subprocess
+import sys
 import threading
 import time
 import uuid
 from pathlib import Path
 
+import claudelogins as logins
 import claudeusage
 import config as cfg
 import notify
@@ -24,6 +26,9 @@ _probe_lock = threading.Lock()
 _full = {"warned": False}
 _refreshing = {"on": False}
 _proposal = {}
+_main = {"uuid": None}
+_synced = {}
+_pending = {}
 _snooze = {"until": 0.0}
 PROPOSAL_TTL, SNOOZE = 1800, 1800
 ORDER = {"first": 0, "normal": 1, "last": 2}
@@ -77,6 +82,10 @@ def set_twin(aid):
 
 def twin():
     """The setup-token account that is the same subscription as Claude Code's login — forgotten once you log in to another account."""
+    uuid = _main["uuid"] or logins.account_json().get("accountUuid")
+    signed = next((a["id"] for a in accounts() if uuid and a.get("uuid") == uuid), "")
+    if signed:
+        return signed
     t = cfg.get("claude.main_twin") or ""
     if not t or not any(a["id"] == t for a in accounts()):
         return ""
@@ -98,7 +107,10 @@ def switch(aid):
     """Claude Code reads env from its user settings for every new session — VS Code included."""
     data = _read_settings()
     env = dict(data.get("env") or {})
-    if aid == MAIN or (aid and aid == twin()):
+    if aid != MAIN and signed_in(aid):
+        use_login(aid)
+        env.pop(ENV_KEY, None)
+    elif aid == MAIN or (aid and aid == twin()):
         env.pop(ENV_KEY, None)
     else:
         token = cfg.secret(secret_key(aid)) if any(a["id"] == aid for a in accounts()) else ""
@@ -118,6 +130,150 @@ def switch(aid):
     os.replace(tmp, SETTINGS)
     _proposal.clear()
     log.info("claude account: switched to %s", aid)
+
+
+def record(aid):
+    return next((a for a in accounts() if a["id"] == aid), None)
+
+
+def signed_in(aid):
+    """Signed in with Claude itself (full access), not only a setup token."""
+    return bool((record(aid) or {}).get("uuid"))
+
+
+def _save_record(aid, **fields):
+    cfg.set("claude.accounts", [dict(a, **fields) if a["id"] == aid else a for a in accounts()], "user", "Accounts page")
+
+
+def _unique_label(name):
+    taken = {a.get("label", "").lower() for a in accounts()}
+    out, n = name, 2
+    while out.lower() in taken:
+        out, n = f"{name} ({n})", n + 1
+    return out
+
+
+def main_identity():
+    """Whose sign-in Claude Code holds now: asked from Anthropic by token, else what Claude Code itself recorded."""
+    token, _ = logins.access()
+    ident = logins.identity(token) if token else None
+    if ident:
+        return ident
+    if not logins.oauth().get("refreshToken"):
+        return None
+    aj = logins.account_json()
+    return {"uuid": aj["accountUuid"], "email": aj.get("emailAddress") or "", "plan": str(aj.get("organizationType") or "").replace("_", " ").title()} if aj.get("accountUuid") else None
+
+
+def sync_login():
+    """Keep the account Claude Code is signed in to on the list, with a current copy of its sign-in in its own slot."""
+    if not (accounts() or cfg.get("claude.live_usage")):
+        return None
+    ident = main_identity()
+    if not ident:
+        return None
+    _main["uuid"] = ident["uuid"]
+    acc = next((a for a in accounts() if a.get("uuid") == ident["uuid"]), None)
+    if not acc:
+        email = (ident.get("email") or "").lower()
+        old = cfg.get("claude.main_twin") if (cfg.get("claude.main_twin_login") or "").lower() == email and email else ""
+        aid = next((a["id"] for a in accounts() if not a.get("uuid") and (a["id"] == old or a.get("label", "").lower() == email)), None)
+        if aid:
+            _save_record(aid, uuid=ident["uuid"], email=ident.get("email") or "", plan=ident.get("plan") or "")
+        else:
+            aid = uuid.uuid4().hex[:8]
+            cfg.set("claude.accounts", accounts() + [{"id": aid, "label": _unique_label(ident.get("email") or "Claude account"), "added": int(time.time()), "uuid": ident["uuid"], "email": ident.get("email") or "", "plan": ident.get("plan") or ""}], "user", "Claude Code sign-in")
+        acc = record(aid)
+    aid, now = acc["id"], logins.oauth()
+    mark = hash(json.dumps(now, sort_keys=True))
+    if now.get("refreshToken") and _synced.get(aid) != mark:
+        if logins.oauth(aid) == now or logins.put_oauth(aid, now):
+            _synced[aid] = mark
+    aj = logins.account_json()
+    if aj.get("accountUuid") == ident["uuid"]:
+        logins.put_account_json(aid, aj)
+    elif logins.account_json(aid).get("accountUuid") == ident["uuid"]:
+        logins.put_account_json(None, logins.account_json(aid))
+    return aid
+
+
+def use_login(aid):
+    """Put this account's sign-in into Claude Code's own entry; the one it replaces is saved to its slot first."""
+    rec = record(aid)
+    current = sync_login()
+    if current == aid:
+        return
+    mine = logins.oauth(aid)
+    if not mine.get("refreshToken"):
+        raise ValueError("sign in to this account first")
+    if logins.oauth().get("refreshToken") and not current:
+        raise ValueError("could not tell which account Claude Code is signed in to — try again in a moment")
+    if not logins.put_oauth(None, mine):
+        raise ValueError("could not update Claude Code's sign-in")
+    stored = logins.account_json(aid)
+    if stored.get("accountUuid") == rec["uuid"]:
+        logins.put_account_json(None, stored)
+    _main["uuid"] = rec["uuid"]
+    _synced[aid] = hash(json.dumps(mine, sort_keys=True))
+
+
+def login_begin(email="", aid=None, terminal=True):
+    """Start a sign-in for one more account in its own config folder; Claude Code opens the browser."""
+    import shlex
+
+    email = str(email or "").strip()
+    if email and not re.fullmatch(r"[^@\s'\"]+@[^@\s'\"]+", email):
+        raise ValueError("this does not look like an email")
+    if aid and not record(aid):
+        raise ValueError("unknown account")
+    slot = uuid.uuid4().hex[:8]
+    logins.slot_dir(slot).mkdir(parents=True, exist_ok=True)
+    cmd = f"CLAUDE_CONFIG_DIR={shlex.quote(str(logins.slot_dir(slot)))} {shlex.quote(claude_bin())} auth login" + (f" --email {shlex.quote(email)}" if email else "")
+    opened = False
+    if terminal and sys.platform == "darwin" and not os.environ.get("OPS_NO_OS_NOTIFY"):
+        try:
+            script = ["-e", "on run argv", "-e", 'tell application "Terminal" to do script (item 1 of argv)', "-e", 'tell application "Terminal" to activate', "-e", "end run"]
+            opened = subprocess.run(["osascript", *script, cmd + "; exit"], capture_output=True, timeout=20).returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            opened = False
+    _pending[slot] = {"at": time.time(), "for": aid, "email": email}
+    return {"pid": slot, "command": cmd, "opened": opened}
+
+
+def login_poll():
+    """Finish sign-ins that have arrived; forget the ones nobody completed in 15 minutes."""
+    done = []
+    for slot, p in list(_pending.items()):
+        token, _ = logins.access(slot)
+        ident = logins.identity(token) if token else None
+        if not ident:
+            if time.time() - p["at"] > 900:
+                _pending.pop(slot, None)
+                logins.forget(slot)
+            continue
+        _pending.pop(slot, None)
+        done.append(login_finish(slot, ident, p.get("for")))
+    return done
+
+
+def login_finish(slot, ident, wanted=None):
+    known = next((a["id"] for a in accounts() if a.get("uuid") == ident["uuid"]), None)
+    target = record(wanted) if wanted and not known else None
+    if target and "@" in target.get("label", "") and target["label"].lower() != (ident.get("email") or "").lower():
+        target = None
+    aid = known or (target or {}).get("id")
+    fields = {"uuid": ident["uuid"], "email": ident.get("email") or "", "plan": ident.get("plan") or ""}
+    if aid:
+        if aid != twin():
+            logins.put_oauth(aid, logins.oauth(slot))
+            logins.put_account_json(aid, logins.account_json(slot))
+        logins.forget(slot)
+        _save_record(aid, **fields)
+    else:
+        aid = slot
+        cfg.set("claude.accounts", accounts() + [{"id": aid, "label": _unique_label(ident.get("email") or "Claude account"), "added": int(time.time()), **fields}], "user", "Accounts page")
+    _usage[aid] = probe(aid)
+    return aid
 
 
 def parse_probe(lines):
@@ -153,19 +309,37 @@ def main_token():
 
 
 def probe(aid):
+    if aid != MAIN and signed_in(aid):
+        return probe_login(aid)
     token = main_token() if aid == MAIN else cfg.secret(secret_key(aid))
     if not token:
         return {"error": "no token saved" if aid != MAIN else "", "at": time.time()}
     return probe_token(token)
 
 
+def probe_login(aid):
+    """A signed-in account: the one in Claude Code's own entry by its token, any other through its own config folder."""
+    if aid == twin():
+        token, why = logins.access()
+        return probe_token(token) if token else {"error": why + " — open Claude Code once", "at": time.time()}
+    result = run_probe({"CLAUDE_CONFIG_DIR": str(logins.slot_dir(aid))}, logins.slot_dir(aid))
+    if result.get("windows"):
+        token, _ = logins.access(aid)
+        result["windows"].update(logins.scoped(token, aid))
+    return result
+
+
 def probe_token(token):
-    PROBE_HOME.mkdir(parents=True, exist_ok=True)
+    return run_probe({ENV_KEY: token, "CLAUDE_CONFIG_DIR": str(PROBE_HOME)}, PROBE_HOME)
+
+
+def run_probe(extra, home):
+    home.mkdir(parents=True, exist_ok=True)
     env = {k: v for k, v in os.environ.items() if not k.startswith(("ANTHROPIC_", "CLAUDE_CODE_", "CLAUDE_CONFIG_DIR"))}
-    env.update({ENV_KEY: token, "CLAUDE_CONFIG_DIR": str(PROBE_HOME)})
+    env.update(extra)
     cmd = [claude_bin(), "-p", "Reply with: ok", "--model", "haiku", "--output-format", "stream-json", "--verbose", "--max-turns", "1", "--tools", "", "--strict-mcp-config", "--no-session-persistence"]
     try:
-        r = subprocess.run(cmd, cwd=PROBE_HOME, env=env, capture_output=True, text=True, timeout=120, stdin=subprocess.DEVNULL)
+        r = subprocess.run(cmd, cwd=home, env=env, capture_output=True, text=True, timeout=120, stdin=subprocess.DEVNULL)
     except (OSError, subprocess.SubprocessError) as exc:
         return {"error": f"claude did not run ({exc.__class__.__name__})", "at": time.time()}
     windows, error = parse_probe(r.stdout.splitlines())
@@ -395,21 +569,26 @@ def public():
         windows = dict(u.get("windows") or {})
         if aid in (MAIN, twin()):
             windows.update({k: w for k, w in (login.get("windows") or {}).items() if k.startswith("seven_day_") and k not in windows})
-        rows.append({"id": aid, "label": label(aid), "active": aid == current, "enabled": enabled(aid), "windows": windows, "plan": plan if aid in (MAIN, twin()) else "", "at": u.get("at") or 0, "error": u.get("error") or "", "level": level(u, now), "masked": cfg.masked(cfg.secret(secret_key(aid))) if aid != MAIN else "", "login": aid == twin(), "added": next((x.get("added") or 0 for x in accounts() if x["id"] == aid), 0), "order": order_of(aid) if aid != MAIN else "normal"})
+        rows.append({"id": aid, "label": label(aid), "active": aid == current, "enabled": enabled(aid), "windows": windows, "plan": (record(aid) or {}).get("plan") or (plan if aid in (MAIN, twin()) else ""), "kind": "main" if aid == MAIN else "login" if signed_in(aid) else "token", "email": (record(aid) or {}).get("email") or "", "at": u.get("at") or 0, "error": u.get("error") or "", "level": level(u, now), "masked": cfg.masked(cfg.secret(secret_key(aid))) if aid != MAIN and cfg.secret(secret_key(aid)) else "", "login": aid == twin(), "added": next((x.get("added") or 0 for x in accounts() if x["id"] == aid), 0), "order": order_of(aid) if aid != MAIN else "normal"})
     prop = {k: _proposal[k] for k in ("pid", "level", "to_level", "at")} if _proposal else None
     if prop:
         prop.update(src=label(_proposal["src"]), dst=label(_proposal["dst"]))
     nxt = pick(current, now)
     for r in rows:
         r["next"] = r["id"] == nxt
-    return {"active": current, "mode": cfg.get("claude.switch_mode") or "ask", "ask_in": cfg.get("claude.ask_in") or [], "watch": cfg.get("claude.watch") or [], "when_none": cfg.get("claude.when_none") or "stay", "confirm_manual": bool(cfg.get("claude.confirm_manual")), "proposal": prop, "accounts": rows, "busy": busy(), "refreshing": _refreshing["on"], "settings": str(SETTINGS).replace(str(Path.home()), "~", 1)}
+    return {"active": current, "mode": cfg.get("claude.switch_mode") or "ask", "ask_in": cfg.get("claude.ask_in") or [], "watch": cfg.get("claude.watch") or [], "when_none": cfg.get("claude.when_none") or "stay", "confirm_manual": bool(cfg.get("claude.confirm_manual")), "proposal": prop, "pending": list(_pending), "accounts": rows, "busy": busy(), "refreshing": _refreshing["on"], "settings": str(SETTINGS).replace(str(Path.home()), "~", 1)}
 
 
 def collect():
+    try:
+        sync_login()
+    except (OSError, ValueError) as exc:
+        log.warning("claude account: sign-in sync failed: %s", exc)
     current = active_id()
     now = time.time()
     if _probe_lock.acquire(blocking=False):
         try:
+            login_poll()
             for aid in pool() if accounts() else []:
                 due = ACTIVE_EVERY if aid == current else IDLE_EVERY
                 if now - (_usage.get(aid) or {}).get("at", 0) >= due:
@@ -503,8 +682,13 @@ def rename(aid, name):
 def remove(aid):
     if not any(a["id"] == aid for a in accounts()):
         raise ValueError("unknown account")
+    if signed_in(aid) and aid == twin():
+        raise ValueError("Claude Code is signed in to this account — switch to another one first")
     if active_id() == aid:
         switch(MAIN)
+    if signed_in(aid):
+        logins.forget(aid)
+        _synced.pop(aid, None)
     if cfg.get("claude.main_twin") == aid:
         set_twin("")
     set_enabled(aid, True)
