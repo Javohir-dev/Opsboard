@@ -387,6 +387,9 @@ class Handler(BaseHTTPRequestHandler):
                     if aid != claudeaccounts.MAIN and not any(a["id"] == aid for a in claudeaccounts.accounts()):
                         raise ValueError("unknown account")
                     claudeaccounts.switch(aid)
+                elif action == "reset":
+                    note = claudeaccounts.use_reset(aid, str(body.get("grant") or ""))
+                    claudeaccounts.refresh_all()
                 elif action == "refresh":
                     claudeaccounts.refresh_all()
                 elif action == "decide":

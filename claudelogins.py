@@ -8,15 +8,17 @@ Values are passed between entries and never logged or returned to the page.
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import time
 import unicodedata
+import uuid
 from pathlib import Path
 from urllib import error, request
 
-from core import DATA, epoch
+from core import DATA, claude_bin, epoch
 
 API = os.environ.get("OPS_ANTHROPIC_URL", "https://api.anthropic.com").rstrip("/")
 BASE = "Claude Code-credentials"
@@ -25,6 +27,7 @@ USAGE_EVERY, USAGE_BACKOFF = 900, 1800
 
 _identity = {}
 _usage = {}
+_agent = {}
 
 
 def main_json():
@@ -126,10 +129,64 @@ def access(slot=None):
     return o["accessToken"], ""
 
 
-def _get(path, token):
-    req = request.Request(f"{API}{path}", headers={"Authorization": f"Bearer {token}", "anthropic-beta": "oauth-2025-04-20", "Content-Type": "application/json", "User-Agent": "opsboard"})
+def _get(path, token, agent="opsboard"):
+    req = request.Request(f"{API}{path}", headers={"Authorization": f"Bearer {token}", "anthropic-beta": "oauth-2025-04-20", "Content-Type": "application/json", "User-Agent": agent})
     with request.urlopen(req, timeout=15) as resp:
         return json.loads(resp.read().decode())
+
+
+def cli_agent():
+    """Claude Code's own client name: Anthropic lists limit resets only for it."""
+    if "v" not in _agent:
+        try:
+            out = subprocess.run([claude_bin(), "--version"], capture_output=True, text=True, timeout=20).stdout
+        except (OSError, subprocess.SubprocessError):
+            out = ""
+        found = re.search(r"\d+\.\d+\.\d+", out)
+        _agent["v"] = found.group(0) if found else "2.1.328"
+    return f"claude-cli/{_agent['v']} (external, cli)"
+
+
+USAGE_PATH = "/api/oauth/usage?cedar_ember=1"
+RESET_NAMES = {"five_hour": "Session", "seven_day": "Weekly", "seven_day_overage_included": "Fable"}
+
+
+def parse_resets(data):
+    """Limit resets Anthropic has granted this account: [{id, label, left, total, ends, clears, usable, why, used}]."""
+    block = (data or {}).get("cedar_ember") or {}
+    out = []
+    for g in block.get("grants") or []:
+        if not isinstance(g, dict) or not re.fullmatch(r"[a-z0-9_-]{1,40}", str(g.get("id") or "")) or not g.get("resets_total"):
+            continue
+        used = g.get("percent_used") or {}
+        out.append({
+            "id": g["id"],
+            "label": str(g.get("label") or g["id"])[:160],
+            "left": int(g.get("resets_left") or 0),
+            "total": int(g.get("resets_total") or 0),
+            "ends": int(epoch(g.get("ends_at") or "") or 0),
+            "clears": [RESET_NAMES.get(k, k.replace("seven_day_", "Weekly ").replace("_", " ")) for k in g.get("clears") or []],
+            "used": {RESET_NAMES.get(k, k): v for k, v in used.items() if isinstance(v, int)},
+            "usable": bool(g.get("usable_now")) and not g.get("paused") and int(g.get("resets_left") or 0) > 0,
+            "needs_limit": bool(g.get("use_requires_limit")),
+            "keeps_week": bool(g.get("gives_back_weekly")),
+            "why": str(g.get("unavailable_reason") or ""),
+        })
+    return out
+
+
+def claim_reset(token, org, grant):
+    """Spend one granted reset. Only ever called from the person's own confirmed click. Returns (ok, result, data)."""
+    body = json.dumps({"program": "cedar_ember", "grant_id": grant, "request_id": uuid.uuid4().hex}).encode()
+    req = request.Request(f"{API}/api/organizations/{org}/reset_rate_limits", data=body, method="POST", headers={"Authorization": f"Bearer {token}", "anthropic-beta": "oauth-2025-04-20", "Content-Type": "application/json", "User-Agent": cli_agent()})
+    try:
+        with request.urlopen(req, timeout=25) as resp:
+            d = json.loads(resp.read().decode())
+    except error.HTTPError as exc:
+        return False, f"HTTP {exc.code}", {}
+    except (error.URLError, OSError, ValueError) as exc:
+        return False, exc.__class__.__name__, {}
+    return d.get("result") == "reset", str(d.get("result") or "unavailable"), d if isinstance(d, dict) else {}
 
 
 def identity(token):
@@ -189,7 +246,8 @@ def scoped(token, key, force=False):
     now = time.time()
     if token and (force or now >= st["next"]):
         try:
-            d = _get("/api/oauth/usage", token)
+            d = _get(USAGE_PATH, token, cli_agent())
+            st["resets"] = parse_resets(d)
             windows = {}
             for item in d.get("limits") or []:
                 model = (((item.get("scope") or {}).get("model") or {}).get("display_name")) or ""
@@ -202,6 +260,10 @@ def scoped(token, key, force=False):
         except (error.URLError, OSError, ValueError):
             st["next"] = now + 300
     return st["windows"]
+
+
+def resets(key):
+    return (_usage.get(key) or {}).get("resets") or []
 
 
 def reset():

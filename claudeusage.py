@@ -6,6 +6,8 @@ import time
 from pathlib import Path
 from urllib import error, request
 
+import claudelogins
+
 API = os.environ.get("OPS_ANTHROPIC_URL", "https://api.anthropic.com").rstrip("/")
 KEYCHAIN_SERVICE = "Claude Code-credentials"
 CREDENTIALS_FILE = Path(os.environ.get("OPS_CLAUDE_CREDENTIALS", Path.home() / ".claude" / ".credentials.json"))
@@ -61,8 +63,8 @@ def fetch():
         _status.update(next=time.time() + MIN_INTERVAL, error=problem)
         return None, problem
     req = request.Request(
-        f"{API}/api/oauth/usage",
-        headers={"Authorization": f"Bearer {value}", "anthropic-beta": "oauth-2025-04-20", "Content-Type": "application/json", "User-Agent": "opsboard"},
+        f"{API}{claudelogins.USAGE_PATH}",
+        headers={"Authorization": f"Bearer {value}", "anthropic-beta": "oauth-2025-04-20", "Content-Type": "application/json", "User-Agent": claudelogins.cli_agent()},
     )
     try:
         with request.urlopen(req, timeout=15) as resp:
@@ -82,6 +84,14 @@ def fetch():
     _status.update(interval=MIN_INTERVAL, next=time.time() + MIN_INTERVAL, error="")
     _last.update(data=data, at=time.time())
     return data, ""
+
+
+def resets():
+    return claudelogins.parse_resets(_last["data"])
+
+
+def expire():
+    _status["next"] = 0.0
 
 
 def last_fetched():

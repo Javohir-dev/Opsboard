@@ -45,10 +45,34 @@ function accRow(a) {
     : st.action === "reauth" ? `<button type="button" class="accbtn danger" data-acc-edit="${esc(a.id)}" data-acc-replace="1">Re-authenticate</button>`
     : `<button type="button" class="accbtn" data-acc-switch="${esc(a.id)}" ${st.action === "off" ? "disabled" : ""}>Switch</button>`;
   return `<div class="accrow ${a.active ? "on" : ""} ${st.dim ? "dim" : ""}" data-acc-row="${esc(a.id)}">
-    <div class="accwho"><div class="accname"><span class="accdot ${a.active ? "on" : st.tone === "bad" ? "bad" : ""}"></span><b translate="no" title="${esc(a.label)}">${esc(a.label)}</b>${st.chip ? `<span class="accchip ${st.tone}">${esc(st.chip)}</span>` : ""}</div>
+    <div class="accwho"><div class="accname"><span class="accdot ${a.active ? "on" : st.tone === "bad" ? "bad" : ""}"></span><b translate="no" title="${esc(a.label)}">${esc(a.label)}</b>${st.chip ? `<span class="accchip ${st.tone}">${esc(st.chip)}</span>` : ""}${accResetChip(a)}</div>
       <div class="accmeta muted" title="${esc(a.error || "")}">${esc(st.meta || accSub(a))}</div></div>
     ${accMeterCell(w.five_hour, st.loading)}${accMeterCell(w.seven_day, st.loading)}${accMeterCell(accFable(w), st.loading)}
     <div class="accact">${action}<button type="button" class="iconbtn ghost accmore" data-acc-menu="${esc(a.id)}" aria-label="More actions" aria-haspopup="menu" aria-expanded="${accUi.menu === a.id}">${icon("more", 16)}</button></div></div>`;
+}
+function accResetsLeft(a) { return (a.resets || []).filter(r => r.left > 0); }
+function accResetDay(r) { return r.ends ? new Date(r.ends * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""; }
+function accResetChip(a) {
+  const n = accResetsLeft(a).reduce((x, r) => x + r.left, 0);
+  return n ? `<button type="button" class="accchip reset" data-acc-menu="${esc(a.id)}" title="${esc(accResetsLeft(a).map(r => r.label + (r.ends ? " · use by " + accResetDay(r) : "")).join("\n"))}">${n} reset${n > 1 ? "s" : ""}</button>` : "";
+}
+function openAccReset(id, grant) {
+  accClosePop();
+  const a = accById(id), r = (a?.resets || []).find(x => x.id === grant);
+  if (!a || !r) return;
+  const d = accDialog(), used = Object.entries(r.used || {}).filter(([k]) => r.clears.includes(k));
+  d.setAttribute("aria-label", "Use limit reset");
+  d.innerHTML = `<div class="accconfirm"><h3>Use a limit reset on ${esc(accShort(a.label))}?</h3>
+      <p class="muted">${esc(r.label)}</p>
+      <div class="accresetbox"><div><span class="acctag">Refills now</span><b>${esc(r.clears.join(" · ") || "—")}</b></div>
+        <div><span class="acctag">Used so far</span><b>${esc(used.map(([k, v]) => k + " " + v + "%").join(" · ") || "—")}</b></div>
+        <div><span class="acctag">After this</span><b>${r.left - 1} of ${r.total} left${r.ends ? " · use by " + esc(accResetDay(r)) : ""}</b></div></div>
+      <p class="muted">${r.usable ? (r.keeps_week ? "Your weekly reset day stays the same. " : "") + "A used reset cannot be taken back." : "This reset cannot be used right now" + (r.needs_limit ? " — it works only once a limit is reached." : r.why ? " (" + esc(r.why) + ")." : ".")}</p>
+      <div class="msg" id="accMsg" role="status"></div>
+      <div class="accconfirmfoot"><span class="grow"></span><button type="button" class="btn-primary" data-acc-close>Keep it</button><button type="button" class="accbtn danger" data-acc-reset-go="${esc(id)}" data-grant="${esc(grant)}" ${r.usable ? "" : "disabled"}>Use reset</button></div></div>`;
+  translateTree(d);
+  if (!d.open) d.showModal();
+  d.querySelector("[data-acc-close]").focus();
 }
 function accBanner() {
   const p = accData().proposal;
@@ -116,6 +140,7 @@ function openAccMenu(btn) {
     ${item("data-acc-refresh", "refresh", "Refresh usage", "R")}
     ${item(`data-acc-edit="${esc(a.id)}"`, "pencil", "Edit account…", "E")}
     ${a.kind === "token" ? item(`data-acc-signin="${esc(a.id)}"`, "agent", "Sign in with Claude…") : ""}
+    ${accResetsLeft(a).map(r => item(`data-acc-reset="${esc(a.id)}" data-grant="${esc(r.id)}"`, "refresh", "Use reset: " + esc(r.clears.join(" + ")) + "…", r.left + " left")).join("")}
     ${item(`data-acc-copy="${esc(a.label)}"`, "copy", "Copy name")}
     <div class="accmisep"></div>
     <label class="accmi"><span class="ic16">${icon("refresh", 16)}</span><span class="grow">Include in auto-switch</span><input type="checkbox" data-acc-include="${esc(a.id)}" ${a.enabled ? "checked" : ""}><span class="tog sm"></span></label>
@@ -333,6 +358,16 @@ document.addEventListener("click", async e => {
   if (ed) { openAccEdit(ed.dataset.accEdit, !!ed.dataset.accReplace); return; }
   const rm = t0.closest("[data-acc-remove]");
   if (rm) { openAccEdit(rm.dataset.accRemove, false, true); return; }
+  const rst = t0.closest("[data-acc-reset]");
+  if (rst) { openAccReset(rst.dataset.accReset, rst.dataset.grant); return; }
+  const rg = t0.closest("[data-acc-reset-go]");
+  if (rg) {
+    rg.disabled = true; accSay("muted", t("Resetting…"));
+    const r = await accPost({ action: "reset", id: rg.dataset.accResetGo, grant: rg.dataset.grant });
+    if (!r.ok) { accSay("err", r.error); rg.disabled = false; return; }
+    accDialog().close(); accDone(r);
+    return;
+  }
   const sw = t0.closest("[data-acc-switch]");
   if (sw) { openAccConfirm(sw.dataset.accSwitch); return; }
   const go = t0.closest("[data-acc-switch-go]");

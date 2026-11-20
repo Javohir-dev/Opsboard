@@ -77,7 +77,7 @@ class LiveUsageTest(unittest.TestCase):
         system.collect_claude_usage()
         usage = core.state["claude_usage"]
         self.assertEqual((usage["source"], usage["limits"][0]["percent"]), ("live", 57))
-        self.assertEqual(SEEN, [("/api/oauth/usage", "Bearer test-oauth-token", "oauth-2025-04-20")])
+        self.assertEqual(SEEN, [("/api/oauth/usage?cedar_ember=1", "Bearer test-oauth-token", "oauth-2025-04-20")])
         self.assertNotIn("test-oauth-token", json.dumps(core.state))
 
     def test_asks_at_most_once_a_minute(self):

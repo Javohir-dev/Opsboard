@@ -147,3 +147,77 @@ class ClaudeLoginsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+GRANTS = {
+    "cedar_ember": {
+        "eligible": True,
+        "grants": [
+            {"id": "full-1", "label": "One full reset", "resets_total": 1, "resets_left": 1, "ends_at": "2030-01-01T00:00:00+00:00", "clears": ["five_hour", "seven_day"], "usable_now": True, "percent_used": {"five_hour": 7, "seven_day": 23}},
+            {"id": "used-1", "label": "Used", "resets_total": 1, "resets_left": 0, "clears": ["five_hour"], "usable_now": False, "unavailable_reason": "unavailable"},
+            {"id": "BAD ID", "resets_total": 1, "resets_left": 1},
+        ],
+    }
+}
+
+
+class LimitResetsTest(unittest.TestCase):
+    def setUp(self):
+        logins.reset()
+        logins._agent["v"] = "9.9.9"
+        self.aid = "aaaa1111"
+        patches = [
+            mock.patch.object(ca, "signed_in", side_effect=lambda a: a == self.aid),
+            mock.patch.object(ca, "twin", return_value=None),
+            mock.patch.object(ca, "label", return_value="ann"),
+            mock.patch.object(ca, "refresh_all"),
+            mock.patch.object(logins, "access", return_value=("at-ann", "")),
+            mock.patch.object(logins, "identity", return_value={"org_uuid": "org-1"}),
+        ]
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+        logins._usage[self.aid] = {"next": 0.0, "windows": {}, "at": 0.0, "resets": logins.parse_resets(GRANTS)}
+
+    def test_granted_resets_are_listed_with_what_they_refill(self):
+        full, used = ca.resets(self.aid)
+        self.assertEqual((full["id"], full["left"], full["clears"], full["usable"], full["used"]), ("full-1", 1, ["Session", "Weekly"], True, {"Session": 7, "Weekly": 23}))
+        self.assertEqual((used["left"], used["usable"]), (0, False))
+        self.assertEqual(ca.resets("token-acc"), [])
+
+    def test_a_reset_is_spent_only_when_it_is_offered_and_usable(self):
+        with mock.patch.object(logins, "claim_reset", return_value=(True, "reset", {"resets_left": 0})) as claim:
+            for grant in ("used-1", "nope"):
+                with self.assertRaises(ValueError):
+                    ca.use_reset(self.aid, grant)
+            claim.assert_not_called()
+            self.assertIn("0 left", ca.use_reset(self.aid, "full-1"))
+            claim.assert_called_once_with("at-ann", "org-1", "full-1")
+
+    def test_a_refused_reset_says_why(self):
+        with mock.patch.object(logins, "claim_reset", return_value=(False, "not_limited", {})):
+            with self.assertRaisesRegex(ValueError, "only be used at a limit"):
+                ca.use_reset(self.aid, "full-1")
+
+    def test_the_claim_goes_to_the_accounts_organization(self):
+        seen = {}
+
+        class Resp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self):
+                return b'{"result": "reset", "resets_left": 0}'
+
+        def fake(req, timeout=0):
+            seen.update(url=req.full_url, body=json.loads(req.data), agent=req.get_header("User-agent"))
+            return Resp()
+
+        with mock.patch.object(logins.request, "urlopen", side_effect=fake):
+            self.assertEqual(logins.claim_reset("at-ann", "org-1", "full-1")[:2], (True, "reset"))
+        self.assertTrue(seen["url"].endswith("/api/organizations/org-1/reset_rate_limits"))
+        self.assertEqual((seen["body"]["program"], seen["body"]["grant_id"], seen["agent"]), ("cedar_ember", "full-1", "claude-cli/9.9.9 (external, cli)"))
+        self.assertRegex(seen["body"]["request_id"], r"^[A-Za-z0-9_-]{1,64}$")

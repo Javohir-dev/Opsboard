@@ -569,7 +569,7 @@ def public():
         windows = dict(u.get("windows") or {})
         if aid in (MAIN, twin()):
             windows.update({k: w for k, w in (login.get("windows") or {}).items() if k.startswith("seven_day_") and k not in windows})
-        rows.append({"id": aid, "label": label(aid), "active": aid == current, "enabled": enabled(aid), "windows": windows, "plan": (record(aid) or {}).get("plan") or (plan if aid in (MAIN, twin()) else ""), "kind": "main" if aid == MAIN else "login" if signed_in(aid) else "token", "email": (record(aid) or {}).get("email") or "", "at": u.get("at") or 0, "error": u.get("error") or "", "level": level(u, now), "masked": cfg.masked(cfg.secret(secret_key(aid))) if aid != MAIN and cfg.secret(secret_key(aid)) else "", "login": aid == twin(), "added": next((x.get("added") or 0 for x in accounts() if x["id"] == aid), 0), "order": order_of(aid) if aid != MAIN else "normal"})
+        rows.append({"id": aid, "label": label(aid), "active": aid == current, "enabled": enabled(aid), "windows": windows, "plan": (record(aid) or {}).get("plan") or (plan if aid in (MAIN, twin()) else ""), "kind": "main" if aid == MAIN else "login" if signed_in(aid) else "token", "email": (record(aid) or {}).get("email") or "", "at": u.get("at") or 0, "error": u.get("error") or "", "level": level(u, now), "masked": cfg.masked(cfg.secret(secret_key(aid))) if aid != MAIN and cfg.secret(secret_key(aid)) else "", "login": aid == twin(), "added": next((x.get("added") or 0 for x in accounts() if x["id"] == aid), 0), "order": order_of(aid) if aid != MAIN else "normal", "resets": resets(aid)})
     prop = {k: _proposal[k] for k in ("pid", "level", "to_level", "at")} if _proposal else None
     if prop:
         prop.update(src=label(_proposal["src"]), dst=label(_proposal["dst"]))
@@ -696,6 +696,38 @@ def remove(aid):
     cfg.set_secret(secret_key(aid), "")
     _usage.pop(aid, None)
     put("claude_accounts", public())
+
+
+def resets(aid):
+    """Limit resets Anthropic has granted this account; only a signed-in account can see or use them."""
+    if aid in (MAIN, twin()):
+        return claudeusage.resets()
+    return logins.resets(aid) if signed_in(aid) else []
+
+
+def use_reset(aid, grant):
+    """Spend one reset of this account. Runs only on the person's own confirmed click, never by itself."""
+    found = next((r for r in resets(aid) if r["id"] == grant), None)
+    if not found:
+        raise ValueError("This reset is no longer offered — refresh and look again")
+    if not found["usable"]:
+        raise ValueError("This reset cannot be used right now")
+    token, why = logins.access(None if aid in (MAIN, twin()) else aid)
+    if not token:
+        raise ValueError(f"{label(aid)}: {why}")
+    org = (logins.identity(token) or {}).get("org_uuid")
+    if not org:
+        raise ValueError("Could not tell which organization this account belongs to — nothing was used")
+    ok, result, data = logins.claim_reset(token, org, grant)
+    log.info("claude account: reset %s on %s -> %s", grant, aid, result)
+    claudeusage.expire()
+    (logins._usage.get(aid) or {})["next"] = 0.0
+    _usage.pop(aid, None)
+    if not ok:
+        texts = {"already_used": "This reset was already used", "not_limited": "This reset can only be used at a limit", "cooldown": "A reset was used recently — wait and try again", "ineligible": "This account cannot use the reset", "unavailable": "Anthropic could not reset the limits right now — nothing was used"}
+        raise ValueError(texts.get(result) or f"The reset did not go through ({result}) — check the limits before trying again")
+    left = data.get("resets_left")
+    return f"Limits reset for {label(aid)}" + (f" · {left} left" if isinstance(left, int) else "")
 
 
 def refresh_all():

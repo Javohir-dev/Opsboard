@@ -1234,6 +1234,10 @@ dialog.accdlg .accadd{padding-bottom:0;display:flex;flex-direction:column;gap:2p
 .accchip.ok{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}
 .accchip.bad{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}
 .accchip.info{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent)}
+.accchip.reset{border:0;cursor:pointer;font-family:inherit;background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}
+.accchip.reset:hover{background:color-mix(in srgb,var(--ok) 26%,transparent)}
+.accresetbox{display:grid;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:10px}
+.accresetbox div{display:flex;flex-direction:column;gap:2px;font-size:13px}
 .accchip.mute{background:var(--chip);color:var(--muted)}
 .am{display:flex;flex-direction:column;gap:6px;min-width:0}
 .amtop{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12px;white-space:nowrap}
