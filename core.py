@@ -2,6 +2,7 @@ import json
 import logging
 import logging.handlers
 import os
+import sys
 import re
 import shutil
 import subprocess
@@ -18,6 +19,8 @@ HERE = Path(__file__).parent
 CLAUDE = Path.home() / ".claude"
 SESSIONS = CLAUDE / "sessions"
 PROJECTS = CLAUDE / "projects"
+if "unittest" in sys.modules and not os.environ.get("OPS_DATA_DIR"):
+    raise SystemExit("Run the tests with: python3 -m unittest discover -s tests -t .  (tests/__init__.py keeps them away from your real data)")
 DATA = Path(os.environ.get("OPS_DATA_DIR", HERE))
 log = logging.getLogger("opsboard")
 

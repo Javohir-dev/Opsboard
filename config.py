@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 import re
 import threading
 from pathlib import Path
@@ -7,6 +8,8 @@ from pathlib import Path
 import secretstore
 
 HERE = Path(__file__).parent
+if "unittest" in sys.modules and not os.environ.get("OPS_DATA_DIR"):
+    raise SystemExit("Run the tests with: python3 -m unittest discover -s tests -t .  (tests/__init__.py keeps them away from your real data)")
 CONFIG_FILE = Path(os.environ.get("OPS_CONFIG") or Path(os.environ.get("OPS_DATA_DIR", HERE)) / "config.json")
 SOURCES = ("user", "agent", "auto")
 
