@@ -275,7 +275,7 @@ function renderAccEdit() {
       : `<div class="acccode"><code>${esc(a.masked)}</code><span class="muted fs-sm grow">${esc([accAdded(a), a.error ? "not working" : "valid"].filter(Boolean).join(" · "))}</span><button type="button" class="accbtn sm" data-acc-replace-open>Replace token</button></div>`}</div>`;
   const w = a.windows || {}, lim = [["Session", w.five_hour], ["Weekly", w.seven_day], ["Fable", accFable(w)]];
   const resets = a.resets || [];
-  const resetRows = resets.length ? resets.map(r => `<div class="acccode"><span class="grow"><b>${esc(r.clears.join(" + ") || r.label)}</b><span class="muted fs-sm"> · ${r.left ? `${r.left} of ${r.total} left${r.ends ? " · use by " + esc(accResetDay(r)) : ""}` : "used"}</span></span><button type="button" class="accbtn sm" data-acc-reset="${esc(a.id)}" data-grant="${esc(r.id)}" ${r.left ? "" : "disabled"}>Use…</button></div>`).join("")
+  const resetRows = resets.length ? resets.map(r => `<div class="acccode"><span class="grow"><b>${esc(r.clears.join(" + ") || r.label)}</b><span class="muted fs-sm"> · ${r.left ? `${r.left} of ${r.total} left${r.ends ? " · use by " + esc(accResetDay(r)) : ""}` : "used"}</span></span><button type="button" class="accbtn sm" data-acc-reset="${esc(a.id)}" data-grant="${esc(r.id)}" ${r.left ? "" : "disabled"}>${r.left ? "Use reset" : "Used"}</button></div>`).join("")
     : `<span class="muted fs-sm">${a.kind === "token" ? "Sign in with Claude to see them" : "None offered right now"}</span>`;
   d.setAttribute("aria-label", "Account");
   d.innerHTML = `${accHead(esc(a.label), esc(accSub(a)))}
