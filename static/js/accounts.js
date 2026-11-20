@@ -24,7 +24,7 @@ function accMeterCell(w, loading) {
   if (!w) return `<div class="am"><div class="amtop"><span class="amp muted">—</span><span class="muted">n/a</span></div><div class="ambar"><span style="width:0"></span></div></div>`;
   const past = w.resets_at && w.resets_at < now(), p = past ? 0 : w.percent;
   return `<div class="am" title="${w.resets_at ? esc("resets " + fmtDateTime(w.resets_at)) : ""}"><div class="amtop"><span class="amp ${accColor(p)}">${p}%</span><span class="muted">${past ? "reset" : accWhen(w.resets_at)}</span></div>
-    <div class="ambar ${accColor(p)}" role="progressbar" aria-valuenow="${p}" aria-valuemin="0" aria-valuemax="100"><span style="width:${Math.max(p, 1)}%"></span><i style="left:${accTo()}%"></i><i class="sw" style="left:${accAt()}%"></i></div></div>`;
+    <div class="ambar ${accColor(p)}" role="progressbar" aria-valuenow="${p}" aria-valuemin="0" aria-valuemax="100"><span style="width:${Math.max(p, 1)}%"></span><i style="left:${accTo()}%"></i><i class="swp" style="left:${accAt()}%"></i></div></div>`;
 }
 function accState(a) {
   const err = a.error || "";
@@ -261,6 +261,7 @@ function openAccEdit(id, replace = false, del = false) {
   accClosePop();
   const a = accById(id);
   if (!a) return;
+  if (accUi.edit?.id !== id) accDialog().innerHTML = "";
   accUi.edit = { id, order: a.order || "normal", enabled: a.enabled, replace, del };
   renderAccEdit();
 }

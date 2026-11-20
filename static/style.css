@@ -1252,7 +1252,7 @@ dialog.accdlg .accadd{padding-bottom:0;display:flex;flex-direction:column;gap:2p
 .ambar span{display:block;height:100%;border-radius:3px;background:#5b7cfa;transition:width .4s}
 .ambar.warn span{background:#f5a524}.ambar.bad span{background:#ef5a5a}
 .ambar i{position:absolute;top:0;width:1px;height:100%;background:var(--muted);opacity:.55}
-.ambar i.sw{background:#c98a2c;opacity:.9}
+.ambar i.swp{background:#c98a2c;opacity:.9}
 .ambar.load span{width:35%;background:var(--line);animation:accload 1.2s ease-in-out infinite}
 @keyframes accload{50%{opacity:.4}}
 .accact{display:flex;justify-content:flex-end;align-items:center;gap:6px}
