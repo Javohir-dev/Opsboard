@@ -2,10 +2,10 @@ import json
 import logging
 import logging.handlers
 import os
-import sys
 import re
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from datetime import datetime

@@ -1,10 +1,11 @@
 import json
 import os
-import sys
 import re
+import sys
 import threading
 from pathlib import Path
 
+import safety
 import secretstore
 
 HERE = Path(__file__).parent
@@ -107,6 +108,8 @@ def load():
 
 def save(data):
     with _lock:
+        safety.allow_write(CONFIG_FILE)
+        safety.backup(CONFIG_FILE, "config")
         tmp = CONFIG_FILE.with_suffix(".tmp")
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as fh:

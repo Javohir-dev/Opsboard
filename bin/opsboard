@@ -22,7 +22,9 @@ case "${1:-up}" in
   restart) "$0" down; sleep 1; "$0" up --no-open ;;
   status) running && echo "running: http://127.0.0.1:$(port)/ (pid $(cat "$PIDF"))" || echo "not running" ;;
   test)
-    cd "$DIR" && "$PY" -m unittest discover -s tests -t . || exit 1
+    SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/opsboard-home.XXXXXX")"
+    (cd "$DIR" && HOME="$SANDBOX" OPS_DATA_DIR="$SANDBOX/data" "$PY" -m unittest discover -s tests -t .); rc=$?
+    rm -rf "$SANDBOX"; [ $rc -eq 0 ] || exit 1
     if [ "$2" = "--e2e" ]; then
       [ -d tests/e2e/node_modules ] || npm install --prefix tests/e2e >/dev/null && npx --prefix tests/e2e playwright install chromium >/dev/null
       PYTHON="$PY" npm test --prefix tests/e2e
@@ -30,7 +32,7 @@ case "${1:-up}" in
     ;;
   review) exec "$PY" "$DIR/review.py" "$@" ;;
   skill) exec "$PY" "$DIR/skillcheck.py" "$@" ;;
-  detect|config|secret|doctor) cd "$DIR" && exec "$PY" ops.py "$@" ;;
+  detect|config|secret|doctor|backups|restore) cd "$DIR" && exec "$PY" ops.py "$@" ;;
   update)
     cd "$DIR" || exit 1
     git fetch -q --tags origin || exit 1
@@ -89,6 +91,7 @@ PL
     echo "usage: opsboard [up|down|restart|status|update|version] [--no-open]"
     echo "       opsboard autostart [on|off] | home"
     echo "       opsboard test [--e2e]"
+    echo "       opsboard backups [kind] | opsboard restore <name>"
     echo "       opsboard skill check [name]   (checks a fix skill against docs/fix-skill.md)"
     echo "       opsboard review whoami|mine|info|threads|reply|resolve|describe|upload … (see opsboard review -h)"
     echo "       opsboard detect [--apply] [--json]"

@@ -3,6 +3,8 @@ import shutil
 import subprocess
 import sys
 
+import safety
+
 SERVICE = os.environ.get("OPS_SECRET_SERVICE", "opsboard")
 LEGACY_SERVICE = "claude-ops"
 NAMES = {"keychain": "macOS Keychain", "libsecret": "Secret Service (libsecret)"}
@@ -54,6 +56,7 @@ def read(key):
 def write(key, value):
     kind = backend()
     if kind == "keychain":
+        safety.allow_keychain()
         r = _run(["security", "add-generic-password", "-U", "-s", SERVICE, "-a", key, "-l", f"{SERVICE} {key}", "-w", value])
     elif kind == "libsecret":
         r = _run(["secret-tool", "store", "--label", f"{SERVICE} {key}", "service", SERVICE, "key", key], stdin=value)
@@ -65,6 +68,7 @@ def write(key, value):
 def _delete(service, key):
     kind = backend()
     if kind == "keychain":
+        safety.allow_keychain()
         _run(["security", "delete-generic-password", "-s", service, "-a", key])
     elif kind == "libsecret":
         _run(["secret-tool", "clear", "service", service, "key", key])

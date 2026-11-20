@@ -35,3 +35,4 @@ profile.local.json
 ops-dash.log*
 claude-probe/
 claude-logins/
+backups/

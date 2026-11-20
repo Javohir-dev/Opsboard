@@ -6,6 +6,7 @@ import time
 import uuid
 from pathlib import Path
 
+import safety
 from core import DATA, lock
 
 NOTES_FILE = Path(os.environ.get("OPS_NOTES", DATA / "notes.json"))
@@ -61,6 +62,7 @@ def save_notes(body):
     clean = [clean_note(it) for it in items]
     clean_trash = [clean_note(it) for it in trash[-300:]]
     with notes_lock:
+        safety.allow_write(NOTES_FILE)
         current = load_notes()
         client = int(body.get("version", -1))
         if client < current.get("version", 0):
@@ -104,4 +106,6 @@ def set_mark(key, color):
             marks[key] = color
         else:
             marks.pop(key, None)
+        safety.allow_write(MARKS_FILE)
+        safety.backup(MARKS_FILE, "marks")
         MARKS_FILE.write_text(json.dumps(marks))

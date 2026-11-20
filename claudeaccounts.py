@@ -12,6 +12,7 @@ import claudelogins as logins
 import claudeusage
 import config as cfg
 import notify
+import safety
 from core import DATA, claude_bin, lock, log, put, state
 
 SETTINGS = Path(os.environ.get("OPS_CLAUDE_SETTINGS", Path.home() / ".claude" / "settings.json"))
@@ -121,6 +122,8 @@ def switch(aid):
         data["env"] = env
     else:
         data.pop("env", None)
+    safety.allow_write(SETTINGS)
+    safety.backup(SETTINGS, "claude-settings")
     SETTINGS.parent.mkdir(parents=True, exist_ok=True)
     tmp = SETTINGS.with_name(SETTINGS.name + ".opsboard.tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)

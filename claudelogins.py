@@ -18,6 +18,7 @@ import uuid
 from pathlib import Path
 from urllib import error, request
 
+import safety
 from core import DATA, claude_bin, epoch
 
 API = os.environ.get("OPS_ANTHROPIC_URL", "https://api.anthropic.com").rstrip("/")
@@ -87,12 +88,14 @@ def read(slot=None):
 def write(slot, data):
     raw = json.dumps(data, separators=(",", ":"))
     if keychain():
+        safety.allow_keychain()
         line = f'add-generic-password -U -a "{_user()}" -s "{service(slot)}" -X "{raw.encode().hex()}"\n'
         r = _security(["-i"], stdin=line) if len(line) < 4000 else _security(["add-generic-password", "-U", "-a", _user(), "-s", service(slot), "-w", raw])
         if not r or r.returncode != 0:
             return False
     else:
         path = main_file() if slot is None else slot_dir(slot) / ".credentials.json"
+        safety.allow_write(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_name(path.name + ".tmp")
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -103,7 +106,10 @@ def write(slot, data):
 
 
 def forget(slot):
+    safety.allow_write(slot_dir(slot))
+    safety.backup(slot_dir(slot), "claude-logins")
     if keychain():
+        safety.allow_keychain()
         _security(["delete-generic-password", "-a", _user(), "-s", service(slot)])
     shutil.rmtree(slot_dir(slot), ignore_errors=True)
 
@@ -231,6 +237,9 @@ def put_account_json(slot, value):
         data = {}
     if not isinstance(data, dict) or data.get("oauthAccount") == value:
         return
+    safety.allow_write(path)
+    if slot is not None:
+        safety.backup(path.parent, "claude-logins")
     data["oauthAccount"] = value
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".opsboard.tmp")

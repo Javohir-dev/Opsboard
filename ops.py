@@ -1,10 +1,14 @@
 import argparse
 import getpass
 import json
+import os
+import shutil
 import sys
+from pathlib import Path
 
 import config as cfg
 import detect
+import safety
 
 MARK = {True: "✓", False: "✗", None: "–"}
 USER_ONLY = {"claude.live_usage", "telegram.chat_id", "telegram.claude_chat", "telegram.chat_permission", "telegram.webapp"}
@@ -80,6 +84,41 @@ def cmd_doctor(args):
     return 1 if any(c["ok"] is False for c in checks) else 0
 
 
+def _target(item):
+    kind, name = item.parent.name, item.name.split("-", 3)[-1]
+    data = cfg.CONFIG_FILE.parent
+    return {
+        "config": cfg.CONFIG_FILE,
+        "claude-settings": Path(os.environ.get("OPS_CLAUDE_SETTINGS", Path.home() / ".claude" / "settings.json")),
+        "marks": data / "marks.json",
+        "notes": data / "notes.json",
+        "claude-logins": data / "claude-logins" / name,
+    }.get(kind)
+
+
+def cmd_backups(args):
+    items = [i for i in safety.listing() if not args.kind or i.parent.name == args.kind]
+    for i in items[-args.last:]:
+        print(f"{i.parent.name:16} {i.name}")
+    if not items:
+        print("no backups yet")
+
+
+def cmd_restore(args):
+    item = next((i for i in safety.listing() if i.name == args.name), None)
+    if not item:
+        print(f"no backup named {args.name} — see: opsboard backups")
+        return 1
+    dest = _target(item)
+    safety.backup(dest, item.parent.name)
+    if item.is_dir():
+        shutil.rmtree(dest, ignore_errors=True)
+        shutil.copytree(item, dest)
+    else:
+        shutil.copy2(item, dest)
+    print(f"restored {dest} from {item.name} (the version it replaced is backed up too)")
+
+
 def main():
     p = argparse.ArgumentParser(prog="opsboard")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -98,12 +137,17 @@ def main():
     s.add_argument("--clear", action="store_true")
     dr = sub.add_parser("doctor", help="check every connection")
     dr.add_argument("--json", action="store_true")
+    b = sub.add_parser("backups", help="list the copies kept before every change")
+    b.add_argument("kind", nargs="?", choices=["config", "claude-settings", "claude-logins", "marks", "notes"])
+    b.add_argument("--last", type=int, default=30)
+    r = sub.add_parser("restore", help="put a backup back")
+    r.add_argument("name")
     args = p.parse_args()
     if args.cmd == "config" and args.action in ("set", "unset") and not args.key:
         p.error("config set/unset needs a key")
     if args.cmd == "config" and args.action == "set" and args.value is None:
         p.error("config set needs a value")
-    return {"detect": cmd_detect, "config": cmd_config, "secret": cmd_secret, "doctor": cmd_doctor}[args.cmd](args)
+    return {"detect": cmd_detect, "config": cmd_config, "secret": cmd_secret, "doctor": cmd_doctor, "backups": cmd_backups, "restore": cmd_restore}[args.cmd](args)
 
 
 if __name__ == "__main__":
