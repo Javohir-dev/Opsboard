@@ -1352,7 +1352,6 @@ dialog.accdlg .accswitch{margin:0;flex-direction:row}
 
 .ucard{display:flex;align-items:center;gap:6px;padding:2px 0 10px}
 .uring{display:block;flex:none;width:34px;height:34px}
-.uring .uon{fill:var(--ok)}
 .ucol{display:flex;flex-direction:column;gap:1px;min-width:0}
 .ucol:not(.r){flex:1}
 .ucol.r{flex:none;align-items:flex-end}
