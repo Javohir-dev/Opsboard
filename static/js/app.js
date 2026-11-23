@@ -45,12 +45,12 @@ function render() {
   const sess = findLim(/session|5.?h/i), week = findLim(/^weekly \(|7.?day|^weekly$/i) || findLim(/weekly/i);
   const pctOf = l => !l ? null : l.resets_at && l.resets_at < now() ? 0 : l.percent;
   const left = l => l?.resets_at && l.resets_at > now() ? dur(l.resets_at - now()) : "";
-  const arc = (r, p, col) => { const c = 2 * Math.PI * r; return `<circle r="${r}" cx="22" cy="22" fill="none" stroke="var(--line)" stroke-width="4"/>${p ? `<circle r="${r}" cx="22" cy="22" fill="none" stroke="${col}" stroke-width="4" stroke-linecap="round" stroke-dasharray="${(c * Math.min(100, p)) / 100} ${c}" transform="rotate(-90 22 22)"/>` : ""}`; };
+  const arc = (r, p, col) => { const c = 2 * Math.PI * r; return `<circle r="${r}" cx="22" cy="22" fill="none" stroke="var(--line)" stroke-width="3"/>${p ? `<circle r="${r}" cx="22" cy="22" fill="none" stroke="${col}" stroke-width="3" stroke-linecap="round" stroke-dasharray="${(c * Math.min(100, p)) / 100} ${c}" transform="rotate(-90 22 22)"/>` : ""}`; };
   const sp = pctOf(sess), wp = pctOf(week);
   const ringTip = [sess && `Session ${sp}%${left(sess) ? " · resets in " + left(sess) : ""}`, week && `Weekly ${wp}%${left(week) ? " · resets in " + left(week) : ""}`].filter(Boolean).join("\n");
   const who = using ? using.label : cu.account?.email || "";
   const sc = sess ? usageColor({ ...sess, percent: sp }) : "var(--usage)";
-  const usage = lims.length ? `<div class="ucard"><div class="utop"><div class="uring" title="${esc(ringTip)}"><svg viewBox="0 0 44 44" aria-hidden="true">${arc(19, sp, sc)}</svg><span class="uringt"><b>${sp == null ? "—" : sp + "%"}</b><i>5h</i></span></div>
+  const usage = lims.length ? `<div class="ucard"><div class="utop"><div class="uring" title="${esc(ringTip)}"><svg viewBox="0 0 44 44" aria-hidden="true">${arc(20.5, sp, sc)}</svg><span class="uringt"><b class="${sp >= 100 ? "x3" : ""}">${sp == null ? "—" : sp + "%"}</b><i>5h</i></span></div>
 <div class="ucol"><b class="uname1" translate="no" title="${esc(ringTip)}">${esc(nick(who) || "Claude")}${live ? `<span class="ulive" title="Asked from Anthropic every 10 minutes">live</span>` : ""}</b><span class="usub">${left(sess) ? "resets " + left(sess) : sess ? "session" : ""}</span></div>
     <div class="ucol r" title="${esc(week?.resets_at ? "resets " + fmtDateTime(week.resets_at) : "")}"><b class="ubig" style="${wp >= 80 ? `color:${usageColor({ ...week, percent: wp })}` : ""}">${wp == null ? "—" : wp + "%"}</b><span class="usub">7d${left(week) ? " · " + left(week) : ""}</span></div></div>
     ${week ? `<div class="uwbar" title="${esc(`Weekly ${wp}% · auto-switch point ${accAt()}%`)}"><span style="width:${Math.min(100, wp || 0)}%;background:${usageColor({ ...week, percent: wp })}"></span><i style="left:${accAt()}%"></i></div>` : ""}</div>` : "";
