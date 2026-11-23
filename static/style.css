@@ -1372,6 +1372,7 @@ dialog.accdlg .accswitch{margin:0;flex-direction:row}
 .uswitch{display:flex;flex-direction:column;gap:2px}
 .urow{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 4px 5px 6px;border-radius:7px;color:var(--text);text-decoration:none;font-size:12.5px}
 .urow:hover{background:color-mix(in srgb,var(--text) 6%,transparent)}
+.urow,.urow:hover,.urow:hover *{text-decoration:none}
 .uname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .upill{flex:none;min-width:38px;text-align:center;padding:2px 7px;border-radius:999px;font-size:11.5px;font-weight:650;font-variant-numeric:tabular-nums;background:color-mix(in srgb,var(--text) 9%,transparent);color:var(--text)}
 .upill.ok{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
