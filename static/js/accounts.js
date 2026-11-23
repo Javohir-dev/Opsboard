@@ -376,6 +376,8 @@ document.addEventListener("click", async e => {
   }
   const row = t0.closest("[data-acc-row]");
   if (row && !t0.closest("button, a, input, label")) { openAccEdit(row.dataset.accRow); return; }
+  const ao = t0.closest("[data-acc-open]");
+  if (ao) { e.preventDefault(); openAccConfirm(ao.dataset.accOpen); return; }
   const sw = t0.closest("[data-acc-switch]");
   if (sw) { openAccConfirm(sw.dataset.accSwitch); return; }
   const go = t0.closest("[data-acc-switch-go]");

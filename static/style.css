@@ -1349,3 +1349,23 @@ dialog.accdlg .accswitch{margin:0;flex-direction:row}
 .accseg.two{grid-template-columns:repeat(2,minmax(0,1fr))}
 .accwrap{white-space:normal;word-break:break-all;font-size:12px;padding:8px 0}
 .acccheck.wait svg{animation:spin 1.2s linear infinite}
+
+.ucard{display:flex;align-items:center;gap:6px;padding:2px 0 10px}
+.uring{display:block;flex:none;width:34px;height:34px}
+.uring .uon{fill:var(--ok)}
+.ucol{display:flex;flex-direction:column;gap:1px;min-width:0}
+.ucol:not(.r){flex:1}
+.ucol.r{flex:none;align-items:flex-end}
+.uname1{font-size:13px;font-weight:650;line-height:1.35;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.uname1 .ulive{margin-left:5px;vertical-align:1px}
+.ubig{font-size:18px;font-weight:700;line-height:1.1;color:var(--text);font-variant-numeric:tabular-nums}
+.usub{font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.uswitch{display:flex;flex-direction:column;gap:2px;padding-top:8px;border-top:1px solid var(--line)}
+.ushead{display:flex;justify-content:space-between;font-size:var(--fs-xs);color:var(--muted);padding:0 2px 4px}
+.urow{display:grid;grid-template-columns:22px minmax(0,1fr) 34px 32px;align-items:center;gap:8px;padding:3px 2px;border-radius:6px;color:var(--text);text-decoration:none;font-size:12px}
+.urow:hover{background:color-mix(in srgb,var(--text) 6%,transparent)}
+.uini{display:grid;place-items:center;width:22px;height:22px;border-radius:5px;background:var(--panel2);color:var(--muted);font-size:9.5px;font-weight:700;letter-spacing:.2px}
+.uname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ubar{height:3px;border-radius:2px;background:var(--line);overflow:hidden}
+.ubar span{display:block;height:100%;background:var(--muted);border-radius:2px}
+.urow b{text-align:right;font-weight:650;font-variant-numeric:tabular-nums}
