@@ -548,7 +548,7 @@ body { min-height: 100vh; }
 .navi .n { font-size: var(--fs-xs); font-weight: 600; color: var(--muted); background: var(--chip); border-radius: var(--r-full); padding: 1px 7px; font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; gap: 3px; }
 .navi .n.busy { color: var(--busy); background: color-mix(in srgb, var(--busy) 16%, transparent); }
 .navi.lock { opacity: .4; cursor: not-allowed; }
-.sidefoot { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding: 12px 4px 0; }
+.sidefoot { display: flex; flex-direction: column; gap: 10px; padding: 12px 4px 0; }
 .sidefoot #theme { align-self: flex-start; }
 .hstats { display: flex; flex-direction: column; gap: 8px; font-size: var(--fs-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
 .meter .mrow { display: flex; justify-content: space-between; gap: 8px; }
@@ -1350,7 +1350,7 @@ dialog.accdlg .accswitch{margin:0;flex-direction:row}
 .accwrap{white-space:normal;word-break:break-all;font-size:12px;padding:8px 0}
 .acccheck.wait svg{animation:spin 1.2s linear infinite}
 
-.ucard{display:flex;flex-direction:column;gap:9px;padding:9px 8px;margin-bottom:6px;border:1px solid var(--line);border-radius:10px;background:color-mix(in srgb,var(--text) 3%,transparent)}
+.ucard{display:flex;flex-direction:column;gap:9px;padding:0 2px;margin-bottom:6px}
 .utop{display:flex;align-items:center;gap:6px}
 .uwbar{position:relative;height:3px;border-radius:2px;background:var(--line)}
 .uwbar span{display:block;height:100%;border-radius:2px}
