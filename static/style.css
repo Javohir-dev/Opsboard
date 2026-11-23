@@ -1351,7 +1351,7 @@ dialog.accdlg .accswitch{margin:0;flex-direction:row}
 .accwrap{white-space:normal;word-break:break-all;font-size:12px;padding:8px 0}
 .acccheck.wait svg{animation:spin 1.2s linear infinite}
 
-.ucard{display:flex;flex-direction:column;gap:9px;padding:0 2px;margin-bottom:6px}
+.ucard{display:flex;flex-direction:column;gap:9px;padding:0;margin-bottom:6px}
 .utop{display:flex;align-items:center;gap:6px}
 .uwbar{position:relative;height:3px;border-radius:2px;background:var(--line)}
 .uwbar span{display:block;height:100%;border-radius:2px}
@@ -1370,7 +1370,7 @@ dialog.accdlg .accswitch{margin:0;flex-direction:row}
 .ubig{font-size:16px;font-weight:700;line-height:1.1;color:var(--text);font-variant-numeric:tabular-nums}
 .usub{font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .uswitch{display:flex;flex-direction:column;gap:2px}
-.urow{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 4px 5px 6px;border-radius:7px;color:var(--text);text-decoration:none;font-size:12.5px}
+.urow{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 -6px;padding:5px 6px;border-radius:7px;color:var(--text);text-decoration:none;font-size:12.5px}
 .urow:hover{background:color-mix(in srgb,var(--text) 6%,transparent)}
 .urow,.urow:hover,.urow:hover *{text-decoration:none}
 .uname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
