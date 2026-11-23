@@ -19,7 +19,6 @@ function render() {
   const groups = [
     ["", [["overview", "Overview"], ["sessions", "Sessions"], ["tasks", tasksPage()], ["mrs", mrsPage()], ["notes", "ToDo"], ["accounts", "Claude accounts"]]],
     ["Infrastructure", [["docker", "Docker"], ["postgres", "Postgres"], ["worktrees", "Worktrees"], ["processes", "Processes"]]],
-    ["", [["settings", "Settings"]]],
   ];
   const missing = setupMissing();
   const locked = missing.length > 0;
@@ -32,7 +31,9 @@ function render() {
     if (locked && !["settings", "notes", "accounts"].includes(k)) return `<span class="navi lock" title="Finish the required settings first">${icon(k, 16)}<span class="lbl">${label}</span></span>`;
     return `<a href="#/${k === "overview" ? "" : k}" class="navi ${active === k ? "on" : ""}" ${active === k ? 'aria-current="page"' : ""} title="${esc(label + (combo ? " · " + combo : ""))}">${icon(k, 16)}<span class="lbl">${label}</span>${busy}${n}</a>`;
   };
-  patch($("nav"), groups.map(([title, items], gi) => `<div class="navgroup ${gi === groups.length - 1 ? "last" : ""}">${title ? `<div class="navtitle">${title}</div>` : ""}${items.map(navItem).join("")}</div>`).join(""));
+  $("setbtn").classList.toggle("on", active === "settings");
+  $("setbtn").toggleAttribute("aria-current", active === "settings");
+  patch($("nav"), groups.map(([title, items], gi) => `<div class="navgroup">${title ? `<div class="navtitle">${title}</div>` : ""}${items.map(navItem).join("")}</div>`).join(""));
   const errs = Object.entries(data).filter(([k]) => k.startsWith("error_"));
   const cu = data.claude_usage || {};
   const usageColor = l => l.severity === "critical" || l.percent >= 95 ? "var(--bad)" : l.severity === "warning" || l.percent >= 80 ? "var(--warn)" : "var(--usage)";
@@ -382,13 +383,7 @@ document.addEventListener("click", async e => {
 });
 document.addEventListener("toggle", e => { const k = e.target.dataset?.key; if (k) e.target.open ? expanded.add(k) : expanded.delete(k); }, true);
 document.addEventListener("change", e => { const k = e.target.dataset?.pref; if (k) { setPref(k, e.target.checked); render(); } });
-$("theme").onclick = () => {
-  const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-  const next = cur === "dark" ? "light" : "dark";
-  document.documentElement.dataset.theme = next;
-  try { localStorage.setItem("ops.theme", next); } catch (e) {}
-  fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "ui.theme", value: next }) }).then(() => { if (data?.config) data.config["ui.theme"] = { value: next, source: "user" }; if (route().page === "settings") rerenderSettings(); }).catch(() => {});
-};
+$("setbtn").onclick = () => { location.hash = "#/settings"; };
 let fixIid = null;
 const FX = ["fxThreads", "fxSkip", "fxConflict", "fxPush"];
 function fixOpts() { return { iid: fixIid, threads: $("fxThreads").checked, skiptests: $("fxSkip").checked, conflict: $("fxConflict").checked, push: $("fxPush").checked }; }

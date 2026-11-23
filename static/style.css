@@ -484,7 +484,8 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .menu .mi:hover { background: var(--panel2); }
 .menu .swatch { height: 24px; padding: 0; border: 2px solid transparent; }
 .ntag { height: auto; }
-#theme { width: var(--h-sm); padding: 0; }
+#setbtn { width: var(--h-sm); padding: 0; }
+#setbtn.on { color: var(--accent); border-color: var(--accent); }
 input, select { font: inherit; }
 .search, .datef select, .datef input[type=date], .mrsort, .smap select, .fctl input[type=text], .fctl input[type=password], .fctl input[type=number], .fctl input:not([type]), .fctl select { height: var(--h-md); font-size: var(--fs-md); border-radius: var(--r-sm); padding-top: 0; padding-bottom: 0; }
 .mrbar .search, .mrsort { height: var(--h-md); }
@@ -549,7 +550,7 @@ body { min-height: 100vh; }
 .navi .n.busy { color: var(--busy); background: color-mix(in srgb, var(--busy) 16%, transparent); }
 .navi.lock { opacity: .4; cursor: not-allowed; }
 .sidefoot { display: flex; flex-direction: column; gap: 10px; padding: 12px 4px 0; }
-.sidefoot #theme { align-self: flex-start; }
+.sidefoot #setbtn { align-self: flex-start; }
 .hstats { display: flex; flex-direction: column; gap: 8px; font-size: var(--fs-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
 .meter .mrow { display: flex; justify-content: space-between; gap: 8px; }
 .meter b { color: var(--text); font-weight: 600; }
