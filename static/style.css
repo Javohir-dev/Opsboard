@@ -858,6 +858,16 @@ main:has(.mrlayout) { max-width: none; }
   .mrbar2 { margin: 0 -24px 14px; padding: 10px 24px; }
   .mrcmp { display: none; }
 }
+main:has(.mrlayout) { container: mrwrap / inline-size; }
+@container mrwrap (max-width: 1200px) { .mrlayout.with-tree.with-threads { grid-template-columns: 220px minmax(0, 1fr) 320px; } }
+@container mrwrap (max-width: 1040px) {
+  .mrlayout.with-tree.with-threads { grid-template-columns: minmax(0, 1fr) 320px; }
+  .mrlayout.with-tree.with-threads .ftree { grid-column: 1 / -1; position: static; max-height: 300px; }
+}
+@container mrwrap (max-width: 780px) {
+  .mrlayout.with-tree, .mrlayout.with-threads, .mrlayout.with-tree.with-threads { grid-template-columns: minmax(0, 1fr); }
+  .mrlayout .ftree, .mrlayout .mrthreads { position: static; max-height: 420px; }
+}
 @media (max-width: 760px) { .mrbar2 { top: 52px; margin: 0 -16px 14px; padding: 8px 16px; } .mrstat { display: none; } .dviewed { display: none; } }
 
 /* merge request page: GitLab header, tabs, overview */
@@ -998,7 +1008,8 @@ a.cnt:hover { filter: brightness(1.15); }
 .mrside2, .runmain { top: calc(var(--mrstick, 0px) + 16px); }
 .mrthreads { top: calc(var(--mrstick, 0px) + 16px); max-height: calc(100vh - var(--mrstick, 0px) - 32px); }
 .feed { max-height: calc(100vh - var(--mrstick, 0px) - 120px); }
-@media (max-width: 1100px) { .mrsticky { margin: 0 -24px; padding: 0 24px; } .mrmini .brchip, .mrmini .dicon, .mrmini .muted { display: none; } }
+@media (max-width: 1180px) and (min-width: 761px) { .mrsticky { margin: 0 -24px; padding: 0 24px; } .mrbar2 { margin: 0 -24px 14px; padding: 10px 24px; } }
+@media (max-width: 1100px) { .mrmini .brchip, .mrmini .dicon, .mrmini .muted { display: none; } }
 @media (max-width: 760px) { .mrsticky { top: 52px; margin: 0 -16px; padding: 0 16px; } .mrbar2 { top: calc(var(--mrstick, 0px) + 52px); } .mrtabs2 { overflow-x: auto; } }
 .linkbtn.danger { color: var(--bad); } .tglink { display: inline-flex; align-items: center; text-decoration: none !important; } .badge.muted { color: var(--muted); background: var(--chip); }
 .tgtoken input { width: 100%; }
