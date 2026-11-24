@@ -949,6 +949,7 @@ a.cnt:hover { filter: brightness(1.15); }
 .runpick button.on { color: var(--text); border-color: var(--accent); }
 .runpick .dot { margin: 0; }
 .runhead { display: flex; align-items: center; gap: 16px; padding: 14px 16px; margin-bottom: 16px; }
+.runhead > .grow { flex: 1; min-width: 0; }
 .runname { font-family: var(--mono); font-size: var(--fs-md); font-weight: 600; margin-bottom: 4px; overflow-wrap: anywhere; }
 .runhead .outcome { margin-top: 6px; }
 .runlayout { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 20px; align-items: start; }
