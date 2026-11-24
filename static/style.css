@@ -228,6 +228,7 @@ details[open] > summary::before { transform: rotate(45deg); }
 .mrlist .mrrow:hover { background: var(--panel2); }
 .mrmain { flex: 1; min-width: 0; }
 .mrtitle { font-weight: 600; font-size: var(--fs-base); color: var(--text); text-decoration: none; }
+.mrrow .mrtitle { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mrtitle:hover { color: var(--accent); }
 .mrsub { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; margin-top: 4px; font-size: var(--fs-sm); color: var(--muted); }
 .mrbr { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: var(--fs-sm); }
