@@ -1068,44 +1068,6 @@ def deliver(text, placeholder=None):
         send(part, plain=True)
 
 
-WAIT = {
-    "en": [
-        "🤔 One moment, let me think…",
-        "🧠 Gathering my thoughts…",
-        "☕ One sip of coffee and I'm on it…",
-        "🧩 It's starting to come together…",
-        "🐢 Slow and careful — nearly there…",
-        "✨ Polishing the answer…",
-        "🧭 Finding the right way to put it…",
-        "📝 Preparing the answer…",
-        "⏳ Just a moment…",
-        "💡 Good question — thinking it through…",
-    ],
-    "uz": [
-        "🤔 Kutib turing, o'ylab olay…",
-        "🧠 Fikrlarni jamlayapman…",
-        "☕ Bir qultum choy — va davom etaman…",
-        "🧩 Rasm aniqlashib qoldi…",
-        "🐢 Shoshmasdan, puxta — oz qoldi…",
-        "✨ Javobni sayqallayapman…",
-        "🧭 To'g'ri yo'lni topyapman…",
-        "📝 Javobni tayyorlayapman…",
-        "⏳ Bir zum…",
-        "💡 Yaxshi savol, o'ylab ko'ryapman…",
-    ],
-    "ru": [
-        "🤔 Секунду, подумаю…",
-        "🧠 Собираюсь с мыслями…",
-        "☕ Глоток кофе — и продолжаю…",
-        "🧩 Картина складывается…",
-        "🐢 Медленно, но верно — почти готово…",
-        "✨ Шлифую ответ…",
-        "🧭 Ищу, как лучше сказать…",
-        "📝 Готовлю ответ…",
-        "⏳ Минутку…",
-        "💡 Хороший вопрос, обдумываю…",
-    ],
-}
 DOING = {
     "en": {
         "read": "📖 reading {x}",
@@ -1148,7 +1110,7 @@ RE_EN = re.compile(r"\b(the|what|how|why|is|are|can|please|show|tell|does|which|
 
 def lang_of(text):
     chosen = cfg.get("telegram.language") or "auto"
-    if chosen in WAIT:
+    if chosen in WORKING:
         return chosen
     text = text or ""
     if re.search(r"[А-Яа-яЁё]", text):
@@ -1159,7 +1121,7 @@ def lang_of(text):
     if en:
         return "en"
     ui = (cfg.get("ui.language") or "")[:2]
-    return ui if ui in WAIT else "uz"
+    return ui if ui in WORKING else "uz"
 
 
 def _doing(block, lang):
@@ -1267,8 +1229,8 @@ class ClaudeChat:
                     send(f"Could not start Claude: {esc(str(exc))}")
                     return
             queued = bool(self.turns)
-            msg = send(_waiting_text(QUEUED[lang] if queued else random.choice(WAIT[lang]), time.time(), ""))
-            self.turns.append({"placeholder": (msg or {}).get("message_id"), "started": time.time(), "lang": lang, "phrases": random.sample(WAIT[lang], len(WAIT[lang]))})
+            msg = send(esc(QUEUED[lang] if queued else WORKING[lang]))
+            self.turns.append({"placeholder": (msg or {}).get("message_id"), "started": time.time(), "lang": lang})
             self.lang, self.last = lang, time.time()
             try:
                 self.proc.stdin.write(json.dumps({"type": "user", "message": {"role": "user", "content": text}}) + "\n")
@@ -1321,10 +1283,8 @@ class ClaudeChat:
                 send(text)
 
     def _tick(self, proc):
-        n = 0
         while proc.poll() is None:
             time.sleep(1)
-            n += 1
             with self.lock:
                 turn = self.turns[0] if self.turns else None
                 idle = not self.turns and time.time() - self.last > IDLE_CLOSE
@@ -1337,9 +1297,6 @@ class ClaudeChat:
                 call("sendChatAction", chat_id=chat_id(), action="typing")
             except TelegramError:
                 pass
-            if n % 5 == 0 and turn["placeholder"]:
-                phrase = turn["phrases"][(n // 5) % len(turn["phrases"])]
-                edit(turn["placeholder"], _waiting_text(phrase, turn["started"], self.doing))
 
     def close(self):
         proc = self.proc
@@ -1367,8 +1324,7 @@ class ClaudeChat:
 CHAT = ClaudeChat()
 
 
-def _waiting_text(phrase, started, doing):
-    return f"{esc(phrase)}\n\n<i>⏱ {_dur(time.time() - started)}{' · ' + esc(doing) if doing else ''}</i>"
+WORKING = {"uz": "⏳ So'rovingiz ustida ishlayapman, kuting…", "en": "⏳ Working on your request, please wait…", "ru": "⏳ Работаю над вашим запросом, подождите…"}
 
 
 def reply_for(text, message_id=None, quoted=""):
