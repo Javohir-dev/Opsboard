@@ -149,7 +149,18 @@ class Handler(BaseHTTPRequestHandler):
         if not self.same_origin():
             self.send_error(403)
             return
-        if self.path.startswith("/api/claude-wait-answer"):
+        if self.path.startswith("/api/telegram-file"):
+            try:
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+                if body.get("path"):
+                    msg = telegram.send_file(str(body["path"]), str(body.get("caption") or ""), str(body.get("origin") or "")[:200])
+                else:
+                    msg = telegram.send_text(str(body.get("text") or "")[:3500], str(body.get("origin") or "")[:200])
+                out = {"ok": bool(msg)}
+            except (ValueError, OSError) as exc:
+                out = {"ok": False, "error": str(exc)[:200]}
+            self.send(json.dumps(out), "application/json")
+        elif self.path.startswith("/api/claude-wait-answer"):
             try:
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
                 req = str(body.get("req") or "")

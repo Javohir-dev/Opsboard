@@ -309,10 +309,11 @@ class TelegramTest(unittest.TestCase):
         self.assertIn("<code>ISS-4805</code>", [b for m, b in SENT if m == "sendMessage"][-1]["text"])
         self.assertIn(("editMessageReplyMarkup", {"chat_id": 111, "message_id": 9, "reply_markup": {"inline_keyboard": []}}), SENT)
         self.panelize.return_value = "🟢 Daemon · ishlayapti\n🔴 Qotgan · 3"
-        telegram.deliver_panel("Multica ishlayapti, nosozlik ko'rinmayapti. Agentlar va autopilotlar holati.", None, "uz")
-        sent = [b for m, b in SENT if m == "sendMessage"][-1]
-        self.assertEqual(sent["text"], "🟢 Daemon · ishlayapti\n\n🔴 Qotgan · 3")
-        self.assertIn("📄 Batafsil", sent["reply_markup"]["inline_keyboard"][0][0]["text"])
+        telegram.deliver_panel("Multica ishlayapti, nosozlik ko'rinmayapti.\nAgentlar: 12 ta, 3 tasi ishlayapti.\nAutopilotlar: Girgitton hozir ishlayapti.\nIssue'lar: 7 ta in progress, 62 ta blocked.", None, "uz")
+        self.assertEqual([b for m, b in SENT if m == "sendMessage"][-1]["text"], "🟢 Daemon · ishlayapti\n\n🔴 Qotgan · 3")
+        telegram.deliver_panel("Qaysi sessiya yuborganini ayting?", None, "uz")
+        self.assertNotIn("reply_markup", [b for m, b in SENT if m == "sendMessage"][-1])
+
         self.assertTrue(telegram.is_panel("🟢 a\n👉 b"))
         self.assertFalse(telegram.is_panel("Multica ishlayapti"))
 

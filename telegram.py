@@ -97,7 +97,7 @@ def public():
     return out
 
 
-_notes, _notes_lock = [], threading.Lock()
+_notes, _notes_lock, _origins = [], threading.Lock(), {}
 NOTES_KEEP, NOTES_SPAN = 20, 3 * 3600
 
 
@@ -107,6 +107,64 @@ def _remember(text):
         with _notes_lock:
             _notes.append((time.time(), plain[:1500]))
             del _notes[:-NOTES_KEEP]
+
+
+def send_file(path, caption="", origin=""):
+    """A file another Claude Code session sends through the bot; the chat later knows which session sent it."""
+    path = Path(path)
+    target = chat_id()
+    if not target or not path.is_file():
+        return None
+    boundary = secrets.token_hex(12)
+    parts = [f"--{boundary}\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n{target}\r\n".encode()]
+    if caption:
+        parts.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"caption\"\r\n\r\n{caption[:1000]}\r\n".encode())
+    parts += [f"--{boundary}\r\nContent-Disposition: form-data; name=\"document\"; filename=\"{path.name}\"\r\n\r\n".encode(), path.read_bytes(), f"\r\n--{boundary}--\r\n".encode()]
+    req = request.Request(f"{API}/bot{cfg.secret('telegram.token')}/sendDocument", data=b"".join(parts), headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+    try:
+        with request.urlopen(req, timeout=60) as resp:
+            out = json.loads(resp.read().decode())
+    except (error.URLError, OSError, ValueError) as exc:
+        log.warning("telegram file send failed: %s", exc.__class__.__name__)
+        return None
+    msg = out.get("result") if out.get("ok") else None
+    if msg:
+        _remember(f"[file {path.name} sent by session {origin or '?'}] {caption}")
+        with _notes_lock:
+            _origins[msg["message_id"]] = origin or "?"
+            while len(_origins) > 200:
+                _origins.pop(next(iter(_origins)))
+    return msg
+
+
+def send_text(text, origin=""):
+    if not text.strip():
+        return None
+    msg = send(md_to_html(text))
+    if msg:
+        _remember(f"[message from session {origin or '?'}] {text}")
+        with _notes_lock:
+            _origins[msg["message_id"]] = origin or "?"
+    return msg
+
+
+def _live_sessions():
+    """One line per running Claude Code session, so the chat can tell which one a message is about."""
+    with lock:
+        rows = list(state.get("sessions") or [])
+    home = str(Path.home())
+    out = []
+    for x in rows[:15]:
+        cwd = str(x.get("cwd") or "")
+        folder = re.sub(r"[^A-Za-z0-9]", "-", cwd)
+        name = x.get("title") or x.get("name") or ""
+        if x.get("name") and x.get("name") != name:
+            name = f"{name} ({x['name']})"
+        status = "working" if x.get("status") == "busy" else "idle"
+        prompt = re.sub(r"\s+", " ", str(x.get("last_prompt") or ""))[:120]
+        out.append(f"- {name} · {status} · {cwd.replace(home, '~', 1)} · {x.get('entrypoint') or ''} · "
+                   f"transcript ~/.claude/projects/{folder}/{x.get('id')}.jsonl" + (f" · last prompt: {prompt}" if prompt else ""))
+    return "\n".join(out)
 
 
 def recent_notes(since):
@@ -1135,6 +1193,9 @@ def _spaced(panel):
 
 
 def deliver_panel(text, placeholder=None, lang="uz"):
+    if "\n---" not in text and len(text) <= 300 and len([ln for ln in text.splitlines() if ln.strip()]) <= 3:
+        deliver(text, placeholder)
+        return
     panel, details = split_panel(text)
     if not is_panel(panel):
         made = panelize(text)
@@ -1275,7 +1336,10 @@ CHAT_ROLE = (
     "Each message may start with [Opsboard notifications since your last turn] and [He replied to] blocks: "
     "read them first, they are what his message is about. Permission prompts and questions of other Claude Code "
     "sessions arrive as their own bot messages with buttons; when he wants to allow or answer one, tell him to use "
-    "those buttons or reply to that message (VS Code sessions), otherwise to answer on the Mac.\n\n"
+    "those buttons or reply to that message (VS Code sessions), otherwise to answer on the Mac. "
+    "Other Claude Code sessions on this Mac also send him files and screenshots through the bot; a [He replied to] block "
+    "then names the sending session and folder. Answer from what that message and its caption say; when the question "
+    "is about that session's work, read its transcript (~/.claude/projects/<folder>/<session>.jsonl) or the code it names.\n\n"
     "How to write every answer (the bot shows only the first part on his phone; the rest is behind a Details button):\n"
     "Part 1 — a status panel: 2 to 6 lines, each '<emoji> <label> · <short value>', at most 40 characters, no sentences. "
     "Emoji: 🟢 fine, 🟡 watch, 🔴 problem or he must act, ⚪ nothing/none. Put the 🔴 lines first. If he must do "
@@ -1347,6 +1411,9 @@ class ClaudeChat:
             text = "[Opsboard notifications since your last turn]\n" + "\n".join(ctx) + "\n\n" + text
         if quoted:
             text = f"[He replied to]\n{quoted[:1500]}\n\n" + text
+        live = _live_sessions()
+        if live:
+            text = "[Live Claude Code sessions on this Mac]\n" + live + "\n\n" + text
         if message_id:
             react(message_id)
         with self.lock:
@@ -1513,7 +1580,12 @@ def handle_message(msg):
         return
     if msg.get("reply_to_message") and any(hook(msg) for hook in REPLY_HOOKS):
         return
-    quoted = (msg.get("reply_to_message") or {}).get("text") or ""
+    rep = msg.get("reply_to_message") or {}
+    quoted = rep.get("text") or rep.get("caption") or ""
+    with _notes_lock:
+        origin = _origins.get(rep.get("message_id"))
+    if origin:
+        quoted = f"{quoted}\n(sent by the Claude Code session {origin})"
     text_out, buttons = reply_for(text, msg.get("message_id"), quoted)
     if text_out:
         send(text_out, buttons)
