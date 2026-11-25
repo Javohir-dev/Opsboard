@@ -223,7 +223,7 @@ def text(item):
     else:
         head = f"Fix {o.get('status') or 'finished'} · {ref}"
         th = o.get("threads") or {}
-        parts = [str(o["commit"])[:10] if o.get("commit") else "", f"threads {th.get('resolved', 0)} resolved · {th.get('open', 0)} open" if th else "", o.get("checks") or "", o.get("note") or ""]
+        parts = [str(o["commit"])[:10] if o.get("commit") else "", (f"threads {th['replied']} replied · {th.get('open', 0)} open" if 'replied' in th else f"threads {th.get('resolved', 0)} resolved · {th.get('open', 0)} open") if th else "", o.get("checks") or "", o.get("note") or ""]
         body = " · ".join(p for p in parts if p) or item.get("mr_title") or "done"
     return head, body
 

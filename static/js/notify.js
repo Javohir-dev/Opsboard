@@ -11,7 +11,7 @@ function notifText(n) {
   if (n.kind === "thread") return { level: "info", head: `New thread · ${ref}${n.path && n.line ? ` · ${n.path.split("/").pop()}:${n.line}` : ""}`, body: `${n.author}: ${n.body}` };
   if (n.status === "error") return { level: "bad", head: `Fix failed · ${ref}`, body: n.error || "The run ended with an error" };
   if (o.status === "stopped") return { level: "bad", head: `Fix stopped · ${ref}`, body: o.note || "It could not finish" };
-  const th = o.threads ? `threads ${o.threads.resolved ?? 0} resolved · ${o.threads.open ?? 0} open` : "";
+  const th = o.threads ? (o.threads.replied != null ? `threads ${o.threads.replied} replied · ${o.threads.open ?? 0} open` : `threads ${o.threads.resolved ?? 0} resolved · ${o.threads.open ?? 0} open`) : "";
   const body = [o.commit ? String(o.commit).slice(0, 10) : "", th, o.checks || "", o.note || ""].filter(Boolean).join(" · ");
   return { level: o.status === "committed" ? "warn" : "ok", head: `Fix ${o.status || "finished"} · ${ref}`, body };
 }

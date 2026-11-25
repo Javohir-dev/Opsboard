@@ -118,7 +118,7 @@ function notesTodoSection() {
 function outcomeLine(o) {
   if (!o) return "";
   const cls = { pushed: "ok", committed: "warn", stopped: "bad" }[o.status] || "muted";
-  const th = o.threads ? `threads ${o.threads.resolved ?? 0} resolved · ${o.threads.open ?? 0} open` : "";
+  const th = o.threads ? (o.threads.replied != null ? `threads ${o.threads.replied} replied · ${o.threads.open ?? 0} open` : `threads ${o.threads.resolved ?? 0} resolved · ${o.threads.open ?? 0} open`) : "";
   return `<div class="s outcome"><span class="badge ${cls}">${esc(o.status || "?")}</span>${[o.commit ? `<code>${esc(String(o.commit).slice(0, 10))}</code>` : "", th, o.checks ? esc(o.checks) : "", o.note ? esc(o.note) : ""].filter(Boolean).join(" · ")}</div>`;
 }
 function runsSection(limit = 8) {

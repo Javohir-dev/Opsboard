@@ -746,7 +746,7 @@ def _fix_finished(item):
     o = item.get("outcome") or {}
     th = o.get("threads") or {}
     key = "error" if item.get("status") == "error" else "stopped" if o.get("status") == "stopped" else "done"
-    bits = [o.get("status") or "", str(o.get("commit") or "")[:10], f"{th.get('resolved', 0)}/{th.get('resolved', 0) + th.get('open', 0)} threads" if th else ""]
+    bits = [o.get("status") or "", str(o.get("commit") or "")[:10], (f"{th['replied']} replied, {th.get('open', 0)} open" if 'replied' in th else f"{th.get('resolved', 0)}/{th.get('resolved', 0) + th.get('open', 0)} threads") if th else ""]
     detail = " · ".join(b for b in bits if b)
     status = words[key].format(name=esc(tracked["name"])) + (f" · {esc(detail)}" if detail else "")
     edit(tracked["message_id"], f"{tracked['base']}\n\n{status}")
