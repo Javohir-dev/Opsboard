@@ -14,6 +14,7 @@ from pathlib import Path
 from urllib import error, request
 
 import claudeaccounts
+import cockpitchat
 import config as cfg
 import notify
 from core import DATA, claude_bin, lock, log, project_root, state
@@ -1337,6 +1338,10 @@ CHAT_ROLE = (
     "read them first, they are what his message is about. Permission prompts and questions of other Claude Code "
     "sessions arrive as their own bot messages with buttons; when he wants to allow or answer one, tell him to use "
     "those buttons or reply to that message (VS Code sessions), otherwise to answer on the Mac. "
+    "When he asks you to do something on this Mac (run a command, change a file, put it to sleep), do it yourself with your "
+    "tools — never tell him to do it by hand. Anything that needs his permission reaches him as its own bot message with "
+    "Yes/No buttons, so just make the call. In plan mode, first call ExitPlanMode with a one-line plan; he approves it with "
+    "a button and you can act. "
     "Other Claude Code sessions on this Mac also send him files and screenshots through the bot; a [He replied to] block "
     "then names the sending session and folder. Answer from what that message and its caption say; when the question "
     "is about that session's work, read its transcript (~/.claude/projects/<folder>/<session>.jsonl) or the code it names.\n\n"
@@ -1366,6 +1371,8 @@ class ClaudeChat:
         self.seen = time.time() - NOTES_SPAN
         self.prev = None
         self.lock = threading.Lock()
+        self.wlock = threading.Lock()
+        self.cwd = str(Path.home())
 
     @property
     def busy(self):
@@ -1376,10 +1383,12 @@ class ClaudeChat:
         root = project_root()
         chat = _load_chat()
         sid = chat.get("session_id") if time.time() - (chat.get("last") or chat.get("at") or 0) < FRESH_AFTER else None
-        cmd = [claude_bin(), "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--permission-mode", mode, "--append-system-prompt", CHAT_ROLE] + (["--resume", sid] if sid else [])
+        cmd = [claude_bin(), "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--permission-mode", mode, "--permission-prompt-tool", "stdio", "--append-system-prompt", CHAT_ROLE] + (["--resume", sid] if sid else [])
+        self.cwd = str(root) if root and root.is_dir() else str(Path.home())
         self.proc = subprocess.Popen(
             cmd,
-            cwd=str(root) if root and root.is_dir() else str(Path.home()),
+            cwd=self.cwd,
+            env=dict(os.environ, OPS_COCKPIT="1"),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -1429,18 +1438,34 @@ class ClaudeChat:
             msg = send(esc(QUEUED[lang] if queued else WORKING[lang]))
             self.turns.append({"placeholder": (msg or {}).get("message_id"), "started": time.time(), "lang": lang, "asked": asked})
             self.lang, self.last = lang, time.time()
-            try:
-                self.proc.stdin.write(json.dumps({"type": "user", "message": {"role": "user", "content": text}}) + "\n")
-                self.proc.stdin.flush()
-            except (OSError, ValueError):
+            if not self._write(self.proc, {"type": "user", "message": {"role": "user", "content": text}}):
                 self.turns.pop()
                 send("Claude is not running — send the message again.")
+
+    def _write(self, proc, obj):
+        with self.wlock:
+            try:
+                proc.stdin.write(json.dumps(obj) + "\n")
+                proc.stdin.flush()
+                return True
+            except (OSError, ValueError):
+                return False
+
+    def _respond(self, proc, rid, response):
+        self._write(proc, {"type": "control_response", "response": {"subtype": "success", "request_id": rid, "response": response}})
+
+    def _after_allow(self, proc, name):
+        if name == "ExitPlanMode":
+            self._write(proc, {"type": "control_request", "request_id": secrets.token_hex(8), "request": {"subtype": "set_permission_mode", "mode": "default"}})
 
     def _read(self, proc):
         for line in proc.stdout:
             try:
                 ev = json.loads(line)
             except ValueError:
+                continue
+            if ev.get("type") == "control_request":
+                cockpitchat.handle_control(ev, _load_chat().get("session_id") or "telegram-chat", self.cwd, lambda rid, r, p=proc: self._respond(p, rid, r), lambda p=proc: p.poll() is None, lambda name, p=proc: self._after_allow(p, name))
                 continue
             if ev.get("session_id") and ev.get("type") in ("system", "result"):
                 chat = _load_chat()

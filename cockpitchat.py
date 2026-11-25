@@ -99,37 +99,7 @@ class CockpitSession:
             pass
 
     def _control(self, ev):
-        rid, req = ev.get("request_id"), ev.get("request") or {}
-        if req.get("subtype") != "can_use_tool":
-            self._respond(rid, {})
-            return
-        name, args = req.get("tool_name") or "", req.get("input") or {}
-        questions = [q for q in args.get("questions") or [] if isinstance(q, dict)] if name == "AskUserQuestion" else []
-        held = claudewait.report({
-            "session_id": self.sid or self.key, "cwd": self.cwd, "transcript_path": None, "cockpit": True,
-            "type": "question_request" if questions else "permission_request",
-            "message": " / ".join(str(q.get("question") or "") for q in questions) if questions else summary(name, args, req.get("description") or ""),
-            "questions": questions,
-        })
-        if not isinstance(held, str):
-            self._respond(rid, {"behavior": "deny", "message": "Opsboard could not ask the user (Claude waiting alerts are off)."})
-            return
-        threading.Thread(target=self._await, args=(rid, held, args), daemon=True).start()
-
-    def _await(self, rid, held, args):
-        while self.alive():
-            out = claudewait.poll(held)
-            if out.get("decision") == "allow":
-                self._respond(rid, {"behavior": "allow", "updatedInput": dict(args, answers=out["answers"]) if out.get("answers") else args})
-                return
-            if out.get("decision") == "deny":
-                note = out.get("message") or ""
-                self._respond(rid, {"behavior": "deny", "message": f"The user denied this and said: {note}" if note else "The user denied this."})
-                return
-            if not out.get("open"):
-                self._respond(rid, {"behavior": "deny", "message": "The request expired without an answer."})
-                return
-            time.sleep(0.5)
+        handle_control(ev, self.sid or self.key, self.cwd, self._respond, self.alive)
 
     def set_mode(self, mode):
         if mode not in MODES:
@@ -159,8 +129,47 @@ class CockpitSession:
                 "alive": self.alive(), "error": self.error, "started": self.started, "last": self.last}
 
 
+def handle_control(ev, sid, cwd, respond, alive, on_allow=None):
+    """A headless Claude asks permission over --permission-prompt-tool stdio: hold it in claudewait (the Cockpit and
+    Telegram ask him) and answer with his decision."""
+    rid, req = ev.get("request_id"), ev.get("request") or {}
+    if req.get("subtype") != "can_use_tool":
+        respond(rid, {})
+        return
+    name, args = req.get("tool_name") or "", req.get("input") or {}
+    questions = [q for q in args.get("questions") or [] if isinstance(q, dict)] if name == "AskUserQuestion" else []
+    held = claudewait.report({
+        "session_id": sid, "cwd": cwd, "transcript_path": None, "cockpit": True,
+        "type": "question_request" if questions else "permission_request",
+        "message": " / ".join(str(q.get("question") or "") for q in questions) if questions else summary(name, args, req.get("description") or ""),
+        "questions": questions,
+    })
+    if not isinstance(held, str):
+        respond(rid, {"behavior": "deny", "message": "Opsboard could not ask the user (Claude waiting alerts are off)."})
+        return
+    threading.Thread(target=_await, args=(rid, held, name, args, respond, alive, on_allow), daemon=True).start()
+
+
+def _await(rid, held, name, args, respond, alive, on_allow):
+    while alive():
+        out = claudewait.poll(held)
+        if out.get("decision") == "allow":
+            respond(rid, {"behavior": "allow", "updatedInput": dict(args, answers=out["answers"]) if out.get("answers") else args})
+            if on_allow:
+                on_allow(name)
+            return
+        if out.get("decision") == "deny":
+            note = out.get("message") or ""
+            respond(rid, {"behavior": "deny", "message": f"The user denied this and said: {note}" if note else "The user denied this."})
+            return
+        if not out.get("open"):
+            respond(rid, {"behavior": "deny", "message": "The request expired without an answer."})
+            return
+        time.sleep(0.5)
+
+
 def summary(name, args, description=""):
-    for key in ("command", "file_path", "url", "pattern"):
+    for key in ("command", "file_path", "url", "pattern", "plan"):
         if args.get(key):
             return f"{name}: {str(args[key])[:400]}" + (f" — {description}" if description and key == "command" else "")
     return f"{name}: {description}" if description else name
