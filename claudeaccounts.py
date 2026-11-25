@@ -22,7 +22,29 @@ TOKEN_RE = re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}")
 ACTIVE_EVERY, IDLE_EVERY, FRESH = 180, 900, 1800
 MAIN = "main"
 
-_usage = {}
+USAGE_CACHE = DATA / "claude-usage-cache.json"
+
+
+def _load_usage():
+    try:
+        data = json.loads(USAGE_CACHE.read_text())
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_usage():
+    try:
+        safety.allow_write(USAGE_CACHE)
+        tmp = USAGE_CACHE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(_usage))
+        os.chmod(tmp, 0o600)
+        tmp.replace(USAGE_CACHE)
+    except (OSError, RuntimeError) as exc:
+        log.warning("claude account: could not save the usage cache: %s", exc)
+
+
+_usage = _load_usage()
 _probe_lock = threading.Lock()
 _full = {"warned": False}
 _refreshing = {"on": False}
@@ -589,6 +611,10 @@ def collect():
         log.warning("claude account: sign-in sync failed: %s", exc)
     current = active_id()
     now = time.time()
+    with lock:
+        first = "claude_accounts" not in state
+    if first:
+        put("claude_accounts", public())
     if _probe_lock.acquire(blocking=False):
         try:
             login_poll()
@@ -596,6 +622,8 @@ def collect():
                 due = ACTIVE_EVERY if aid == current else IDLE_EVERY
                 if now - (_usage.get(aid) or {}).get("at", 0) >= due:
                     _usage[aid] = probe(aid)
+                    _save_usage()
+                    put("claude_accounts", public())
             dedupe()
         finally:
             _probe_lock.release()

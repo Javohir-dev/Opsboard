@@ -36,3 +36,5 @@ ops-dash.log*
 claude-probe/
 claude-logins/
 backups/
+claude-usage-cache.json
+claude-usage-cache.tmp
