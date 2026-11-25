@@ -252,3 +252,22 @@ document.addEventListener("submit", e => {
   const text = f.querySelector("input").value.trim();
   if (text) waitAnswer(f.dataset.waitOwn, { question: +f.dataset.q, text });
 });
+
+function openLightbox(src) {
+  let box = $("lightbox");
+  if (!box) {
+    box = document.createElement("dialog");
+    box.id = "lightbox"; box.className = "lightbox"; box.setAttribute("aria-label", "Image");
+    box.innerHTML = '<button type="button" class="lbclose" aria-label="Close">×</button><img alt="Pasted image">';
+    box.addEventListener("click", e => { if (e.target === box || e.target.closest(".lbclose")) box.close(); });
+    document.body.appendChild(box);
+  }
+  box.querySelector("img").src = src;
+  box.showModal();
+}
+document.addEventListener("click", e => {
+  const a = e.target.closest(".ximgs a");
+  if (!a || e.metaKey || e.ctrlKey) return;
+  e.preventDefault();
+  openLightbox(a.href);
+});

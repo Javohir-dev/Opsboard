@@ -1528,3 +1528,8 @@ form.ckcompose textarea{resize:none;border:0;outline:none;background:transparent
 .ximgs{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 .ximgs img{display:block;max-width:240px;max-height:180px;border-radius:6px;border:1px solid var(--line);object-fit:cover;background:var(--bg)}
 .aslist .ximgs img{max-width:150px;max-height:110px}
+.lightbox{padding:0;border:0;background:transparent;max-width:94vw;max-height:94vh;overflow:visible}
+.lightbox::backdrop{background:rgba(0,0,0,.78)}
+.lightbox img{display:block;max-width:94vw;max-height:90vh;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.lbclose{position:absolute;top:-14px;right:-14px;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--text);font-size:20px;line-height:1;cursor:pointer}
+.ximgs img{cursor:zoom-in}
