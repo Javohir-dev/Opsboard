@@ -134,6 +134,12 @@ class ClaudeWaitTest(unittest.TestCase):
                 self.assertIn("❌ Denied from Telegram", edit.call_args[0][1])
         self.assertEqual(claudewait.poll(req2)["decision"], "deny")
 
+    def test_public_lists_waiting_sessions_for_the_cockpit(self):
+        with mock.patch.object(claudewait, "ON_NEW", None):
+            req = claudewait.report(dict(self.ev("permission_request"), message="Bash: ls", cwd=str(Path.home() / "p")))
+        rows = claudewait.public()
+        self.assertEqual([(r["req"], r["name"], r["cwd"], r["message"]) for r in rows], [(req, "fix bug", "~/p", "Bash: ls")])
+
     def test_hook_script_never_fails_and_never_prints(self):
         hook = Path(claudewait.__file__).resolve().parent / "hooks" / "claude-wait.py"
         env = dict(os.environ, OPS_PORT="9", OPS_TOKEN_FILE=str(claudewait.SESSIONS / "no-token"))

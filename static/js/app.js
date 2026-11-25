@@ -22,7 +22,7 @@ function render() {
   ];
   const missing = setupMissing();
   const locked = missing.length > 0;
-  if (locked && !["settings", "notes", "accounts"].includes(r.page)) { location.hash = "#/settings"; return; }
+  if (locked && !["settings", "notes", "accounts", "cockpit"].includes(r.page)) { location.hash = "#/settings"; return; }
   const active = r.page === "s" ? "sessions" : r.page === "mr" ? "mrs" : r.page;
   const navItem = ([k, label]) => {
     const combo = (hotkeys().find(h => h.page === k) || {}).combo;
@@ -33,7 +33,12 @@ function render() {
   };
   $("setbtn").classList.toggle("on", active === "settings");
   $("setbtn").toggleAttribute("aria-current", active === "settings");
-  patch($("nav"), groups.map(([title, items], gi) => `<div class="navgroup">${title ? `<div class="navtitle">${title}</div>` : ""}${items.map(navItem).join("")}</div>`).join(""));
+  const cockpit = r.page === "cockpit";
+  if (!cockpit) ui.lastBoard = location.hash || "#/";
+  document.body.classList.toggle("cockpit", cockpit);
+  const waitN = (data.claude_wait || []).length;
+  patch($("modesw"), `<a href="${esc(ui.lastBoard || "#/")}" role="tab" aria-selected="${!cockpit}" class="${cockpit ? "" : "on"}">${icon("board", 15)}<span>Board</span></a><a href="#/cockpit" role="tab" aria-selected="${cockpit}" class="${cockpit ? "on" : ""}">${icon("cockpit", 15)}<span>Cockpit</span>${waitN ? `<b class="wn" title="${esc(plural(waitN, "session"))} waiting for you">${waitN}</b>` : ""}</a>`);
+  patch($("nav"), cockpit ? cockpitNav(ctx, r) : groups.map(([title, items], gi) => `<div class="navgroup">${title ? `<div class="navtitle">${title}</div>` : ""}${items.map(navItem).join("")}</div>`).join(""));
   const errs = Object.entries(data).filter(([k]) => k.startsWith("error_"));
   const cu = data.claude_usage || {};
   const usageColor = l => l.severity === "critical" || l.percent >= 95 ? "var(--bad)" : l.severity === "warning" || l.percent >= 80 ? "var(--warn)" : "var(--usage)";
@@ -65,7 +70,7 @@ function render() {
   const machine = `${meter("CPU", `${(m.cpu ?? 0).toFixed(0)}%`, m.cpu)}${meter("RAM", `${bytes(m.mem_used)} / ${bytes(m.mem_total, 0)}`, pct(m.mem_used, m.mem_total))}${m.swap_total ? meter("Swap", bytes(m.swap_used), pct(m.swap_used, m.swap_total)) : ""}`;
   patch($("hstats"), `${showUsage() ? `${usage ? `${usage}${stale}${liveNote}${accRows}` : cu.account?.email ? `<div class="utitle">Claude usage</div><div class="reset" title="Claude Code saves your plan limits when it shows them">Run /usage in Claude Code once to show your limits here</div>${liveNote}` : ""}` : machine}${accProposal()}${errs.length ? `<div class="err fs-sm" title="${esc(errs.map(e => e.join(": ")).join("\n"))}">${errs.length} collector error(s)</div>` : ""}${data.version?.update ? `<a class="badge warn" href="#/settings" title="Run opsboard update">${esc(data.version.latest)} available</a>` : ""}`);
   $("ver").textContent = data.version?.current ? "v" + data.version.current : "";
-  const pages = { overview: pageOverview, sessions: pageSessions, s: c => pageSession(c, r.arg), docker: pageDocker, postgres: pagePostgres, tasks: c => (hasJira() ? pageJira(c) : pageTasks(c)), mrs: pageMrs, mr: c => pageMr(c, r.arg), worktrees: pageWorktrees, processes: pageProcesses, settings: pageSettings, notes: pageNotes, accounts: pageAccounts };
+  const pages = { overview: pageOverview, sessions: pageSessions, s: c => pageSession(c, r.arg), docker: pageDocker, postgres: pagePostgres, tasks: c => (hasJira() ? pageJira(c) : pageTasks(c)), mrs: pageMrs, mr: c => pageMr(c, r.arg), worktrees: pageWorktrees, processes: pageProcesses, settings: pageSettings, notes: pageNotes, accounts: pageAccounts, cockpit: c => pageCockpit(c, r.arg) };
   const view = (pages[r.page] || pageOverview)(ctx);
   if (ui.forcePatch || view !== ui.lastView) { ui.lastView = view; patch($("view"), view); }
   ui.forcePatch = false;
@@ -141,7 +146,7 @@ async function tick() {
     if (!ui.booted) {
       ui.booted = true;
       if (data.config?.["ui.theme"]?.source === "user") applyTheme();
-      if (!conf("project.root") && !["settings", "notes", "accounts"].includes(route().page)) location.hash = "#/settings";
+      if (!conf("project.root") && !["settings", "notes", "accounts", "cockpit"].includes(route().page)) location.hash = "#/settings";
       if (route().page === "settings") loadDoctor();
     }
     render();

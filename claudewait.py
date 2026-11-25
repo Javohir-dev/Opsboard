@@ -176,6 +176,24 @@ def pending_answers(req):
         return dict(w["answers"]) if w else None
 
 
+def public():
+    """What the Cockpit page shows: every session waiting for the user, oldest first."""
+    home = str(Path.home())
+    with _lock:
+        items = [dict(w, sid=sid) for sid, w in _waiting.items()]
+    out = []
+    for w in sorted(items, key=lambda x: x["at"]):
+        meta = _session(w["sid"]) or {}
+        if meta.get("entrypoint") in ("sdk-cli", "background") and not w.get("req"):
+            continue
+        out.append({
+            "sid": w["sid"], "req": w.get("req"), "kind": w["kind"], "at": w["at"], "message": w["message"],
+            "questions": w.get("questions") or [], "answers": w.get("answers") or {},
+            "cwd": (w["cwd"] or "").replace(home, "~", 1), "name": meta.get("name") or "", "where": meta.get("entrypoint") or "",
+        })
+    return out
+
+
 def pending():
     with _lock:
         return {k: dict(v) for k, v in _waiting.items()}

@@ -98,6 +98,7 @@ def snapshot():
         data["notifications"] = notify.load()
         data["wt_jobs"] = {} if DEMO else worktrees.jobs()
         data["telegram"] = {"configured": False} if DEMO else dict(telegram.public(), webapp=webapp.public())
+        data["claude_wait"] = [] if DEMO else claudewait.public()
         return redact(json.dumps(data, default=str))
 
 
@@ -148,7 +149,22 @@ class Handler(BaseHTTPRequestHandler):
         if not self.same_origin():
             self.send_error(403)
             return
-        if self.path.startswith("/api/claude-wait"):
+        if self.path.startswith("/api/claude-wait-answer"):
+            try:
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+                req = str(body.get("req") or "")
+                if "allow" in body:
+                    note = telegram._wait_decide(req, bool(body["allow"]))
+                else:
+                    text = str(body.get("text") or "").strip()
+                    if not text:
+                        raise ValueError("write an answer first")
+                    note = telegram._wait_answer(req, int(body.get("question") or 0), text)
+                out = {"ok": not note, "error": note}
+            except (ValueError, TypeError) as exc:
+                out = {"ok": False, "error": str(exc)[:200]}
+            self.send(json.dumps(out), "application/json")
+        elif self.path.startswith("/api/claude-wait"):
             try:
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
                 body = body if isinstance(body, dict) else {}
