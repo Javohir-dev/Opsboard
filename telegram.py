@@ -97,10 +97,29 @@ def public():
     return out
 
 
-def send(text, buttons=None, chat=None, plain=False, reply_to=None):
+_notes, _notes_lock = [], threading.Lock()
+NOTES_KEEP, NOTES_SPAN = 20, 3 * 3600
+
+
+def _remember(text):
+    plain = html.unescape(re.sub(r"<[^>]+>", "", text or "")).strip()
+    if plain:
+        with _notes_lock:
+            _notes.append((time.time(), plain[:1500]))
+            del _notes[:-NOTES_KEEP]
+
+
+def recent_notes(since):
+    with _notes_lock:
+        return [(t, x) for t, x in _notes if t > since and t > time.time() - NOTES_SPAN]
+
+
+def send(text, buttons=None, chat=None, plain=False, reply_to=None, note=False):
     target = chat or chat_id()
     if not target:
         return None
+    if note:
+        _remember(text)
     params = {"chat_id": target, "text": text[:4096], "disable_web_page_preview": True, "reply_markup": {"inline_keyboard": buttons} if buttons else None}
     if reply_to:
         params["reply_parameters"] = {"message_id": reply_to, "allow_sending_without_reply": True}
@@ -628,7 +647,7 @@ def on_notify(item):
                 "en": "🪫 <b>Battery at {n}%</b>\n{left}\nPlug in the Mac.",
                 "ru": "🪫 <b>Батарея {n}%</b>\n{left}\nПодключите Mac к зарядке.",
             }
-            send(words[lang].format(n=item.get("level"), left=left).replace("\n\n", "\n"))
+            send(words[lang].format(n=item.get("level"), left=left).replace("\n\n", "\n"), note=True)
         return
     if item.get("kind") == "claude_propose":
         if "telegram" in (cfg.get("claude.ask_in") or []):
@@ -639,12 +658,12 @@ def on_notify(item):
     if item.get("kind") in ("claude_switch", "claude_full", "claude_duplicate"):
         if cfg.get("telegram.notify"):
             head, body = notify.text(item)
-            send(f"{'🔀' if item['kind'] == 'claude_switch' else '⛽'} <b>{esc(head)}</b>\n{esc(body)}")
+            send(f"{'🔀' if item['kind'] == 'claude_switch' else '⛽'} <b>{esc(head)}</b>\n{esc(body)}", note=True)
         return
     if item.get("kind") == "merged":
         if cfg.get("telegram.notify"):
             link = _url_button(f"Open in {_host()}", item.get("url"))
-            send(_merged_text(item), [link] if link else None)
+            send(_merged_text(item), [link] if link else None, note=True)
         return
     if item.get("kind") == "run":
         if not item.get("silent"):
@@ -689,7 +708,7 @@ def _flush_threads(iid):
         group = _pending.pop(iid, None)
     if group:
         text = _thread_text(iid, group)
-        msg = send(text, _fix_buttons(iid))
+        msg = send(text, _fix_buttons(iid), note=True)
         if msg:
             with _pending_lock:
                 _sent_texts[msg["message_id"]] = text
@@ -722,7 +741,7 @@ def claude_wait_alert(item):
         lines.append(f"📂 <code>{esc(where)}</code>")
     if item.get("message"):
         lines.append(f"<i>{esc(item['message'])}</i>")
-    return send("\n".join(lines))
+    return send("\n".join(lines), note=True)
 
 
 def _fix_name(push, skiptests):
@@ -741,7 +760,7 @@ def _fix_started_elsewhere(item):
         call("editMessageReplyMarkup", chat_id=chat_id(), message_id=mid, reply_markup={"inline_keyboard": []})
     except TelegramError as exc:
         log.warning("telegram: could not remove fix buttons: %s", exc)
-    send(words["started"].format(name=esc(name), at=time.strftime("%H:%M")) + f" · {words['from_board']}", reply_to=mid)
+    send(words["started"].format(name=esc(name), at=time.strftime("%H:%M")) + f" · {words['from_board']}", reply_to=mid, note=True)
     with _pending_lock:
         _fix_msgs[item["run_id"]] = {"message_id": mid, "name": name}
 
@@ -798,7 +817,7 @@ def _fix_finished(item):
     status = words[key].format(name=esc(tracked["name"])) + (f" · {esc(detail)}" if detail else "")
     if tracked.get("base"):
         edit(tracked["message_id"], f"{tracked['base']}\n\n{status}")
-    send(status, reply_to=tracked["message_id"])
+    send(status, reply_to=tracked["message_id"], note=True)
 
 
 def md_to_html(text):
@@ -1044,6 +1063,15 @@ def _save_chat(data):
 
 
 IDLE_CLOSE = 3 * 3600
+FRESH_AFTER = 6 * 3600
+CHAT_ROLE = (
+    "You answer Javohir in his Opsboard Telegram bot, running on his Mac. The bot also sends him notifications "
+    "(new review threads, fix runs, Claude sessions waiting for permission or an answer, battery, merges). "
+    "Each message may start with [Opsboard notifications since your last turn] and [He replied to] blocks: "
+    "read them first, they are what his message is about. You cannot press a permission or question dialog "
+    "in another Claude Code session; when he wants to allow or answer one, say plainly that it has to be "
+    "answered on the Mac (name the session and folder from the notification). Answer short, in his language."
+)
 EXTRA = {"en": "🔔 Claude came back:", "uz": "🔔 Claude qaytib keldi:", "ru": "🔔 Claude вернулся:"}
 QUEUED = {"en": "⏳ Queued — after the current answer", "uz": "⏳ Navbatda — joriy javobdan keyin", "ru": "⏳ В очереди — после текущего ответа"}
 
@@ -1059,6 +1087,7 @@ class ClaudeChat:
         self.doing = ""
         self.lang = "uz"
         self.last = time.time()
+        self.seen = time.time() - NOTES_SPAN
         self.lock = threading.Lock()
 
     @property
@@ -1068,8 +1097,9 @@ class ClaudeChat:
     def _start(self):
         mode = cfg.get("telegram.chat_permission") or "plan"
         root = project_root()
-        sid = _load_chat().get("session_id")
-        cmd = [claude_bin(), "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--permission-mode", mode] + (["--resume", sid] if sid else [])
+        chat = _load_chat()
+        sid = chat.get("session_id") if time.time() - (chat.get("last") or chat.get("at") or 0) < FRESH_AFTER else None
+        cmd = [claude_bin(), "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--permission-mode", mode, "--append-system-prompt", CHAT_ROLE] + (["--resume", sid] if sid else [])
         self.proc = subprocess.Popen(
             cmd,
             cwd=str(root) if root and root.is_dir() else str(Path.home()),
@@ -1087,8 +1117,14 @@ class ClaudeChat:
     def alive(self):
         return self.proc is not None and self.proc.poll() is None
 
-    def ask(self, text, message_id=None):
+    def ask(self, text, message_id=None, quoted=""):
         lang = lang_of(text)
+        ctx = [f"- {time.strftime('%H:%M', time.localtime(t))} {x}" for t, x in recent_notes(self.seen)]
+        self.seen = time.time()
+        if ctx:
+            text = "[Opsboard notifications since your last turn]\n" + "\n".join(ctx) + "\n\n" + text
+        if quoted:
+            text = f"[He replied to]\n{quoted[:1500]}\n\n" + text
         if message_id:
             react(message_id)
         with self.lock:
@@ -1117,8 +1153,13 @@ class ClaudeChat:
                 ev = json.loads(line)
             except ValueError:
                 continue
-            if ev.get("session_id") and ev.get("type") in ("system", "result") and _load_chat().get("session_id") != ev["session_id"]:
-                _save_chat({"session_id": ev["session_id"], "at": time.time()})
+            if ev.get("session_id") and ev.get("type") in ("system", "result"):
+                chat = _load_chat()
+                if chat.get("session_id") != ev["session_id"]:
+                    chat = {"session_id": ev["session_id"], "at": time.time()}
+                if ev.get("type") == "result" or "last" not in chat:
+                    chat["last"] = time.time()
+                    _save_chat(chat)
             if ev.get("type") == "assistant" and not ev.get("parent_tool_use_id"):
                 for b in (ev.get("message") or {}).get("content") or []:
                     if b.get("type") == "tool_use":
@@ -1200,7 +1241,7 @@ def _waiting_text(phrase, started, doing):
     return f"{esc(phrase)}\n\n<i>⏱ {_dur(time.time() - started)}{' · ' + esc(doing) if doing else ''}</i>"
 
 
-def reply_for(text, message_id=None):
+def reply_for(text, message_id=None, quoted=""):
     words = text.strip().split()
     cmd = words[0].split("@")[0].lower() if words and words[0].startswith("/") else ""
     num = next((int(a.lstrip("!#")) for a in words[1:] if a.lstrip("!#").isdigit()), None)
@@ -1227,7 +1268,7 @@ def reply_for(text, message_id=None):
         return "Unknown command.\n\n" + help_text(), None
     if not cfg.get("telegram.claude_chat"):
         return "Claude chat is off — Opsboard → Settings → Telegram → <i>Claude chat</i>.\n\n" + help_text(), None
-    threading.Thread(target=CHAT.ask, args=(text.strip(), message_id), daemon=True).start()
+    threading.Thread(target=CHAT.ask, args=(text.strip(), message_id, quoted), daemon=True).start()
     return None, None
 
 
@@ -1252,7 +1293,8 @@ def handle_message(msg):
         return
     if msg.get("reply_to_message") and any(hook(msg) for hook in REPLY_HOOKS):
         return
-    text_out, buttons = reply_for(text, msg.get("message_id"))
+    quoted = (msg.get("reply_to_message") or {}).get("text") or ""
+    text_out, buttons = reply_for(text, msg.get("message_id"), quoted)
     if text_out:
         send(text_out, buttons)
 
@@ -1313,7 +1355,7 @@ def proposal_text(item):
 def send_proposal(item):
     words = PROPOSAL[_bot_lang()]
     buttons = [[{"text": words["yes"].format(name=_short(item.get("to") or "")), "callback_data": f"cacc:y:{item['pid']}"}], [{"text": words["no"], "callback_data": f"cacc:n:{item['pid']}"}]]
-    msg = send(proposal_text(item), buttons)
+    msg = send(proposal_text(item), buttons, note=True)
     if msg:
         claudeaccounts.remember_message(item["pid"], msg["message_id"])
     return msg

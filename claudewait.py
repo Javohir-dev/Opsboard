@@ -50,6 +50,7 @@ def report(ev):
             "message": str(ev.get("message") or "")[:600],
             "base": None,
         }
+    log.info("claude wait: %s %s in %s", kind, sid[:8], ev.get("cwd") or "?")
     return True
 
 
@@ -70,6 +71,7 @@ def check(now=None, send=None):
                 continue
             if seen != w["base"]:
                 _waiting.pop(sid)
+                log.info("claude wait: %s answered", sid[:8])
                 continue
             if now - w["at"] >= wait:
                 due.append((sid, _waiting.pop(sid)))
@@ -79,6 +81,7 @@ def check(now=None, send=None):
         if meta is None or meta.get("entrypoint") in ("sdk-cli", "background"):
             continue
         item = dict(w, sid=sid, name=meta.get("name") or "", minutes=int((now - w["at"]) // 60))
+        log.info("claude wait: alert for %s after %s min", sid[:8], item["minutes"])
         if send:
             try:
                 send(item)
