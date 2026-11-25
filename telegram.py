@@ -727,21 +727,151 @@ def _launch_fix(iid, push, skiptests=False):
 
 
 WAIT_ALERT = {
-    "uz": {"permission_prompt": "ruxsat so'rayapti", "elicitation_dialog": "savol beryapti", "question": "savol beryapti", "idle_prompt": "keyingi buyruqni kutyapti", "head": "⏳ <b>Claude {what}</b> — {m} daqiqadan beri javob yo'q"},
-    "en": {"permission_prompt": "is asking for permission", "elicitation_dialog": "is asking a question", "question": "is asking a question", "idle_prompt": "is waiting for your next message", "head": "⏳ <b>Claude {what}</b> — no answer for {m} min"},
-    "ru": {"permission_prompt": "просит разрешение", "elicitation_dialog": "задаёт вопрос", "question": "задаёт вопрос", "idle_prompt": "ждёт следующего сообщения", "head": "⏳ <b>Claude {what}</b> — без ответа {m} мин"},
+    "uz": {
+        "permission_prompt": "ruxsat so'rayapti", "permission_request": "ruxsat so'rayapti", "elicitation_dialog": "savol beryapti",
+        "question": "savol beryapti", "question_request": "savol beryapti", "idle_prompt": "keyingi buyruqni kutyapti",
+        "head": "⏳ <b>Claude {what}</b> — {m} daqiqadan beri javob yo'q", "now": "❓ <b>Claude {what}</b>",
+        "allow": "✅ Ruxsat", "deny": "❌ Rad etish", "allowed": "✅ Telegram'dan ruxsat berildi · {at}", "denied": "❌ Telegram'dan rad etildi · {at}",
+        "answered": "✅ Javob: {a} · {at}", "mac": "💻 Mac'da javob berildi", "closed": "Bu so'rov yopilgan — Mac'da javob berilgan.",
+        "own": "✍️ O'z javobingizni yozish uchun shu xabarga reply qiling.", "q": "Savol {i}/{n}",
+    },
+    "en": {
+        "permission_prompt": "is asking for permission", "permission_request": "is asking for permission", "elicitation_dialog": "is asking a question",
+        "question": "is asking a question", "question_request": "is asking a question", "idle_prompt": "is waiting for your next message",
+        "head": "⏳ <b>Claude {what}</b> — no answer for {m} min", "now": "❓ <b>Claude {what}</b>",
+        "allow": "✅ Allow", "deny": "❌ Deny", "allowed": "✅ Allowed from Telegram · {at}", "denied": "❌ Denied from Telegram · {at}",
+        "answered": "✅ Answer: {a} · {at}", "mac": "💻 Answered on the Mac", "closed": "This request is closed — it was answered on the Mac.",
+        "own": "✍️ Reply to this message to write your own answer.", "q": "Question {i}/{n}",
+    },
+    "ru": {
+        "permission_prompt": "просит разрешение", "permission_request": "просит разрешение", "elicitation_dialog": "задаёт вопрос",
+        "question": "задаёт вопрос", "question_request": "задаёт вопрос", "idle_prompt": "ждёт следующего сообщения",
+        "head": "⏳ <b>Claude {what}</b> — без ответа {m} мин", "now": "❓ <b>Claude {what}</b>",
+        "allow": "✅ Разрешить", "deny": "❌ Отклонить", "allowed": "✅ Разрешено из Telegram · {at}", "denied": "❌ Отклонено из Telegram · {at}",
+        "answered": "✅ Ответ: {a} · {at}", "mac": "💻 Ответили на Mac", "closed": "Запрос закрыт — на него ответили на Mac.",
+        "own": "✍️ Ответьте на это сообщение, чтобы написать свой ответ.", "q": "Вопрос {i}/{n}",
+    },
 }
+_wait_msgs = {}
 
 
-def claude_wait_alert(item):
+def _wait_text(item):
     w = WAIT_ALERT[_bot_lang()]
-    lines = [w["head"].format(what=w.get(item["kind"], item["kind"]), m=item["minutes"])]
+    what = w.get(item["kind"], item["kind"])
+    lines = [w["head"].format(what=what, m=item["minutes"]) if item.get("minutes") else w["now"].format(what=what)]
     where = " · ".join(x for x in (item.get("name"), (item.get("cwd") or "").replace(str(Path.home()), "~", 1)) if x)
     if where:
         lines.append(f"📂 <code>{esc(where)}</code>")
-    if item.get("message"):
+    qs = item.get("questions") or []
+    if item["kind"] == "question_request" and qs:
+        for i, q in enumerate(qs):
+            lines.append(("\n" + w["q"].format(i=i + 1, n=len(qs)) + "\n" if len(qs) > 1 else "\n") + f"<b>{esc(str(q.get('question') or ''))}</b>")
+            for o in q.get("options") or []:
+                desc = f" — {esc(str(o.get('description') or ''))}" if o.get("description") else ""
+                lines.append(f"• {esc(str(o.get('label') or ''))}{desc}")
+        lines.append(f"\n<i>{w['own']}</i>")
+    elif item.get("message"):
         lines.append(f"<i>{esc(item['message'])}</i>")
-    return send("\n".join(lines), note=True)
+    return "\n".join(lines)
+
+
+def _wait_buttons(item):
+    w, req = WAIT_ALERT[_bot_lang()], item.get("req")
+    if not req:
+        return None
+    if item["kind"] == "permission_request":
+        return [[{"text": w["allow"], "callback_data": f"cw:{req}:a"}, {"text": w["deny"], "callback_data": f"cw:{req}:d"}]]
+    rows, qs = [], item.get("questions") or []
+    for qi, q in enumerate(qs):
+        for oi, o in enumerate((q.get("options") or [])[:8]):
+            label = str(o.get("label") or "")[:40]
+            rows.append([{"text": (f"{qi + 1}. " if len(qs) > 1 else "") + label, "callback_data": f"cq:{req}:{qi}:{oi}"}])
+    return rows or None
+
+
+def claude_wait_alert(item):
+    text = _wait_text(item)
+    msg = send(text, _wait_buttons(item), note=True)
+    if msg and item.get("req"):
+        with _pending_lock:
+            _wait_msgs[item["req"]] = {"mid": msg["message_id"], "text": text, "item": item, "done": []}
+            while len(_wait_msgs) > 100:
+                _wait_msgs.pop(next(iter(_wait_msgs)))
+    return msg
+
+
+def claude_wait_closed(w):
+    with _pending_lock:
+        tracked = _wait_msgs.pop(w.get("req"), None) if w.get("req") else None
+    if tracked:
+        edit(tracked["mid"], f"{tracked['text']}\n\n{WAIT_ALERT[_bot_lang()]['mac']}")
+
+
+def _wait_status(req, status):
+    with _pending_lock:
+        tracked = _wait_msgs.pop(req, None)
+    if tracked:
+        edit(tracked["mid"], f"{tracked['text']}\n\n{status}")
+
+
+def _wait_decide(req, allow):
+    import claudewait
+
+    w = WAIT_ALERT[_bot_lang()]
+    if not claudewait.decide(req, "allow" if allow else "deny"):
+        _wait_status(req, w["mac"])
+        return w["closed"]
+    _wait_status(req, w["allowed" if allow else "denied"].format(at=time.strftime("%H:%M")))
+    return ""
+
+
+def _wait_answer(req, qi, text):
+    import claudewait
+
+    w = WAIT_ALERT[_bot_lang()]
+    out = claudewait.answer(req, qi, text)
+    if out is None:
+        _wait_status(req, w["mac"])
+        return w["closed"]
+    done, entry = out
+    if done:
+        shown = "; ".join(entry["answers"].values())
+        _wait_status(req, w["answered"].format(a=esc(shown[:300]), at=time.strftime("%H:%M")))
+    return ""
+
+
+def _wait_option(req, qi, oi):
+    with _pending_lock:
+        tracked = _wait_msgs.get(req)
+    qs = (tracked or {}).get("item", {}).get("questions") or []
+    try:
+        label = str(qs[qi]["options"][oi]["label"])
+    except (IndexError, KeyError, TypeError):
+        return WAIT_ALERT[_bot_lang()]["closed"]
+    return _wait_answer(req, qi, label)
+
+
+def _wait_reply(msg):
+    mid = (msg.get("reply_to_message") or {}).get("message_id")
+    with _pending_lock:
+        req = next((r for r, t in _wait_msgs.items() if t["mid"] == mid), None)
+        tracked = _wait_msgs.get(req) if req else None
+    if not tracked:
+        return False
+    if tracked["item"]["kind"] != "question_request":
+        return False
+    import claudewait
+
+    open_q = [i for i, q in enumerate(tracked["item"].get("questions") or []) if str(q.get("question") or "") not in (claudewait.pending_answers(req) or {})]
+    note = _wait_answer(req, open_q[0] if open_q else 0, (msg.get("text") or "").strip())
+    if note:
+        send(esc(note))
+    else:
+        react(msg.get("message_id"), "👍")
+    return True
+
+
+REPLY_HOOKS.append(_wait_reply)
 
 
 def _fix_name(push, skiptests):
@@ -1389,6 +1519,15 @@ def handle_callback(cq):
         try:
             note = claudeaccounts.decide(pid, answer == "y", "from Telegram")
         except (ValueError, OSError) as exc:
+            note = str(exc)[:190]
+    elif kind == "cw":
+        req, _, act = rest.partition(":")
+        note = _wait_decide(req, act == "a")
+    elif kind == "cq":
+        req, qi, oi = (rest.split(":") + ["", ""])[:3]
+        try:
+            note = _wait_option(req, int(qi), int(oi))
+        except ValueError as exc:
             note = str(exc)[:190]
     elif kind == "fix":
         iid, _, flags = rest.partition(":")

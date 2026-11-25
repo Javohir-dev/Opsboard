@@ -151,7 +151,8 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/api/claude-wait"):
             try:
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
-                out = {"ok": claudewait.report(body if isinstance(body, dict) else {})}
+                body = body if isinstance(body, dict) else {}
+                out = claudewait.poll(str(body["poll"])) if body.get("poll") else {"ok": claudewait.report(body)}
             except ValueError as exc:
                 out = {"ok": False, "error": str(exc)[:200]}
             self.send(json.dumps(out), "application/json")
@@ -597,7 +598,9 @@ def serve_demo(port):
 
 
 def check_claude_wait():
-    claudewait.check(send=telegram.claude_wait_alert if telegram.chat_id() else None)
+    linked = bool(telegram.chat_id())
+    claudewait.ON_NEW = telegram.claude_wait_alert if linked else None
+    claudewait.check(send=telegram.claude_wait_alert if linked else None, closed=telegram.claude_wait_closed if linked else None)
 
 
 def main():
