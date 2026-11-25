@@ -872,11 +872,11 @@ def _wait_status(req, status):
         edit(tracked["mid"], f"{tracked['text']}\n\n{status}")
 
 
-def _wait_decide(req, allow):
+def _wait_decide(req, allow, message=""):
     import claudewait
 
     w = WAIT_ALERT[_bot_lang()]
-    if not claudewait.decide(req, "allow" if allow else "deny"):
+    if not claudewait.decide(req, "allow" if allow else "deny", message):
         _wait_status(req, w["mac"])
         return w["closed"]
     _wait_status(req, w["allowed" if allow else "denied"].format(at=time.strftime("%H:%M")))

@@ -123,7 +123,8 @@ class CockpitSession:
                 self._respond(rid, {"behavior": "allow", "updatedInput": dict(args, answers=out["answers"]) if out.get("answers") else args})
                 return
             if out.get("decision") == "deny":
-                self._respond(rid, {"behavior": "deny", "message": "The user denied this."})
+                note = out.get("message") or ""
+                self._respond(rid, {"behavior": "deny", "message": f"The user denied this and said: {note}" if note else "The user denied this."})
                 return
             if not out.get("open"):
                 self._respond(rid, {"behavior": "deny", "message": "The request expired without an answer."})

@@ -104,7 +104,7 @@ def answer(req, index, text):
         return done, dict(w)
 
 
-def decide(req, behavior):
+def decide(req, behavior, message=""):
     """A Telegram button answered a held permission request; False when it was already answered or expired."""
     if behavior not in ("allow", "deny"):
         raise ValueError("unknown decision")
@@ -113,7 +113,7 @@ def decide(req, behavior):
         if not sid:
             return False
         _waiting.pop(sid)
-        _decided[req] = {"behavior": behavior}
+        _decided[req] = {"behavior": behavior, "message": str(message or "")[:2000]}
     log.info("claude wait: %s %s from Telegram", req, behavior)
     return True
 
@@ -122,7 +122,7 @@ def poll(req):
     with _lock:
         if req in _decided:
             d = _decided.pop(req)
-            return {"decision": d["behavior"], "answers": d.get("answers")}
+            return {"decision": d["behavior"], "answers": d.get("answers"), "message": d.get("message") or ""}
         return {"decision": None, "open": any(w.get("req") == req for w in _waiting.values())}
 
 

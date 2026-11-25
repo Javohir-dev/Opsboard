@@ -1548,3 +1548,50 @@ main:has(.ckchat)>.ckchat{flex:1;min-height:0;height:auto;width:100%}
 .ckdown .ic{transform:rotate(90deg)}
 .ckdown:hover{background:var(--panel)}
 .ckdown[hidden]{display:none}
+.vqwrap{display:flex;flex-direction:column;gap:6px;min-width:0}
+.vqmeta{display:flex;gap:10px;align-items:baseline;font-size:var(--fs-xs);color:var(--muted);min-width:0;padding:0 4px}
+.vqmeta b{color:var(--text);font-weight:600}
+.vqmeta span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vqmeta span:last-child{margin-left:auto;flex:none}
+.vqbox{border:1px solid color-mix(in srgb,var(--busy) 70%,var(--line));border-radius:10px;background:var(--panel);padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.vqhead{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
+.vqhead>b{font-size:var(--fs-base)}
+.vqicon{width:26px;height:26px;border:0;border-radius:6px;background:none;color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none}
+.vqicon .ic{transform:rotate(90deg);transition:transform .15s}
+.vqbox.folded .vqicon .ic{transform:rotate(-90deg)}
+.vqicon:hover{background:var(--panel2);color:var(--text)}
+.vqtabs{display:flex;gap:4px;flex-wrap:wrap;min-width:0}
+.vqtabs button{border:0;background:none;color:var(--muted);font:inherit;font-size:var(--fs-md);padding:4px 8px;border-radius:6px;cursor:pointer;position:relative}
+.vqtabs button.on{color:var(--text);background:var(--panel2);font-weight:600}
+.vqtabs button.done::after{content:"";position:absolute;top:4px;right:2px;width:5px;height:5px;border-radius:50%;background:var(--ok)}
+.vqq{font-weight:600;line-height:1.5;overflow-wrap:anywhere}
+.vqcmd{margin:0;font-family:var(--mono);font-size:var(--fs-md);line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text);max-height:220px;overflow:auto}
+.vqdesc{color:var(--muted);font-size:var(--fs-md);overflow-wrap:anywhere}
+.vqopts{display:flex;flex-direction:column;gap:4px}
+.vqopt{display:flex;align-items:flex-start;gap:12px;width:100%;text-align:left;padding:8px 10px;border:1px solid transparent;border-radius:6px;background:none;color:var(--text);font:inherit;font-size:var(--fs-md);cursor:pointer}
+.vqopt:hover{background:var(--panel2)}
+.vqopt.sel{background:var(--panel2);border-color:var(--line)}
+.vqopt.key{align-items:center;border-color:var(--line)}
+.vqopt.key:first-child{background:var(--panel2)}
+.vqopt kbd{min-width:18px;font-family:var(--mono);font-size:var(--fs-sm);color:var(--muted);background:none;border:0;padding:0}
+.vqradio{flex:none;width:16px;height:16px;margin-top:2px;border-radius:50%;border:1.5px solid var(--muted);box-sizing:border-box}
+.vqopt.sel .vqradio{border-color:var(--accent);box-shadow:inset 0 0 0 3px var(--panel2);background:var(--accent)}
+.vqtext{display:flex;flex-direction:column;gap:2px;min-width:0}
+.vqtext b{font-weight:600}
+.vqtext span{color:var(--muted);font-size:var(--fs-sm)}
+.vqown,.vqother input{width:100%;box-sizing:border-box;height:36px;padding:0 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text);font:inherit;font-size:var(--fs-md)}
+.vqother{margin:0}
+.vqsubmit{height:36px;border:1px solid var(--line);border-radius:6px;background:var(--panel2);color:var(--text);font:inherit;font-size:var(--fs-md);font-weight:600;cursor:pointer;text-align:left;padding:0 12px}
+.vqsubmit:not([disabled]){background:var(--accent);border-color:transparent;color:#fff}
+.vqsubmit[disabled]{color:var(--muted);cursor:default}
+.vqsent{display:flex;align-items:center;gap:6px;color:var(--ok);font-size:var(--fs-md)}
+.wkgrid{grid-template-columns:repeat(auto-fill,minmax(440px,1fr))}
+.vqopt{height:auto;min-height:40px;justify-content:flex-start;line-height:1.4}
+.vqopt.key{height:auto;min-height:38px}
+.vqsubmit{display:flex;align-items:center;justify-content:flex-start}
+.vqtabs button,.vqicon{height:auto}
+.vqtabs button{min-height:28px}
+.vqicon{height:26px}
+.vqopt,.vqsubmit,.vqtabs button{white-space:normal;font-weight:400;transition:none}
+.vqopt:hover{border-color:transparent}.vqopt.sel:hover,.vqopt.key:hover{border-color:var(--line)}
+.vqsubmit:disabled{opacity:1}

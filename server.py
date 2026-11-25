@@ -187,7 +187,12 @@ class Handler(BaseHTTPRequestHandler):
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
                 req = str(body.get("req") or "")
                 if "allow" in body:
-                    note = telegram._wait_decide(req, bool(body["allow"]))
+                    note = telegram._wait_decide(req, bool(body["allow"]), str(body.get("message") or ""))
+                elif isinstance(body.get("answers"), dict):
+                    note = ""
+                    for qi, text in sorted(body["answers"].items(), key=lambda kv: int(kv[0])):
+                        if str(text).strip():
+                            note = telegram._wait_answer(req, int(qi), str(text).strip()) or note
                 else:
                     text = str(body.get("text") or "").strip()
                     if not text:

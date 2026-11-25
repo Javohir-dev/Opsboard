@@ -96,7 +96,7 @@ def main():
         if out.get("decision") in ("allow", "deny"):
             decision = {"behavior": out["decision"]}
             if out["decision"] == "deny":
-                decision["message"] = "Denied from Telegram."
+                decision["message"] = f"The user denied this and said: {out['message']}" if out.get("message") else "Denied from Telegram."
             elif out.get("answers"):
                 decision["updatedInput"] = dict(ev.get("tool_input") or {}, answers=out["answers"])
             print(json.dumps({"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": decision}}))

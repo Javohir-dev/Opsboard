@@ -82,9 +82,13 @@ class ClaudeWaitTest(unittest.TestCase):
         self.assertEqual(claudewait.pending()["s1"]["kind"], "permission_request")
         self.assertEqual(claudewait.poll(req), {"decision": None, "open": True})
         self.assertTrue(claudewait.decide(req, "allow"))
-        self.assertEqual(claudewait.poll(req), {"decision": "allow", "answers": None})
+        self.assertEqual(claudewait.poll(req), {"decision": "allow", "answers": None, "message": ""})
         self.assertEqual(claudewait.poll(req), {"decision": None, "open": False})
         self.assertFalse(claudewait.decide(req, "deny"))
+        with mock.patch.object(claudewait, "ON_NEW", None):
+            req3 = claudewait.report(self.ev("permission_request"))
+        claudewait.decide(req3, "deny", "use the dev branch instead")
+        self.assertEqual(claudewait.poll(req3)["message"], "use the dev branch instead")
 
     def test_held_question_collects_answers(self):
         qs = [{"question": "Which branch?", "options": [{"label": "main"}, {"label": "dev"}]}, {"question": "Push?", "options": [{"label": "Yes"}]}]
@@ -93,7 +97,7 @@ class ClaudeWaitTest(unittest.TestCase):
         self.assertEqual(claudewait.answer(req, 0, "dev"), (False, mock.ANY))
         done, entry = claudewait.answer(req, 1, "no, wait")
         self.assertTrue(done)
-        self.assertEqual(claudewait.poll(req), {"decision": "allow", "answers": {"Which branch?": "dev", "Push?": "no, wait"}})
+        self.assertEqual(claudewait.poll(req), {"decision": "allow", "answers": {"Which branch?": "dev", "Push?": "no, wait"}, "message": ""})
         self.assertIsNone(claudewait.answer(req, 0, "x"))
 
     def test_answered_on_the_mac_closes_the_telegram_message(self):

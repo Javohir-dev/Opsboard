@@ -45,27 +45,55 @@ document.addEventListener("click", e => {
 
 const WAIT_KIND = { permission_request: "Permission", permission_prompt: "Permission", question_request: "Question", question: "Question", elicitation_dialog: "Question", idle_prompt: "Finished" };
 
+const VQ = { tab: {}, pick: {}, other: {}, fold: {} };
+
+function vqTitle(tool) {
+  if (tool === "Bash") return "Allow this bash command?";
+  if (["Write", "Edit", "NotebookEdit"].includes(tool)) return "Allow this edit?";
+  if (tool === "Read") return "Allow reading this file?";
+  if (tool.startsWith("mcp__")) return `Allow ${tool.split("__").pop()}?`;
+  return `Allow ${tool}?`;
+}
+
 function waitCard(w) {
-  const kind = WAIT_KIND[w.kind] || "Waiting";
-  const tone = kind === "Permission" ? "warn" : kind === "Question" ? "acc" : "muted";
-  const where = [w.name, w.cwd].filter(Boolean).join(" · ");
-  const busy = COCKPIT.busy[w.req], msg = COCKPIT.msg[w.req] || "";
-  const head = `<div class="wkhead"><span class="wkkind ${tone}">${kind}</span><b class="wkname" translate="no">${esc(w.name || w.sid.slice(0, 8))}</b><span class="muted fs-sm wkago">${ago(w.at)}</span></div>
-    <div class="muted fs-sm mono wkwhere" translate="no">${esc(where)}</div>`;
-  let body = "";
+  const req = w.req || "", busy = COCKPIT.busy[req], msg = COCKPIT.msg[req] || "";
+  const meta = `<div class="vqmeta" translate="no"><b>${esc(w.name || w.sid.slice(0, 8))}</b><span>${esc(w.cwd)}</span><span>${ago(w.at)}</span></div>`;
+  const fold = VQ.fold[req];
+  const foldBtn = `<button type="button" class="vqicon" data-vq-fold="${esc(req)}" aria-label="${fold ? "Expand" : "Collapse"}" aria-expanded="${!fold}">${icon("chevron", 16)}</button>`;
+  let inner = "";
   if (w.kind === "permission_request") {
-    body = `<div class="wkcmd mono" translate="no">${esc(w.message)}</div>
-      <div class="wkbtns"><button class="wkb ok" data-wait-allow="${esc(w.req)}" ${busy ? "disabled" : ""}>Allow</button><button class="wkb danger" data-wait-deny="${esc(w.req)}" ${busy ? "disabled" : ""}>Deny</button></div>`;
+    const cut = w.message.indexOf(": ");
+    const tool = cut > 0 ? w.message.slice(0, cut) : w.message;
+    let rest = cut > 0 ? w.message.slice(cut + 2) : "", desc = "";
+    const dash = rest.lastIndexOf(" — ");
+    if (dash > 0) { desc = rest.slice(dash + 3); rest = rest.slice(0, dash); }
+    const other = (VQ.other[req] || {})[0] || "";
+    inner = `<div class="vqhead"><b>${esc(vqTitle(tool))}</b>${foldBtn}</div>${fold ? "" : `
+      ${rest ? `<pre class="vqcmd" translate="no">${esc(rest)}</pre>` : ""}${desc ? `<div class="vqdesc">${esc(desc)}</div>` : ""}
+      <div class="vqopts">
+        <button type="button" class="vqopt key" data-vq-allow="${esc(req)}" ${busy ? "disabled" : ""}><kbd>1</kbd><b>Yes</b></button>
+        <button type="button" class="vqopt key" data-vq-deny="${esc(req)}" ${busy ? "disabled" : ""}><kbd>2</kbd><b>No</b></button>
+        <form class="vqother" data-vq-tell="${esc(req)}"><label class="wksr" for="vqt-${esc(req)}">Tell Claude what to do instead</label><input id="vqt-${esc(req)}" type="text" placeholder="Tell Claude what to do instead" autocomplete="off" value="${esc(other)}" ${busy ? "disabled" : ""}></form>
+      </div>`}`;
   } else if (w.kind === "question_request" && w.questions.length) {
-    body = w.questions.map((q, qi) => {
-      const done = w.answers[q.question];
-      return `<div class="wkq"><div class="wkqtext">${esc(q.question)}</div>${done ? `<div class="okmsg fs-sm">Answered: ${esc(done)}</div>` : `<div class="wkopts">${(q.options || []).map(o => `<button class="wkopt" data-wait-pick="${esc(w.req)}" data-q="${qi}" data-text="${esc(o.label)}" ${busy ? "disabled" : ""}><b>${esc(o.label)}</b>${o.description ? `<span class="muted fs-sm">${esc(o.description)}</span>` : ""}</button>`).join("")}</div>
-        <form class="wkown" data-wait-own="${esc(w.req)}" data-q="${qi}"><label class="wksr" for="own-${esc(w.req)}-${qi}">Your own answer</label><input id="own-${esc(w.req)}-${qi}" type="text" placeholder="Or type your own answer" autocomplete="off"><button class="wkb" type="submit" ${busy ? "disabled" : ""}>Send</button></form>`}</div>`;
-    }).join("");
+    const qs = w.questions, tab = Math.min(VQ.tab[req] || 0, qs.length - 1);
+    const picks = VQ.pick[req] || {}, others = VQ.other[req] || {};
+    const answered = qi => w.answers[qs[qi].question] != null || (picks[qi] && (picks[qi] !== "__other__" || (others[qi] || "").trim()));
+    const tabs = `<div class="vqtabs" role="tablist">${qs.map((q, qi) => `<button type="button" role="tab" aria-selected="${qi === tab}" class="${qi === tab ? "on" : ""} ${answered(qi) ? "done" : ""}" data-vq-tab="${esc(req)}" data-q="${qi}">${esc(q.header || `Question ${qi + 1}`)}</button>`).join("")}</div>`;
+    const q = qs[tab], sent = w.answers[q.question];
+    const opts = [...(q.options || []).map(o => ({ label: o.label, desc: o.description })), { label: "__other__", desc: "" }];
+    const rows = sent != null ? `<div class="vqsent">${icon("ok", 14)}Answered: ${esc(sent)}</div>` : `<div class="vqopts">${opts.map(o => {
+      const sel = picks[tab] === o.label;
+      return `<button type="button" class="vqopt ${sel ? "sel" : ""}" role="radio" aria-checked="${sel}" data-vq-pick="${esc(req)}" data-q="${tab}" data-label="${esc(o.label)}" ${busy ? "disabled" : ""}><span class="vqradio"></span><span class="vqtext"><b>${o.label === "__other__" ? "Other" : esc(o.label)}</b>${o.desc ? `<span>${esc(o.desc)}</span>` : ""}</span></button>`;
+    }).join("")}${picks[tab] === "__other__" ? `<input class="vqown" data-vq-own="${esc(req)}" data-q="${tab}" type="text" placeholder="Type your answer" aria-label="Your answer" value="${esc(others[tab] || "")}" autocomplete="off">` : ""}</div>`;
+    const ready = qs.every((_, qi) => answered(qi));
+    const left = qs.filter((_, qi) => !answered(qi)).length;
+    inner = `<div class="vqhead">${qs.length > 1 ? tabs : "<span></span>"}${foldBtn}</div>${fold ? "" : `<div class="vqq">${esc(q.question)}</div>${rows}
+      <button type="button" class="vqsubmit" data-vq-submit="${esc(req)}" ${ready && !busy ? "" : "disabled"}>${ready ? "Submit answers" : `${left} left to answer`}</button>`}`;
   } else {
-    body = `${w.message ? `<div class="wkmsg">${esc(w.message)}</div>` : ""}<div class="muted fs-sm">Answer it in the session on the Mac — only VS Code sessions can be answered from here.</div>`;
+    inner = `<div class="vqhead"><b>${esc(WAIT_KIND[w.kind] === "Finished" ? "Claude finished and waits for you" : "Claude is waiting for you")}</b></div>${w.message ? `<div class="vqdesc">${esc(w.message)}</div>` : ""}<div class="vqdesc">Answer it in the session on the Mac — only VS Code and Cockpit sessions can be answered here.</div>`;
   }
-  return `<section class="wkcard">${head}${body}${msg ? `<div class="fmsg err">${esc(msg)}</div>` : ""}</section>`;
+  return `<section class="vqwrap">${meta}<div class="vqbox ${fold ? "folded" : ""}">${inner}${msg ? `<div class="fmsg err">${esc(msg)}</div>` : ""}</div></section>`;
 }
 
 function pageWaiting() {
@@ -272,17 +300,53 @@ async function waitAnswer(req, body) {
 }
 
 document.addEventListener("click", e => {
-  const a = e.target.closest("[data-wait-allow], [data-wait-deny]");
-  if (a) { waitAnswer(a.dataset.waitAllow || a.dataset.waitDeny, { allow: !!a.dataset.waitAllow }); return; }
-  const p = e.target.closest("[data-wait-pick]");
-  if (p) waitAnswer(p.dataset.waitPick, { question: +p.dataset.q, text: p.dataset.text });
+  const al = e.target.closest("[data-vq-allow]");
+  if (al) { waitAnswer(al.dataset.vqAllow, { allow: true }); return; }
+  const dn = e.target.closest("[data-vq-deny]");
+  if (dn) { waitAnswer(dn.dataset.vqDeny, { allow: false }); return; }
+  const tb = e.target.closest("[data-vq-tab]");
+  if (tb) { VQ.tab[tb.dataset.vqTab] = +tb.dataset.q; ui.forcePatch = true; render(); renderAssist?.(); return; }
+  const fd = e.target.closest("[data-vq-fold]");
+  if (fd) { VQ.fold[fd.dataset.vqFold] = !VQ.fold[fd.dataset.vqFold]; ui.forcePatch = true; render(); renderAssist?.(); return; }
+  const pk = e.target.closest("[data-vq-pick]");
+  if (pk) {
+    const req = pk.dataset.vqPick, qi = +pk.dataset.q;
+    (VQ.pick[req] ||= {})[qi] = pk.dataset.label;
+    const w = waitList().find(x => x.req === req);
+    if (pk.dataset.label !== "__other__" && w && qi < w.questions.length - 1) VQ.tab[req] = qi + 1;
+    ui.forcePatch = true; render(); renderAssist?.();
+    if (pk.dataset.label === "__other__") setTimeout(() => document.querySelector(`[data-vq-own="${CSS.escape(req)}"]`)?.focus(), 30);
+    return;
+  }
+  const sb = e.target.closest("[data-vq-submit]");
+  if (sb) {
+    const req = sb.dataset.vqSubmit, w = waitList().find(x => x.req === req);
+    if (!w) return;
+    const answers = {};
+    w.questions.forEach((q, qi) => {
+      if (w.answers[q.question] != null) return;
+      const p = (VQ.pick[req] || {})[qi];
+      answers[qi] = p === "__other__" ? ((VQ.other[req] || {})[qi] || "").trim() : p;
+    });
+    waitAnswer(req, { answers });
+  }
+});
+document.addEventListener("input", e => {
+  const o = e.target.closest("[data-vq-own]");
+  if (o) { (VQ.other[o.dataset.vqOwn] ||= {})[+o.dataset.q] = o.value; render(); renderAssist?.(); return; }
+  const t = e.target.closest("[data-vq-tell] input");
+  if (t) (VQ.other[t.closest("form").dataset.vqTell] ||= {})[0] = t.value;
 });
 document.addEventListener("submit", e => {
-  const f = e.target.closest("[data-wait-own]");
+  const f = e.target.closest("[data-vq-tell]");
   if (!f) return;
   e.preventDefault();
   const text = f.querySelector("input").value.trim();
-  if (text) waitAnswer(f.dataset.waitOwn, { question: +f.dataset.q, text });
+  if (text) waitAnswer(f.dataset.vqTell, { allow: false, message: text });
+});
+document.addEventListener("keydown", e => {
+  if (e.key !== "Enter" || !e.target.matches("[data-vq-own]")) return;
+  e.preventDefault(); document.querySelector(`[data-vq-submit="${CSS.escape(e.target.dataset.vqOwn)}"]`)?.click();
 });
 
 function openLightbox(src) {
