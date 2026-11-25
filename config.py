@@ -63,7 +63,7 @@ DEFAULTS = {
     "telegram.chat_id": "",
     "telegram.user": "",
     "telegram.notify": True,
-    "telegram.claude_chat": False,
+    "telegram.claude_chat": True,
     "telegram.chat_permission": "plan",
     "telegram.language": "auto",
     "telegram.webapp": False,

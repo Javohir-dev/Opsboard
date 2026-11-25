@@ -282,9 +282,11 @@ class TelegramTest(unittest.TestCase):
 
     def test_claude_chat(self):
         self.link()
+        self.assertTrue(cfg.get("telegram.claude_chat"))
+        cfg.set("telegram.claude_chat", False, "user")
         telegram.handle_message(message("what changed in !7?"))
         self.assertIn("Claude chat is off", self.texts()[-1])
-        cfg.set("telegram.claude_chat", True, "user")
+        cfg.set("telegram.claude_chat", None, "user")
         telegram._save_chat({})
         with mock.patch.object(telegram.subprocess, "Popen", FakeClaude), mock.patch.object(telegram.os, "killpg"):
             telegram.handle_message(dict(message("what changed?"), message_id=42))
