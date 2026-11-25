@@ -482,8 +482,13 @@ class TelegramTest(unittest.TestCase):
         self.assertEqual(done["reply_parameters"]["message_id"], mid)
         n = len(SENT)
         telegram.on_notify({"kind": "run_started", "run_id": "r2", "iid": 8, "push": True, "source": "telegram"})
-        telegram.on_notify({"kind": "run_started", "run_id": "r3", "iid": 99, "push": True, "source": "dashboard"})
         self.assertEqual(len(SENT), n)
+        self.assertEqual(telegram._load_msgs()[2].get(8), mid)
+        telegram.on_notify({"kind": "run_started", "run_id": "r3", "iid": 99, "push": True, "source": "dashboard"})
+        alone = [b for m, b in SENT if m == "sendMessage"][-1]
+        self.assertIn("99", alone["text"])
+        self.assertNotIn("reply_parameters", alone)
+        self.assertIn("r3", telegram._load_msgs()[0])
         cfg.set("claude.fix_skill", None, "user")
 
     def test_switch_proposal_buttons_decide_and_the_message_shows_the_result(self):

@@ -17,6 +17,8 @@ telegram-chat.json
 telegram-live.json
 telegram-live.tmp
 telegram-mrs.json
+telegram-msgs.json
+telegram-msgs.tmp
 threads-seen.tmp
 marks.json
 notes.json

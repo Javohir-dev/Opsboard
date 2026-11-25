@@ -617,7 +617,30 @@ FIX_STATE = {
         "from_board": "из Opsboard",
     },
 }
-_pending, _fix_msgs, _sent_texts, _thread_msgs, _pending_lock = {}, {}, {}, {}, threading.Lock()
+_pending, _pending_lock = {}, threading.Lock()
+MSGS_FILE = DATA / "telegram-msgs.json"
+
+
+def _load_msgs():
+    try:
+        raw = json.loads(MSGS_FILE.read_text())
+    except (OSError, ValueError):
+        raw = {}
+    num = lambda d: {int(k) if str(k).isdigit() else k: v for k, v in (d or {}).items()}
+    return dict(raw.get("fix") or {}), num(raw.get("sent")), num(raw.get("thread"))
+
+
+def _save_msgs():
+    """Which Telegram message belongs to which MR and fix run, kept across restarts so a later run still replies there."""
+    try:
+        tmp = MSGS_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"fix": _fix_msgs, "sent": _sent_texts, "thread": dict(list(_thread_msgs.items())[-200:])}))
+        tmp.replace(MSGS_FILE)
+    except OSError as exc:
+        log.warning("telegram: could not save message map: %s", exc)
+
+
+_fix_msgs, _sent_texts, _thread_msgs = _load_msgs()
 THREAD_GROUP = 3
 
 
@@ -774,6 +797,7 @@ def _flush_threads(iid):
                 _thread_msgs[iid] = msg["message_id"]
                 while len(_sent_texts) > 200:
                     _sent_texts.pop(next(iter(_sent_texts)))
+                _save_msgs()
 
 
 def _launch_fix(iid, push, skiptests=False):
@@ -939,19 +963,27 @@ def _fix_name(push, skiptests):
 
 
 def _fix_started_elsewhere(item):
+    if not chat_id():
+        return
     with _pending_lock:
         mid = _thread_msgs.get(item.get("iid"))
-    if not mid or not chat_id():
-        return
     words = FIX_STATE[_bot_lang()]
     name = _fix_name(item.get("push"), item.get("skiptests"))
-    try:
-        call("editMessageReplyMarkup", chat_id=chat_id(), message_id=mid, reply_markup={"inline_keyboard": []})
-    except TelegramError as exc:
-        log.warning("telegram: could not remove fix buttons: %s", exc)
-    send(words["started"].format(name=esc(name), at=time.strftime("%H:%M")) + f" · {words['from_board']}", reply_to=mid, note=True)
+    text = words["started"].format(name=esc(name), at=time.strftime("%H:%M")) + f" · {words['from_board']}"
+    if mid:
+        try:
+            call("editMessageReplyMarkup", chat_id=chat_id(), message_id=mid, reply_markup={"inline_keyboard": []})
+        except TelegramError as exc:
+            log.warning("telegram: could not remove fix buttons: %s", exc)
+        send(text, reply_to=mid, note=True)
+    else:
+        msg = send(f"🔧 <b>{_ref(item.get('iid'))}</b> — {text}", note=True)
+        mid = (msg or {}).get("message_id")
+        if not mid:
+            return
     with _pending_lock:
         _fix_msgs[item["run_id"]] = {"message_id": mid, "name": name}
+        _save_msgs()
 
 
 def _start_fix(cq, iid, push, skiptests=False):
@@ -968,6 +1000,7 @@ def _start_fix(cq, iid, push, skiptests=False):
     if run:
         with _pending_lock:
             _fix_msgs[run["id"]] = {"message_id": msg.get("message_id"), "base": base, "name": name}
+            _save_msgs()
     return ""
 
 
@@ -995,6 +1028,8 @@ def _thread_text_from(msg):
 def _fix_finished(item):
     with _pending_lock:
         tracked = _fix_msgs.pop(item.get("run_id"), None)
+        if tracked:
+            _save_msgs()
     if not tracked:
         return
     words = FIX_STATE[_bot_lang()]
