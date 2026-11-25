@@ -78,6 +78,9 @@ class TelegramTest(unittest.TestCase):
 
     def setUp(self):
         SENT.clear()
+        patcher = mock.patch.object(telegram, "panelize", return_value=None)
+        self.panelize = patcher.start()
+        self.addCleanup(patcher.stop)
         cfg.set_secret("telegram.token", "12345:" + "x" * 35)
         for key in ("telegram.chat_id", "telegram.user", "telegram.claude_chat"):
             cfg.set(key, None, "user")
@@ -302,6 +305,13 @@ class TelegramTest(unittest.TestCase):
         telegram.handle_callback({"id": "q", "data": button["callback_data"], "message": {"message_id": 9, "chat": {"id": 111}}})
         self.assertIn("<code>ISS-4805</code>", [b for m, b in SENT if m == "sendMessage"][-1]["text"])
         self.assertIn(("editMessageReplyMarkup", {"chat_id": 111, "message_id": 9, "reply_markup": {"inline_keyboard": []}}), SENT)
+        self.panelize.return_value = "🟢 Daemon · ishlayapti\n🔴 Qotgan · 3"
+        telegram.deliver_panel("Multica ishlayapti, nosozlik ko'rinmayapti. Agentlar va autopilotlar holati.", None, "uz")
+        sent = [b for m, b in SENT if m == "sendMessage"][-1]
+        self.assertEqual(sent["text"], "🟢 Daemon · ishlayapti\n\n🔴 Qotgan · 3")
+        self.assertIn("📄 Batafsil", sent["reply_markup"]["inline_keyboard"][0][0]["text"])
+        self.assertTrue(telegram.is_panel("🟢 a\n👉 b"))
+        self.assertFalse(telegram.is_panel("Multica ishlayapti"))
 
     def test_claude_chat(self):
         self.link()

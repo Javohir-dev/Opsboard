@@ -1079,8 +1079,51 @@ def split_panel(text):
     return "\n".join(panel), details
 
 
+STATUS = ("🟢", "🟡", "🔴", "⚪", "👉", "✅", "⚠️", "❌")
+PANELIZE = (
+    "Rewrite the answer below as a phone status panel. Output ONLY:\n"
+    "2 to 6 lines, each '<emoji> <label> · <short value>', at most 40 characters, no sentences. "
+    "Emoji: 🔴 problem or the user must act, 🟡 watch, 🟢 fine, ⚪ none. 🔴 lines first. If the user must do "
+    "something, the last line is '👉 <the action>'. Keep the answer's language. Nothing else.\n\nANSWER:\n"
+)
+
+
+def is_panel(panel):
+    lines = [ln for ln in panel.splitlines() if ln.strip()]
+    return bool(lines) and all(ln.lstrip().startswith(STATUS) for ln in lines)
+
+
+def panelize(text):
+    """A cheap model turns an answer that ignored the panel format into one; None when it cannot."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_CODE_")}
+    cmd = [claude_bin(), "-p", PANELIZE + text[:6000], "--model", "haiku", "--max-turns", "1", "--tools", "", "--strict-mcp-config", "--no-session-persistence"]
+    try:
+        r = subprocess.run(cmd, cwd=str(Path.home()), env=env, capture_output=True, text=True, timeout=90, stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    out = "\n".join(ln.strip() for ln in (r.stdout or "").splitlines() if ln.strip())
+    return out if r.returncode == 0 and is_panel(out) else None
+
+
+def _spaced(panel):
+    """A blank line between the problem lines, the rest and the action line, so it reads at a glance."""
+    lines = [ln.strip() for ln in panel.splitlines() if ln.strip()]
+    out, prev = [], None
+    for ln in lines:
+        group = "act" if ln.startswith("👉") else "bad" if ln.startswith(("🔴", "❌")) else "rest"
+        if prev and group != prev:
+            out.append("")
+        out.append(ln)
+        prev = group
+    return "\n".join(out)
+
+
 def deliver_panel(text, placeholder=None, lang="uz"):
     panel, details = split_panel(text)
+    if not is_panel(panel):
+        made = panelize(text)
+        if made:
+            panel, details = made, text
     buttons = None
     if details:
         key = secrets.token_hex(4)
@@ -1088,7 +1131,7 @@ def deliver_panel(text, placeholder=None, lang="uz"):
         while len(_details) > 50:
             _details.pop(next(iter(_details)))
         buttons = [[{"text": DETAILS.get(lang, DETAILS["uz"]), "callback_data": f"det:{key}"}]]
-    body = md_to_html(panel) or esc(DETAILS.get(lang, ""))
+    body = md_to_html(_spaced(panel)) or esc(DETAILS.get(lang, ""))
     if placeholder and edit(placeholder, body, buttons=buttons):
         return
     send(body, buttons)
