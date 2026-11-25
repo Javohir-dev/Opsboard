@@ -397,6 +397,29 @@ class TelegramTest(unittest.TestCase):
             launch.assert_not_called()
         cfg.set("claude.fix_skill", None, "user")
 
+    def test_fix_started_from_opsboard_replies_under_the_thread_message_and_drops_its_buttons(self):
+        self.link()
+        SENT.clear()
+        cfg.set("claude.fix_skill", "mr-fix", "user")
+        with mock.patch.object(telegram, "THREAD_GROUP", 0.05):
+            telegram.on_notify({"kind": "thread", "iid": 8, "author": "Lena", "body": "a", "mr_title": "T", "status": "thread"})
+            self.assertTrue(self.wait_for("thread ochdi", method="sendMessage"))
+        mid = [b for m, b in SENT if m == "sendMessage"][-1] and telegram._thread_msgs[8]
+        telegram.on_notify({"kind": "run_started", "run_id": "r1", "iid": 8, "push": True, "skiptests": False, "source": "dashboard"})
+        self.assertIn(("editMessageReplyMarkup", {"chat_id": 111, "message_id": mid, "reply_markup": {"inline_keyboard": []}}), SENT)
+        reply = [b for m, b in SENT if m == "sendMessage"][-1]
+        self.assertIn("mr-fix ultra ishga tushdi", reply["text"])
+        self.assertEqual(reply["reply_parameters"]["message_id"], mid)
+        telegram.on_notify({"kind": "run", "run_id": "r1", "iid": 8, "status": "done", "outcome": {"status": "pushed", "commit": "abc1234", "threads": {"replied": 3, "open": 0}}})
+        done = [b for m, b in SENT if m == "sendMessage"][-1]
+        self.assertIn("mr-fix ultra tugadi · pushed · abc1234 · 3 replied, 0 open", done["text"])
+        self.assertEqual(done["reply_parameters"]["message_id"], mid)
+        n = len(SENT)
+        telegram.on_notify({"kind": "run_started", "run_id": "r2", "iid": 8, "push": True, "source": "telegram"})
+        telegram.on_notify({"kind": "run_started", "run_id": "r3", "iid": 99, "push": True, "source": "dashboard"})
+        self.assertEqual(len(SENT), n)
+        cfg.set("claude.fix_skill", None, "user")
+
     def test_switch_proposal_buttons_decide_and_the_message_shows_the_result(self):
         import claudeaccounts
 

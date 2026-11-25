@@ -97,11 +97,13 @@ def public():
     return out
 
 
-def send(text, buttons=None, chat=None, plain=False):
+def send(text, buttons=None, chat=None, plain=False, reply_to=None):
     target = chat or chat_id()
     if not target:
         return None
     params = {"chat_id": target, "text": text[:4096], "disable_web_page_preview": True, "reply_markup": {"inline_keyboard": buttons} if buttons else None}
+    if reply_to:
+        params["reply_parameters"] = {"message_id": reply_to, "allow_sending_without_reply": True}
     if not plain:
         params["parse_mode"] = "HTML"
     try:
@@ -525,17 +527,19 @@ FIX_STATE = {
         "error": "❌ {name} xato bilan tugadi",
         "stopped": "⏹ {name} to'xtatildi",
         "busy": "Bu MR uchun fix allaqachon ishlayapti",
+        "from_board": "Opsboard'dan",
     },
-    "en": {"started": "▶ {name} started · {at}", "done": "✅ {name} finished", "error": "❌ {name} failed", "stopped": "⏹ {name} stopped", "busy": "A fix is already running for this request"},
+    "en": {"from_board": "from Opsboard", "started": "▶ {name} started · {at}", "done": "✅ {name} finished", "error": "❌ {name} failed", "stopped": "⏹ {name} stopped", "busy": "A fix is already running for this request"},
     "ru": {
         "started": "▶ {name} запущен · {at}",
         "done": "✅ {name} завершён",
         "error": "❌ {name} завершился с ошибкой",
         "stopped": "⏹ {name} остановлен",
         "busy": "Для этого запроса исправление уже идёт",
+        "from_board": "из Opsboard",
     },
 }
-_pending, _fix_msgs, _sent_texts, _pending_lock = {}, {}, {}, threading.Lock()
+_pending, _fix_msgs, _sent_texts, _thread_msgs, _pending_lock = {}, {}, {}, {}, threading.Lock()
 THREAD_GROUP = 3
 
 
@@ -646,6 +650,10 @@ def on_notify(item):
         if not item.get("silent"):
             _fix_finished(item)
         return
+    if item.get("kind") == "run_started":
+        if item.get("source") != "telegram":
+            _fix_started_elsewhere(item)
+        return
     if item.get("kind") != "thread" or not cfg.get("telegram.notify"):
         return
     iid = item.get("iid")
@@ -685,6 +693,7 @@ def _flush_threads(iid):
         if msg:
             with _pending_lock:
                 _sent_texts[msg["message_id"]] = text
+                _thread_msgs[iid] = msg["message_id"]
                 while len(_sent_texts) > 200:
                     _sent_texts.pop(next(iter(_sent_texts)))
 
@@ -698,11 +707,31 @@ def _launch_fix(iid, push, skiptests=False):
     return next((r for r in runs.load_runs() if r.get("iid") == iid and r["status"] == "running"), None), ""
 
 
+def _fix_name(push, skiptests):
+    skill = cfg.get("claude.fix_skill") or "fix"
+    return f"{skill} ultra-skip" if skiptests else f"{skill} ultra" if push else skill
+
+
+def _fix_started_elsewhere(item):
+    with _pending_lock:
+        mid = _thread_msgs.get(item.get("iid"))
+    if not mid or not chat_id():
+        return
+    words = FIX_STATE[_bot_lang()]
+    name = _fix_name(item.get("push"), item.get("skiptests"))
+    try:
+        call("editMessageReplyMarkup", chat_id=chat_id(), message_id=mid, reply_markup={"inline_keyboard": []})
+    except TelegramError as exc:
+        log.warning("telegram: could not remove fix buttons: %s", exc)
+    send(words["started"].format(name=esc(name), at=time.strftime("%H:%M")) + f" · {words['from_board']}", reply_to=mid)
+    with _pending_lock:
+        _fix_msgs[item["run_id"]] = {"message_id": mid, "name": name}
+
+
 def _start_fix(cq, iid, push, skiptests=False):
     msg = cq.get("message") or {}
     words = FIX_STATE[_bot_lang()]
-    skill = cfg.get("claude.fix_skill") or "fix"
-    name = f"{skill} ultra-skip" if skiptests else f"{skill} ultra" if push else skill
+    name = _fix_name(push, skiptests)
     run, busy = _launch_fix(iid, push, skiptests)
     if busy:
         return busy
@@ -749,7 +778,9 @@ def _fix_finished(item):
     bits = [o.get("status") or "", str(o.get("commit") or "")[:10], (f"{th['replied']} replied, {th.get('open', 0)} open" if 'replied' in th else f"{th.get('resolved', 0)}/{th.get('resolved', 0) + th.get('open', 0)} threads") if th else ""]
     detail = " · ".join(b for b in bits if b)
     status = words[key].format(name=esc(tracked["name"])) + (f" · {esc(detail)}" if detail else "")
-    edit(tracked["message_id"], f"{tracked['base']}\n\n{status}")
+    if tracked.get("base"):
+        edit(tracked["message_id"], f"{tracked['base']}\n\n{status}")
+    send(status, reply_to=tracked["message_id"])
 
 
 def md_to_html(text):

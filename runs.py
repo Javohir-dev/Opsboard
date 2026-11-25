@@ -3,6 +3,7 @@ import os
 import re
 import signal
 import subprocess
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -90,6 +91,9 @@ def launch_fix(body):
             },
         )
         save_runs(runs[:50])
+    started = {"kind": "run_started", "run_id": rid, "iid": iid, "push": opts["push"], "skiptests": opts["skiptests"], "source": str(body.get("source") or "dashboard")[:20]}
+    for hook in notify.HOOKS:
+        threading.Thread(target=hook, args=(started,), daemon=True).start()
     return prompt
 
 
