@@ -6,12 +6,31 @@ function cockpitNav(ctx, r) {
   const waiting = new Set(waitList().map(w => w.sid));
   const n = waitList().length;
   const inbox = `<a href="#/cockpit" class="navi ${!r.arg ? "on" : ""}" ${!r.arg ? 'aria-current="page"' : ""}>${icon("inbox", 16)}<span class="lbl">Waiting for you</span>${n ? `<span class="n wait">${n}</span>` : ""}</a>`;
-  const rows = ctx.sessions.map(s => {
+  const pins = ckPins();
+  const row = s => {
     const tone = waiting.has(s.id) ? "warn" : s.status === "busy" ? "busy" : "idle";
-    return `<a href="#/cockpit/${esc(s.id)}" class="navi cksess ${r.arg === s.id ? "on" : ""}" ${r.arg === s.id ? 'aria-current="page"' : ""} title="${esc(label(s))}"><span class="dot ${tone}"></span><span class="lbl">${esc(label(s))}</span></a>`;
-  }).join("");
-  return `<div class="navgroup">${inbox}</div><div class="navgroup"><div class="navtitle">Sessions</div>${rows || '<span class="navi muted">No live sessions</span>'}</div>`;
+    const pinned = pins.includes(s.id);
+    return `<div class="ckrow ${pinned ? "pinned" : ""}"><a href="#/cockpit/${esc(s.id)}" class="navi cksess ${r.arg === s.id ? "on" : ""}" ${r.arg === s.id ? 'aria-current="page"' : ""} title="${esc(label(s))}"><span class="dot ${tone}"></span><span class="lbl">${esc(label(s))}</span></a><button type="button" class="ckpin" data-ck-pin="${esc(s.id)}" aria-pressed="${pinned}" aria-label="${pinned ? "Unpin" : "Pin"} ${esc(label(s))}" title="${pinned ? "Unpin" : "Pin to the top"}">${icon("pin", 14)}</button></div>`;
+  };
+  const top = pins.map(id => ctx.sessions.find(s => s.id === id)).filter(Boolean);
+  const rest = ctx.sessions.filter(s => !pins.includes(s.id));
+  const pinnedGroup = top.length ? `<div class="navgroup"><div class="navtitle">Pinned</div>${top.map(row).join("")}</div>` : "";
+  return `<div class="navgroup">${inbox}</div>${pinnedGroup}<div class="navgroup"><div class="navtitle">Sessions</div>${rest.map(row).join("") || `<span class="navi muted">${top.length ? "No other live sessions" : "No live sessions"}</span>`}</div>`;
 }
+
+function ckPins() {
+  try { const v = JSON.parse(localStorage.getItem("ops.ckPins") || "[]"); return Array.isArray(v) ? v.map(String) : []; } catch (e) { return []; }
+}
+function setCkPins(list) { try { localStorage.setItem("ops.ckPins", JSON.stringify(list)); } catch (e) {} }
+
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-ck-pin]");
+  if (!b) return;
+  e.preventDefault();
+  const id = b.dataset.ckPin, pins = ckPins();
+  setCkPins(pins.includes(id) ? pins.filter(x => x !== id) : [...pins, id]);
+  render();
+});
 
 const WAIT_KIND = { permission_request: "Permission", permission_prompt: "Permission", question_request: "Question", question: "Question", elicitation_dialog: "Question", idle_prompt: "Finished" };
 

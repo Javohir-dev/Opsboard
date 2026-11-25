@@ -1398,6 +1398,13 @@ dialog.accdlg .accswitch{margin:0;flex-direction:row}
 .modesw .wn{min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;border-radius:999px;background:var(--warn);color:#14161a;font-size:11px;font-weight:700;line-height:18px;text-align:center}
 .navi .n.wait{background:var(--warn);color:#14161a}
 .navi.cksess .dot{width:8px;height:8px}
+.ckrow{position:relative}
+.ckrow .navi{padding-right:34px}
+.ckpin{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:26px;height:26px;padding:0;border:0;border-radius:6px;background:none;color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0}
+.ckrow:hover .ckpin,.ckpin:focus-visible,.ckrow.pinned .ckpin{opacity:1}
+.ckpin:hover{background:var(--panel2);color:var(--text)}
+.ckrow.pinned .ckpin{color:var(--accent)}
+@media (hover:none){.ckpin{opacity:1}}
 .dot.idle{background:var(--muted);opacity:.6}
 .wkgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px;align-items:start}
 .wkcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
