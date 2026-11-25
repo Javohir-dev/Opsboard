@@ -159,9 +159,11 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("demo mode — nothing is started")
                 action = self.path.split("?", 1)[0].rsplit("/", 1)[-1]
                 if action == "new":
-                    out = {"ok": True, "session": cockpitchat.start(str(body.get("text") or ""), str(body.get("cwd") or ""), str(body.get("resume") or ""), bool(body.get("resume")), bool(body.get("assistant")))}
+                    out = {"ok": True, "session": cockpitchat.start(str(body.get("text") or ""), str(body.get("cwd") or ""), str(body.get("resume") or ""), bool(body.get("resume")), bool(body.get("assistant")), str(body.get("mode") or "default"))}
                 elif action == "send":
                     out = {"ok": True, "session": cockpitchat.send(str(body.get("id") or ""), str(body.get("text") or ""))}
+                elif action == "mode":
+                    out = {"ok": True, "session": cockpitchat.set_mode(str(body.get("id") or ""), str(body.get("mode") or ""))}
                 elif action == "stop":
                     out = {"ok": True, "session": cockpitchat.stop(str(body.get("id") or ""), bool(body.get("close")))}
                 else:

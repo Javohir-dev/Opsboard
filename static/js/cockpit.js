@@ -25,7 +25,7 @@ function ckOwn(id) { return ckOwned().find(c => c.sid === id || c.key === id); }
 function ckAllSessions(ctx) {
   const helper = new Set(ckOwned().filter(c => c.assistant).map(c => c.sid));
   const known = new Set(ctx.sessions.map(s => s.id));
-  const extra = ckOwned().filter(c => c.alive && !c.assistant && !known.has(c.sid)).map(c => ({ id: c.sid || c.key, name: c.title || "New session", name_source: "user", title: "", status: c.busy ? "busy" : "idle", cockpit: true }));
+  const extra = ckOwned().filter(c => (c.alive || c.resumable) && !c.assistant && !known.has(c.sid)).map(c => ({ id: c.sid || c.key, name: c.title || "New session", name_source: "user", title: "", status: c.busy ? "busy" : "idle", cockpit: true }));
   return [...extra, ...ctx.sessions.filter(x => !helper.has(x.id))];
 }
 
@@ -92,22 +92,35 @@ function ckView() { try { return localStorage.getItem("ops.ckView") === "details
 
 function ckTitle(s, id) {
   if (!s) return `<div class="cktitle"><h1>Session ended</h1></div>`;
+  const own = ckOwn(id);
   const where = [s.cwd ? s.cwd.replace(/^\/Users\/[^/]+/, "~") : "", s.branch].filter(Boolean);
-  return `<div class="cktitle"><h1 translate="no">${esc(label(s))}</h1><div class="ckmeta">${statusOf(s)}${where.map(w => `<span class="ckchip mono" translate="no">${esc(w)}</span>`).join("")}</div></div>`;
+  const parent = own?.parent ? (ctxSessions().find(x => x.id === own.parent) || null) : null;
+  const branch = own?.parent ? `<a class="ckchip ckbranch" href="#/cockpit/${esc(own.parent)}" title="Opened from this session with its whole history">↳ branch of ${esc(parent ? label(parent) : own.parent.slice(0, 8))}</a>` : "";
+  return `<div class="cktitle"><h1 translate="no">${esc(own?.title || label(s))}</h1><div class="ckmeta">${statusOf(s)}${branch}${where.map(w => `<span class="ckchip mono" translate="no">${esc(w)}</span>`).join("")}</div></div>`;
 }
+function ctxSessions() { return data.sessions || []; }
 
 function ckThread(id, s) {
   const c = COCKPIT.chat?.[id];
   if (!c || (Date.now() - c.at > 2500 && !c.loading)) ckLoad(id);
   if (!c) return `<div class="ckthread"><div class="skel skel-block"></div></div>`;
   if (c.error) return `<div class="ckthread"><div class="wkempty">${esc(c.error)}</div></div>`;
-  const items = c.items.map((it, n) => xItem(it, `${id}:${c.total - c.items.length + n}`)).join("");
+  const own0 = ckOwn(id);
+  let list = c.items, earlier = 0;
+  if (own0?.parent && own0.first && !COCKPIT.showEarly?.[id]) {
+    const head = own0.first.slice(0, 60);
+    let at = -1;
+    c.items.forEach((it, n) => { if (it.kind === "user" && it.text.startsWith(head)) at = n; });
+    if (at > 0) { earlier = at; list = c.items.slice(at); }
+  }
+  const early = earlier ? `<button type="button" class="ckearly" data-ck-early="${esc(id)}">${icon("history", 14)}Show ${plural(earlier, "earlier entry")} from the original session</button>` : "";
+  const items = early + list.map((it, n) => xItem(it, `${id}:${c.total - c.items.length + (c.items.length - list.length) + n}`)).join("");
   const waits = waitList().filter(w => w.sid === id).map(waitCard).join("");
   const working = s && s.status === "busy" ? `<div class="ckworking"><span class="dot busy"></span>${s.doing ? esc(s.doing.tool + " — " + s.doing.what) : "Thinking…"}</div>` : "";
   const older = c.total > c.items.length ? `<div class="muted fs-sm ckolder">Showing the last ${c.items.length} of ${c.total} entries</div>` : "";
   const own = ckOwn(id);
   let foot = "";
-  if (own && own.alive) foot = ckComposer(own);
+  if (own && (own.alive || own.resumable)) foot = ckComposer(own);
   else if (own) foot = `<div class="ckcompose off">${icon("info", 15)}<span>${esc(own.error || "This session has ended.")}</span><button type="button" class="wkb" data-ck-continue="${esc(id)}">Continue in a new one</button></div>`;
   else if (s && s.entrypoint !== "background") foot = COCKPIT.continueOpen === id
     ? ckComposer(null, id)
@@ -141,13 +154,19 @@ document.addEventListener("click", e => {
   x.classList.toggle("open");
 });
 
+const CK_MODES = [["default", "Manual"], ["acceptEdits", "Accept edits"], ["plan", "Plan"], ["auto", "Auto"]];
+function ckModeSelect(own) {
+  const cur = own ? own.mode : (COCKPIT.mode || "default");
+  return `<label class="ckmode" title="Permission mode"><span class="wksr">Permission mode</span><select ${own ? `data-ck-mode="${esc(own.sid || own.key)}"` : 'id="ckmodesel"'}>${CK_MODES.map(([v, l]) => `<option value="${v}" ${v === cur ? "selected" : ""}>${l}</option>`).join("")}</select></label>`;
+}
+
 function ckComposer(own, resume = "") {
   const busy = own && own.busy;
   const draft = COCKPIT.draft || "";
   return `<form class="ckcompose" data-ck-send="${esc(own ? own.sid || own.key : "")}" data-ck-resume="${esc(resume)}">
     <label class="wksr" for="ckinput">Message</label>
     <textarea id="ckinput" rows="2" placeholder="${resume ? "What should it do next? It continues with the whole history" : "Write to Claude"}">${esc(draft)}</textarea>
-    <div class="ckcbar"><span class="muted fs-sm">${COCKPIT.sendMsg ? esc(COCKPIT.sendMsg) : resume ? "Starts a new branch of this session in Cockpit" : "Enter to send · Shift+Enter for a new line"}</span>
+    <div class="ckcbar">${ckModeSelect(own)}<span class="muted fs-sm">${COCKPIT.sendMsg ? esc(COCKPIT.sendMsg) : resume ? "Starts a new branch of this session in Cockpit" : "Enter to send · Shift+Enter for a new line"}</span>
     ${busy ? `<button type="button" class="wkb danger" data-ck-stop="${esc(own.sid || own.key)}">Stop</button>` : ""}${resume ? `<button type="button" class="wkb" data-ck-continue-cancel>Cancel</button>` : ""}
     <button type="submit" class="wkb ok" aria-label="Send">${icon("chevron", 15)}${resume ? "Start" : "Send"}</button></div></form>`;
 }
@@ -159,7 +178,7 @@ function ckNewPage() {
     <form class="ckcompose" data-ck-new>
       <label class="wksr" for="ckinput">First message</label>
       <textarea id="ckinput" rows="3" placeholder="What should Claude do?">${esc(COCKPIT.draft || "")}</textarea>
-      <div class="ckcbar"><label class="ckfolder"><span class="muted fs-sm">Folder</span><input id="ckcwd" type="text" value="${esc(COCKPIT.cwd || root)}" spellcheck="false"></label><span class="muted fs-sm">${esc(COCKPIT.sendMsg || "")}</span><button type="submit" class="wkb ok">${icon("chevron", 15)}Start</button></div>
+      <div class="ckcbar">${ckModeSelect(null)}<label class="ckfolder"><span class="muted fs-sm">Folder</span><input id="ckcwd" type="text" value="${esc(COCKPIT.cwd || root)}" spellcheck="false"></label><span class="muted fs-sm">${esc(COCKPIT.sendMsg || "")}</span><button type="submit" class="wkb ok">${icon("chevron", 15)}Start</button></div>
     </form></div>`;
 }
 
@@ -175,8 +194,9 @@ async function ckSubmit(form) {
   COCKPIT.sending = true; COCKPIT.sendMsg = "Sending…"; COCKPIT.draft = text;
   try {
     let s;
-    if (form.hasAttribute("data-ck-new")) { COCKPIT.cwd = $("ckcwd").value.trim(); s = await ckPost("new", { text, cwd: COCKPIT.cwd }); }
-    else if (form.dataset.ckResume) s = await ckPost("new", { text, resume: form.dataset.ckResume });
+    const mode = $("ckmodesel")?.value || "default";
+    if (form.hasAttribute("data-ck-new")) { COCKPIT.cwd = $("ckcwd").value.trim(); s = await ckPost("new", { text, cwd: COCKPIT.cwd, mode }); }
+    else if (form.dataset.ckResume) s = await ckPost("new", { text, resume: form.dataset.ckResume, mode });
     else s = await ckPost("send", { id: form.dataset.ckSend, text });
     COCKPIT.draft = ""; COCKPIT.sendMsg = ""; COCKPIT.continueOpen = null; ta.value = ""; ta.defaultValue = "";
     data = await (await fetch("/api/state", { cache: "no-store" })).json();
@@ -196,6 +216,18 @@ document.addEventListener("keydown", e => {
   e.preventDefault(); ckSubmit(e.target.closest("form"));
 });
 document.addEventListener("input", e => { if (e.target.id === "ckinput") COCKPIT.draft = e.target.value; });
+document.addEventListener("change", async e => {
+  if (e.target.id === "ckmodesel") { COCKPIT.mode = e.target.value; return; }
+  const m = e.target.closest("[data-ck-mode]");
+  if (!m) return;
+  try { await ckPost("mode", { id: m.dataset.ckMode, mode: m.value }); COCKPIT.sendMsg = ""; } catch (x) { COCKPIT.sendMsg = x.message; }
+  data = await (await fetch("/api/state", { cache: "no-store" })).json(); ui.forcePatch = true; render();
+});
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-ck-early]");
+  if (!b) return;
+  (COCKPIT.showEarly ||= {})[b.dataset.ckEarly] = true; ui.forcePatch = true; render();
+});
 document.addEventListener("click", async e => {
   const c = e.target.closest("[data-ck-continue]");
   if (c) { COCKPIT.continueOpen = c.dataset.ckContinue; ui.forcePatch = true; render(); $("ckinput")?.focus(); return; }

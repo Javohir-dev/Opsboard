@@ -14,9 +14,12 @@ import uuid
 from pathlib import Path
 
 import claudewait
-from core import claude_bin, log, project_root
+import safety
+from core import DATA, claude_bin, log, project_root
 
 KEEP = 20
+SAVED = DATA / "cockpit-sessions.json"
+MODES = ("default", "acceptEdits", "plan", "auto")
 ASSIST_ROLE = (
     "You are the Opsboard assistant: a small chat panel in the corner of Opsboard, the dashboard Javohir runs on his Mac "
     "(sessions, Jira, GitLab, Docker, Postgres, worktrees, Claude accounts). Each of his messages starts with an "
@@ -31,7 +34,7 @@ _sessions, _lock = {}, threading.Lock()
 
 
 class CockpitSession:
-    def __init__(self, cwd, resume="", fork=False, title="", assistant=False):
+    def __init__(self, cwd, resume="", fork=False, title="", assistant=False, mode="default"):
         self.key = uuid.uuid4().hex[:10]
         self.cwd = str(cwd)
         self.sid = ""
@@ -39,8 +42,11 @@ class CockpitSession:
         self.busy = False
         self.error = ""
         self.assistant = assistant
+        self.parent = resume
+        self.first = ""
+        self.mode = "auto" if assistant else (mode if mode in MODES else "default")
         self.started = self.last = time.time()
-        cmd = [claude_bin(), "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--permission-mode", "auto" if assistant else "default", "--permission-prompt-tool", "stdio"]
+        cmd = [claude_bin(), "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--permission-mode", self.mode, "--permission-prompt-tool", "stdio"]
         if assistant:
             cmd += ["--append-system-prompt", ASSIST_ROLE]
         if resume:
@@ -59,6 +65,8 @@ class CockpitSession:
         self.proc.stdin.write(json.dumps({"type": "user", "message": {"role": "user", "content": text}}) + "\n")
         self.proc.stdin.flush()
         self.busy, self.last = True, time.time()
+        if not self.first:
+            self.first = re.sub(r"<ops-context>[\s\S]*?</ops-context>", "", text).strip()[:300]
         if not self.title:
             self.title = re.sub(r"\s+", " ", re.sub(r"<ops-context>[\s\S]*?</ops-context>", "", text)).strip()[:60]
 
@@ -68,8 +76,9 @@ class CockpitSession:
                 ev = json.loads(line)
             except ValueError:
                 continue
-            if ev.get("session_id") and not self.sid:
+            if ev.get("session_id") and ev.get("type") in ("system", "result") and ev["session_id"] != self.parent and ev["session_id"] != self.sid:
                 self.sid = ev["session_id"]
+                _save()
             if ev.get("type") == "control_request":
                 self._control(ev)
                 continue
@@ -121,6 +130,15 @@ class CockpitSession:
                 return
             time.sleep(0.5)
 
+    def set_mode(self, mode):
+        if mode not in MODES:
+            raise ValueError("unknown mode")
+        if not self.alive():
+            raise ValueError("this session has ended")
+        self.proc.stdin.write(json.dumps({"type": "control_request", "request_id": uuid.uuid4().hex, "request": {"subtype": "set_permission_mode", "mode": mode}}) + "\n")
+        self.proc.stdin.flush()
+        self.mode = mode
+
     def interrupt(self):
         if self.alive():
             try:
@@ -136,7 +154,7 @@ class CockpitSession:
                 pass
 
     def public(self):
-        return {"key": self.key, "sid": self.sid, "cwd": self.cwd.replace(str(Path.home()), "~", 1), "title": self.title, "busy": self.busy, "assistant": self.assistant,
+        return {"key": self.key, "sid": self.sid, "cwd": self.cwd.replace(str(Path.home()), "~", 1), "title": self.title, "busy": self.busy, "assistant": self.assistant, "parent": self.parent, "first": self.first, "mode": self.mode,
                 "alive": self.alive(), "error": self.error, "started": self.started, "last": self.last}
 
 
@@ -147,7 +165,59 @@ def summary(name, args, description=""):
     return f"{name}: {description}" if description else name
 
 
-def start(text, cwd="", resume="", fork=False, assistant=False):
+class Ended:
+    """A Cockpit session from before a restart: shown in the list, and resumed with its history when he writes to it."""
+
+    def __init__(self, row):
+        self.key, self.sid, self.cwd = row["key"], row["sid"], row["cwd"]
+        self.title, self.parent, self.first = row.get("title") or "", row.get("parent") or "", row.get("first") or ""
+        self.mode, self.assistant = row.get("mode") or "default", bool(row.get("assistant"))
+        self.started = self.last = row.get("last") or time.time()
+        self.busy, self.error = False, ""
+
+    def alive(self):
+        return False
+
+    def set_mode(self, mode):
+        if mode not in MODES:
+            raise ValueError("unknown mode")
+        self.mode = mode
+
+    def interrupt(self):
+        pass
+
+    close = interrupt
+
+    def public(self):
+        return {"key": self.key, "sid": self.sid, "cwd": self.cwd.replace(str(Path.home()), "~", 1), "title": self.title, "busy": False, "assistant": self.assistant,
+                "parent": self.parent, "first": self.first, "mode": self.mode, "alive": False, "resumable": True, "error": "", "started": self.started, "last": self.last}
+
+
+def _save():
+    with _lock:
+        rows = [{"key": s.key, "sid": s.sid, "cwd": s.cwd, "title": s.title, "parent": s.parent, "first": s.first, "mode": s.mode, "assistant": s.assistant, "last": s.last}
+                for s in _sessions.values() if s.sid]
+    try:
+        safety.allow_write(SAVED)
+        tmp = SAVED.with_suffix(".tmp")
+        tmp.write_text(json.dumps(rows[-KEEP:]))
+        os.chmod(tmp, 0o600)
+        tmp.replace(SAVED)
+    except (OSError, RuntimeError) as exc:
+        log.warning("cockpit: could not save sessions: %s", exc)
+
+
+def _load():
+    try:
+        rows = json.loads(SAVED.read_text())
+    except (OSError, ValueError):
+        return
+    for row in rows if isinstance(rows, list) else []:
+        if isinstance(row, dict) and row.get("sid") and row.get("key"):
+            _sessions[row["key"]] = Ended(row)
+
+
+def start(text, cwd="", resume="", fork=False, assistant=False, mode="default"):
     text = (text or "").strip()
     if not text:
         raise ValueError("write the first message")
@@ -156,7 +226,7 @@ def start(text, cwd="", resume="", fork=False, assistant=False):
         raise ValueError("choose an existing folder")
     if resume and not re.fullmatch(r"[0-9a-f-]{8,64}", resume):
         raise ValueError("not a session id")
-    s = CockpitSession(folder, resume, fork, "", assistant)
+    s = CockpitSession(folder, resume, fork, "", assistant, mode)
     s.send(text)
     with _lock:
         _sessions[s.key] = s
@@ -179,7 +249,23 @@ def send(ref, text):
     text = (text or "").strip()
     if not text:
         raise ValueError("write a message first")
+    if not s.alive():
+        fresh = CockpitSession(s.cwd, s.sid, False, s.title, s.assistant, s.mode)
+        fresh.key, fresh.sid, fresh.parent, fresh.first = s.key, s.sid, s.parent, s.first
+        fresh.resumed = s.sid
+        with _lock:
+            _sessions[s.key] = fresh
+        s = fresh
+        log.info("cockpit: resumed %s", s.sid[:8])
     s.send(text)
+    return s.public()
+
+
+def set_mode(ref, mode):
+    s = find(ref)
+    if not s:
+        raise ValueError("unknown session")
+    s.set_mode(mode)
     return s.public()
 
 
@@ -189,6 +275,9 @@ def stop(ref, close=False):
         raise ValueError("unknown session")
     s.close() if close else s.interrupt()
     return s.public()
+
+
+_load()
 
 
 def public():

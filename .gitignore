@@ -38,3 +38,5 @@ claude-logins/
 backups/
 claude-usage-cache.json
 claude-usage-cache.tmp
+cockpit-sessions.json
+cockpit-sessions.tmp

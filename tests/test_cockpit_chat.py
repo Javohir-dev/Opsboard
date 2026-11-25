@@ -59,12 +59,27 @@ class CockpitChatTest(unittest.TestCase):
             self.assertTrue(cockpitchat.send("sid-1", "and the bar")["busy"])
             with self.assertRaises(ValueError):
                 cockpitchat.send("other", "x")
-            cockpitchat.start("go on", folder, resume="0123abcd-0000", fork=True)
+            self.assertEqual(cockpitchat.set_mode("sid-1", "plan")["mode"], "plan")
+            with self.assertRaises(ValueError):
+                cockpitchat.set_mode("sid-1", "bypassPermissions")
+            b2 = cockpitchat.start("go on", folder, resume="0123abcd-0000", fork=True, mode="acceptEdits")
+            self.assertEqual((b2["parent"], b2["first"], b2["mode"]), ("0123abcd-0000", "go on", "acceptEdits"))
+            self.assertIn("acceptEdits", FakeProc.instances[-1].cmd)
             self.assertEqual(FakeProc.instances[-1].cmd[-3:], ["--resume", "0123abcd-0000", "--fork-session"])
             with self.assertRaises(ValueError):
                 cockpitchat.start("x", folder, resume="../etc")
             for p in FakeProc.instances:
                 p.stdin.close()
+            self.assertTrue(self.wait(lambda: not cockpitchat.find("sid-1").alive()))
+            cockpitchat._sessions.clear()
+            cockpitchat._load()
+            old = cockpitchat.find("sid-1")
+            self.assertEqual((old.alive(), old.public()["resumable"], old.title), (False, True, "Fix the ring"))
+            n = len(FakeProc.instances)
+            cockpitchat.send("sid-1", "continue please")
+            self.assertEqual(FakeProc.instances[n].cmd[-2:], ["--resume", "sid-1"])
+            self.assertTrue(cockpitchat.find("sid-1").alive())
+            FakeProc.instances[n].stdin.close()
 
 
 if __name__ == "__main__":

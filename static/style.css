@@ -1533,3 +1533,13 @@ form.ckcompose textarea{resize:none;border:0;outline:none;background:transparent
 .lightbox img{display:block;max-width:94vw;max-height:90vh;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
 .lbclose{position:absolute;top:-14px;right:-14px;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--text);font-size:20px;line-height:1;cursor:pointer}
 .ximgs img{cursor:zoom-in}
+main:has(.ckchat){height:100vh;box-sizing:border-box;overflow:hidden;padding-bottom:16px;display:flex;flex-direction:column}
+main:has(.ckchat)>.ckchat{flex:1;min-height:0;height:auto;width:100%}
+.ckchat .ckhead{flex:none}
+.ckcompose{flex:none}
+.ckbranch{color:var(--accent);text-decoration:none}
+.ckbranch:hover{text-decoration:underline}
+.ckearly{align-self:center;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--muted);font:inherit;font-size:var(--fs-sm);cursor:pointer}
+.ckearly:hover{color:var(--text)}
+.ckmode select{height:30px;border-radius:6px;border:1px solid var(--line);background:var(--panel2);color:var(--text);font:inherit;font-size:var(--fs-sm);padding:0 6px}
+@media (max-width:760px){main:has(.ckchat){height:calc(100vh - 52px)}}
