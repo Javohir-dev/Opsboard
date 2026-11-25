@@ -284,6 +284,25 @@ class TelegramTest(unittest.TestCase):
         out = telegram.md_to_html("**✅ Hammasi ishlayapti**\n- 6 ta issue ishda\n\n> Daemon: v0.12.1\n> ISS-5252 <ci>\nend")
         self.assertEqual(out, "<b>✅ Hammasi ishlayapti</b>\n• 6 ta issue ishda\n\n<blockquote expandable>Daemon: v0.12.1\nISS-5252 &lt;ci&gt;</blockquote>\nend")
 
+    def test_answers_arrive_as_a_panel_with_a_details_button(self):
+        panel, details = telegram.split_panel("🔴 Qotgan · 3\n🟢 Daemon · 4 soat\n---\n- `ISS-4805` 24.11 dan beri")
+        self.assertEqual((panel, details), ("🔴 Qotgan · 3\n🟢 Daemon · 4 soat", "- `ISS-4805` 24.11 dan beri"))
+        long = "Multica'da hozir ham jiddiy nosozlik yo'q, lekin bir nechta issue uzoq vaqt qimirlamagan holatda turibdi."
+        panel, details = telegram.split_panel(long + "\n- a")
+        self.assertTrue(panel.splitlines()[0].endswith("…") and len(panel.splitlines()[0]) == 60)
+        self.assertEqual(details, long + "\n- a")
+        self.assertEqual(telegram.split_panel("🟢 Hammasi joyida"), ("🟢 Hammasi joyida", ""))
+        self.link()
+        SENT.clear()
+        telegram.deliver_panel("🔴 Qotgan · 3\n---\n- `ISS-4805`", None, "uz")
+        sent = [b for m, b in SENT if m == "sendMessage"][-1]
+        self.assertEqual(sent["text"], "🔴 Qotgan · 3")
+        button = sent["reply_markup"]["inline_keyboard"][0][0]
+        self.assertEqual(button["text"], "📄 Batafsil")
+        telegram.handle_callback({"id": "q", "data": button["callback_data"], "message": {"message_id": 9, "chat": {"id": 111}}})
+        self.assertIn("<code>ISS-4805</code>", [b for m, b in SENT if m == "sendMessage"][-1]["text"])
+        self.assertIn(("editMessageReplyMarkup", {"chat_id": 111, "message_id": 9, "reply_markup": {"inline_keyboard": []}}), SENT)
+
     def test_claude_chat(self):
         self.link()
         self.assertTrue(cfg.get("telegram.claude_chat"))

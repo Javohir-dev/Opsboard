@@ -967,8 +967,10 @@ def md_to_html(text):
     return "".join(out).strip()
 
 
-def edit(message_id, text, plain=False, chat=None):
+def edit(message_id, text, plain=False, chat=None, buttons=None):
     params = {"chat_id": chat or chat_id(), "message_id": message_id, "text": text[:4096], "disable_web_page_preview": True}
+    if buttons:
+        params["reply_markup"] = {"inline_keyboard": buttons}
     if not plain:
         params["parse_mode"] = "HTML"
     try:
@@ -1052,6 +1054,56 @@ def _chunks(text, size=3800):
     if chunk.strip():
         out.append(chunk)
     return out
+
+
+PANEL_LINES, PANEL_WIDTH = 6, 60
+DETAILS = {"uz": "📄 Batafsil", "en": "📄 Details", "ru": "📄 Подробнее"}
+_details = {}
+
+
+def split_panel(text):
+    """The answer as status lines plus details: the part before a '---' line, or else its first short lines."""
+    text = (text or "").strip()
+    head, sep, tail = text.partition("\n---")
+    if sep:
+        tail = tail.split("\n", 1)[1] if "\n" in tail else ""
+    lines = [ln.strip() for ln in head.splitlines() if ln.strip()]
+    panel = []
+    for ln in lines[:PANEL_LINES]:
+        ln = re.sub(r"^[-*•] +", "", re.sub(r"^#+ +", "", ln))
+        panel.append(ln if len(ln) <= PANEL_WIDTH else ln[: PANEL_WIDTH - 1].rstrip() + "…")
+    rest = "\n".join(lines[PANEL_LINES:]) if not sep else ""
+    details = "\n\n".join(x for x in (rest, tail.strip()) if x)
+    if not sep and any(len(ln) > PANEL_WIDTH for ln in lines[:PANEL_LINES]):
+        details = text
+    return "\n".join(panel), details
+
+
+def deliver_panel(text, placeholder=None, lang="uz"):
+    panel, details = split_panel(text)
+    buttons = None
+    if details:
+        key = secrets.token_hex(4)
+        _details[key] = details
+        while len(_details) > 50:
+            _details.pop(next(iter(_details)))
+        buttons = [[{"text": DETAILS.get(lang, DETAILS["uz"]), "callback_data": f"det:{key}"}]]
+    body = md_to_html(panel) or esc(DETAILS.get(lang, ""))
+    if placeholder and edit(placeholder, body, buttons=buttons):
+        return
+    send(body, buttons)
+
+
+def show_details(cq, key):
+    text = _details.get(key)
+    if not text:
+        return "This answer is too old — ask again."
+    deliver(text)
+    try:
+        call("editMessageReplyMarkup", chat_id=chat_id(), message_id=(cq.get("message") or {}).get("message_id"), reply_markup={"inline_keyboard": []})
+    except TelegramError:
+        pass
+    return ""
 
 
 def deliver(text, placeholder=None):
@@ -1165,13 +1217,13 @@ CHAT_ROLE = (
     "read them first, they are what his message is about. Permission prompts and questions of other Claude Code "
     "sessions arrive as their own bot messages with buttons; when he wants to allow or answer one, tell him to use "
     "those buttons or reply to that message (VS Code sessions), otherwise to answer on the Mac.\n\n"
-    "How to write every answer (it is read on a phone):\n"
-    "1. First line: the verdict in bold, one short sentence with an emoji (✅ all fine / ⚠️ needs attention / ❌ broken).\n"
-    "2. Then at most 3 short lines with only what matters or what he must do, most important first.\n"
-    "3. All details go last inside one collapsed block: every line of it starts with '> ' (it is shown as a tap-to-expand "
-    "quote). Keep it short too; skip it when there is nothing more to say.\n"
-    "Use **bold** sparingly, `code` for ids, '- ' bullets. No headers, no long lists, no tables, no closing offers like "
-    "'tell me if you want more'. Answer in his language."
+    "How to write every answer (the bot shows only the first part on his phone; the rest is behind a Details button):\n"
+    "Part 1 — a status panel: 2 to 6 lines, each '<emoji> <label> · <short value>', at most 40 characters, no sentences. "
+    "Emoji: 🟢 fine, 🟡 watch, 🔴 problem or he must act, ⚪ nothing/none. Put the 🔴 lines first. If he must do "
+    "something, the last line is '👉 <the action>'.\n"
+    "Then a line with only '---'.\n"
+    "Part 2 — details: short '- ' bullets, ids in `code`, no closing offers. Omit part 2 (and the ---) when the panel says it all.\n"
+    "Answer in his language."
 )
 EXTRA = {"en": "🔔 Claude came back:", "uz": "🔔 Claude qaytib keldi:", "ru": "🔔 Claude вернулся:"}
 QUEUED = {"en": "⏳ Queued — after the current answer", "uz": "⏳ Navbatda — joriy javobdan keyin", "ru": "⏳ В очереди — после текущего ответа"}
@@ -1277,10 +1329,10 @@ class ClaudeChat:
                     if not (turn and turn["placeholder"] and edit(turn["placeholder"], note)):
                         send(note)
                 elif turn:
-                    deliver(answer, turn["placeholder"])
+                    deliver_panel(answer, turn["placeholder"], turn["lang"])
                 else:
                     send(f"<i>{esc(EXTRA[self.lang])}</i>")
-                    deliver(answer)
+                    deliver_panel(answer, None, self.lang)
         err = (proc.stderr.read() or "").strip() if proc.stderr else ""
         with self.lock:
             left, self.turns = self.turns, []
@@ -1485,6 +1537,8 @@ def handle_callback(cq):
             note = claudeaccounts.decide(pid, answer == "y", "from Telegram")
         except (ValueError, OSError) as exc:
             note = str(exc)[:190]
+    elif kind == "det":
+        note = show_details(cq, rest)
     elif kind == "cw":
         req, _, act = rest.partition(":")
         note = _wait_decide(req, act == "a")
