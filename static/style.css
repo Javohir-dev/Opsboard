@@ -1432,4 +1432,32 @@ dialog.accdlg .accswitch{margin:0;flex-direction:row}
 .wkown{display:flex;gap:8px}
 .wkown input{flex:1;min-width:0;height:36px;box-sizing:border-box;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);font:inherit}
 .wksr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.ckhead{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+.cktitle{min-width:0;display:flex;flex-direction:column;gap:6px}
+.cktitle h1{margin:0;font-size:var(--fs-2xl);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ckmeta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ckchip{font-size:var(--fs-xs);color:var(--muted);background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:2px 8px}
+.cktabs{display:flex;gap:3px;padding:3px;border:1px solid var(--line);border-radius:10px;background:var(--panel2)}
+.cktabs button{height:30px;padding:0 14px;display:flex;align-items:center;gap:6px;border:0;border-radius:7px;background:none;color:var(--muted);font:inherit;font-size:var(--fs-md);font-weight:500;cursor:pointer}
+.cktabs button.on{background:var(--panel);color:var(--text);font-weight:600;box-shadow:0 0 0 1px var(--line)}
+.ckchat{display:flex;flex-direction:column;height:calc(100vh - 48px);max-width:900px;margin:0 auto}
+.ckthread{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding:4px 4px 16px}
+.ckmsg.me{display:flex;justify-content:flex-end}
+.ckbub{max-width:78%;background:color-mix(in srgb,var(--accent) 22%,var(--panel));border-radius:14px 14px 4px 14px;padding:10px 14px;line-height:1.5;overflow-wrap:anywhere}
+.ckai{line-height:1.6;overflow-wrap:anywhere}
+.ckai>:first-child{margin-top:0}.ckai>:last-child{margin-bottom:0}
+.cktools{border:1px solid var(--line);border-radius:10px;background:var(--panel);font-size:var(--fs-md);padding:0;margin:0;flex:none}
+.ckdetails>.pagehead:first-child{display:none}
+.cktools>summary{display:flex;align-items:center;gap:8px;padding:8px 12px;margin:0;cursor:pointer;list-style:none;color:var(--text);font-size:var(--fs-md)}
+.cktools summary::-webkit-details-marker{display:none}
+.cktools summary .ic{color:var(--ok)}
+.cktools summary span.muted{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.cktools ul{margin:0;padding:4px 12px 10px 34px;display:flex;flex-direction:column;gap:4px}
+.cktools li{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cktools li.err b{color:var(--bad)}
+.ckworking{display:flex;align-items:center;gap:8px;color:var(--busy);font-size:var(--fs-md)}
+.ckolder{text-align:center}
+.ckwaits{display:flex;flex-direction:column;gap:12px}
+.ckcompose{margin-top:8px;display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
+.ckcompose.off{color:var(--muted);font-size:var(--fs-md)}
 .wkempty{display:flex;align-items:center;gap:10px;padding:18px;border:1px dashed var(--line);border-radius:var(--r-md);color:var(--muted)}

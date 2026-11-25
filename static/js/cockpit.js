@@ -65,8 +65,66 @@ function pageWaiting() {
 }
 
 function pageCockpit(ctx, arg) {
-  return arg ? pageSession(ctx, arg) : pageWaiting(ctx);
+  if (!arg) return pageWaiting(ctx);
+  const s = ctx.sessions.find(x => x.id === arg);
+  const view = ckView();
+  const tabs = `<div class="cktabs" role="tablist" aria-label="Session view"><button type="button" role="tab" aria-selected="${view === "chat"}" class="${view === "chat" ? "on" : ""}" data-ck-view="chat">${icon("comment", 14)}Chat</button><button type="button" role="tab" aria-selected="${view === "details"}" class="${view === "details" ? "on" : ""}" data-ck-view="details">${icon("overview", 14)}Details</button></div>`;
+  if (view === "details") return `<div class="ckhead">${ckTitle(s, arg)}${tabs}</div><div class="ckdetails">${pageSession(ctx, arg)}</div>`;
+  return `<div class="ckchat"><div class="ckhead">${ckTitle(s, arg)}${tabs}</div>${ckThread(arg, s)}</div>`;
 }
+
+function ckView() { try { return localStorage.getItem("ops.ckView") === "details" ? "details" : "chat"; } catch (e) { return "chat"; } }
+
+function ckTitle(s, id) {
+  if (!s) return `<div class="cktitle"><h1>Session ended</h1></div>`;
+  const where = [s.cwd ? s.cwd.replace(/^\/Users\/[^/]+/, "~") : "", s.branch].filter(Boolean);
+  return `<div class="cktitle"><h1 translate="no">${esc(label(s))}</h1><div class="ckmeta">${statusOf(s)}${where.map(w => `<span class="ckchip mono" translate="no">${esc(w)}</span>`).join("")}</div></div>`;
+}
+
+function ckThread(id, s) {
+  const c = COCKPIT.chat?.[id];
+  if (!c || (Date.now() - c.at > 2500 && !c.loading)) ckLoad(id);
+  if (!c) return `<div class="ckthread"><div class="skel skel-block"></div></div>`;
+  if (c.error) return `<div class="ckthread"><div class="wkempty">${esc(c.error)}</div></div>`;
+  const items = c.items.map(it => {
+    if (it.kind === "user") return `<div class="ckmsg me"><div class="ckbub">${it.text ? `<div class="mdtext">${esc(it.text).replace(/\n/g, "<br>")}</div>` : ""}${it.images ? `<div class="muted fs-sm">${plural(it.images, "image")} attached</div>` : ""}</div></div>`;
+    if (it.kind === "assistant") return `<div class="ckmsg ai"><div class="ckai md">${md(it.text)}</div></div>`;
+    const bad = it.tools.filter(t => t.error).length;
+    const names = [...new Set(it.tools.map(t => t.name.replace(/^mcp__[^_]+__/, "")))].slice(0, 4).join(", ");
+    return `<details class="cktools"><summary>${icon(bad ? "fail" : "ok", 14)}<span>${plural(it.tools.length, "step")}</span><span class="muted">${esc(names)}</span></summary><ul>${it.tools.map(t => `<li class="${t.error ? "err" : ""}"><b>${esc(t.name.replace(/^mcp__[^_]+__/, ""))}</b> <span class="muted mono">${esc(t.what)}</span></li>`).join("")}</ul></details>`;
+  }).join("");
+  const waits = waitList().filter(w => w.sid === id).map(waitCard).join("");
+  const working = s && s.status === "busy" ? `<div class="ckworking"><span class="dot busy"></span>${s.doing ? esc(s.doing.tool + " — " + s.doing.what) : "Thinking…"}</div>` : "";
+  const older = c.total > c.items.length ? `<div class="muted fs-sm ckolder">Showing the last ${c.items.length} of ${c.total} entries</div>` : "";
+  const foot = s && s.entrypoint && s.entrypoint !== "background"
+    ? `<div class="ckcompose off">${icon("cockpit", 15)}<span>This session runs in ${s.entrypoint === "claude-vscode" ? "VS Code" : "a terminal"} — write to it there. Permission prompts and questions can be answered here.</span></div>`
+    : "";
+  return `<div class="ckthread" id="ckthread">${older}${items || '<div class="muted">No messages yet.</div>'}${working}${waits ? `<div class="ckwaits">${waits}</div>` : ""}</div>${foot}`;
+}
+
+async function ckLoad(id) {
+  const c = (COCKPIT.chat ||= {})[id] ||= { items: [], total: 0, at: 0 };
+  c.loading = true;
+  try {
+    const r = await (await fetch("/api/session-chat?id=" + encodeURIComponent(id), { cache: "no-store" })).json();
+    const grew = r.ok && (r.total !== c.total || !c.at);
+    if (r.ok) Object.assign(c, { items: r.items, total: r.total, error: "" }); else c.error = r.error;
+    c.at = Date.now(); c.loading = false;
+    if (grew || !r.ok) {
+      const el = $("ckthread"), near = !el || el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+      render();
+      const now = $("ckthread"); if (now && near) now.scrollTop = now.scrollHeight;
+    }
+  } catch (x) { c.loading = false; c.at = Date.now(); }
+}
+
+document.addEventListener("click", e => {
+  const v = e.target.closest("[data-ck-view]");
+  if (!v) return;
+  try { localStorage.setItem("ops.ckView", v.dataset.ckView); } catch (x) {}
+  ui.forcePatch = true; render();
+  const t = $("ckthread"); if (t) t.scrollTop = t.scrollHeight;
+});
 
 async function waitAnswer(req, body) {
   COCKPIT.busy[req] = true; delete COCKPIT.msg[req]; render();

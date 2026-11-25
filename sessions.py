@@ -367,6 +367,84 @@ def descendants(procs, root):
     return out
 
 
+_CHAT = {}
+CHAT_KEEP = 300
+_NOISE = re.compile(r"<(system-reminder|local-command-[a-z]+|command-[a-z]+|ide_[a-z_]+|task-notification)>[\s\S]*?</\1>")
+
+
+def _user_text(content):
+    if isinstance(content, str):
+        return _NOISE.sub("", content).strip(), 0
+    text, images = [], 0
+    for b in content or []:
+        if b.get("type") == "text":
+            text.append(_NOISE.sub("", b.get("text") or "").strip())
+        elif b.get("type") == "image":
+            images += 1
+    return "\n\n".join(t for t in text if t), images
+
+
+def chat_items(path):
+    """The visible conversation of a transcript: his prompts, Claude's text, and its tool calls grouped; read incrementally."""
+    path = Path(path)
+    st = path.stat()
+    c = _CHAT.get(str(path))
+    if not c or st.st_size < c["pos"]:
+        c = _CHAT[str(path)] = {"pos": 0, "items": [], "tools": {}}
+    if st.st_size == c["pos"]:
+        return c["items"]
+    with open(path, "rb") as fh:
+        fh.seek(c["pos"])
+        chunk = fh.read()
+    end = chunk.rfind(b"\n") + 1
+    c["pos"] += end
+    items = c["items"]
+    for raw in chunk[:end].splitlines():
+        try:
+            d = json.loads(raw)
+        except ValueError:
+            continue
+        if d.get("isSidechain") or d.get("isMeta"):
+            continue
+        ts, m = d.get("timestamp") or "", d.get("message") or {}
+        if d.get("type") == "user":
+            content = m.get("content")
+            if isinstance(content, list) and any(b.get("type") == "tool_result" for b in content):
+                for b in content:
+                    if b.get("type") == "tool_result" and b.get("is_error") and b.get("tool_use_id") in c["tools"]:
+                        c["tools"][b["tool_use_id"]]["error"] = True
+                continue
+            text, images = _user_text(content)
+            if text or images:
+                items.append({"kind": "user", "text": text[:20000], "images": images, "ts": ts})
+        elif d.get("type") == "assistant":
+            for b in m.get("content") or []:
+                if b.get("type") == "text" and (b.get("text") or "").strip():
+                    items.append({"kind": "assistant", "text": b["text"][:40000], "ts": ts})
+                elif b.get("type") == "tool_use":
+                    tool = {"name": b.get("name") or "", "what": describe(b.get("name") or "", b.get("input") or {})[:200], "error": False}
+                    c["tools"][b.get("id")] = tool
+                    if items and items[-1]["kind"] == "tools":
+                        items[-1]["tools"].append(tool)
+                    else:
+                        items.append({"kind": "tools", "tools": [tool], "ts": ts})
+    if len(items) > CHAT_KEEP * 2:
+        del items[: len(items) - CHAT_KEEP]
+    if len(c["tools"]) > 5000:
+        c["tools"] = dict(list(c["tools"].items())[-2000:])
+    return items
+
+
+def session_chat(sid):
+    with lock:
+        meta = next((x for x in state.get("sessions") or [] if x.get("id") == sid), None)
+    path = find_transcript((meta or {}).get("cwd") or "", sid)
+    if not path:
+        raise ValueError("this session has no transcript yet")
+    items = chat_items(path)
+    return {"items": items[-CHAT_KEEP:], "total": len(items), "status": (meta or {}).get("status") or "ended", "where": (meta or {}).get("entrypoint") or ""}
+
+
 def find_transcript(cwd, sid):
     path = PROJECTS / re.sub(r"[^A-Za-z0-9]", "-", cwd) / f"{sid}.jsonl"
     return path if path.exists() else next(PROJECTS.glob(f"*/{sid}.jsonl"), None)

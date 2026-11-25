@@ -31,6 +31,7 @@ from providers.gitlab import gitlab_get
 from providers.jira import issue as jira_issue
 from providers.jira import jira_account, save_jira_account
 from runs import fix_prompt, launch_fix, run_timeline, stop_run
+import sessions
 from sessions import collect_sessions
 from system import collect_claude_usage, collect_docker, collect_docker_df, collect_docker_stats, collect_mac, collect_mac_slow, collect_pg, collect_pg_sizes, collect_version, collect_worktrees
 from tasks import collect_tasks_loop, refresh_tasks
@@ -518,6 +519,13 @@ class Handler(BaseHTTPRequestHandler):
             except (error.URLError, OSError) as exc:
                 out = {"ok": False, "error": f"{exc.__class__.__name__}: {str(exc)[:200]}"}
             self.send(redact(json.dumps(out, ensure_ascii=False)), "application/json")
+        elif self.path.startswith("/api/session-chat?"):
+            query = dict(p.split("=", 1) for p in self.path.split("?", 1)[1].split("&") if "=" in p)
+            try:
+                out = {"ok": True, **sessions.session_chat(query.get("id", ""))}
+            except (ValueError, OSError) as exc:
+                out = {"ok": False, "error": str(exc)[:200]}
+            self.send(json.dumps(out, ensure_ascii=False), "application/json")
         elif self.path.startswith("/api/run?"):
             query = dict(p.split("=", 1) for p in self.path.split("?", 1)[1].split("&") if "=" in p)
             try:
