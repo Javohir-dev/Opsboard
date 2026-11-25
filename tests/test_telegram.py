@@ -81,6 +81,9 @@ class TelegramTest(unittest.TestCase):
         patcher = mock.patch.object(telegram, "panelize", return_value=None)
         self.panelize = patcher.start()
         self.addCleanup(patcher.stop)
+        topic = mock.patch.object(telegram, "haiku", return_value=None)
+        self.haiku = topic.start()
+        self.addCleanup(topic.stop)
         cfg.set_secret("telegram.token", "12345:" + "x" * 35)
         for key in ("telegram.chat_id", "telegram.user", "telegram.claude_chat"):
             cfg.set(key, None, "user")
@@ -350,9 +353,22 @@ class TelegramTest(unittest.TestCase):
             self.assertTrue(self.wait_for("Claude", method="sendMessage"))
             self.assertTrue(self.wait_for("The other session answered.", method="sendMessage"))
             self.assertTrue(telegram._load_chat().get("last"))
+            self.assertEqual(telegram.CHAT.prev[0], "ok")
+            telegram.CHAT.last = time.time() - 300
+            self.haiku.return_value = "NEW"
+            telegram.handle_message(message("jirada nima gap?"))
+            self.assertTrue(self.wait_for("echo <b>jirada nima gap?</b>"))
+            self.assertEqual(len(FakeClaude.instances), 2)
+            self.assertIn("PREVIOUS USER: ok", self.haiku.call_args[0][0])
+            self.haiku.return_value = "SAME"
+            telegram.CHAT.last = time.time() - 300
+            telegram.handle_message(message("va keyin?"))
+            self.assertTrue(self.wait_for("echo <b>va keyin?</b>"))
+            self.assertEqual(len(FakeClaude.instances), 2)
             telegram.handle_message(message("/new"))
             self.assertEqual(telegram._load_chat(), {})
-        FakeClaude.instances[0].stdin.close()
+        for inst in FakeClaude.instances:
+            inst.stdin.close()
         FakeClaude.instances.clear()
         telegram.CHAT.proc = None
         cfg.set("telegram.claude_chat", None, "user")

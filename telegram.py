@@ -1093,16 +1093,32 @@ def is_panel(panel):
     return bool(lines) and all(ln.lstrip().startswith(STATUS) for ln in lines)
 
 
-def panelize(text):
-    """A cheap model turns an answer that ignored the panel format into one; None when it cannot."""
+def haiku(prompt, timeout=90):
     env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_CODE_")}
-    cmd = [claude_bin(), "-p", PANELIZE + text[:6000], "--model", "haiku", "--max-turns", "1", "--tools", "", "--strict-mcp-config", "--no-session-persistence"]
+    cmd = [claude_bin(), "-p", prompt, "--model", "haiku", "--max-turns", "1", "--tools", "", "--strict-mcp-config", "--no-session-persistence"]
     try:
-        r = subprocess.run(cmd, cwd=str(Path.home()), env=env, capture_output=True, text=True, timeout=90, stdin=subprocess.DEVNULL)
+        r = subprocess.run(cmd, cwd=str(Path.home()), env=env, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
     except (OSError, subprocess.SubprocessError):
         return None
-    out = "\n".join(ln.strip() for ln in (r.stdout or "").splitlines() if ln.strip())
-    return out if r.returncode == 0 and is_panel(out) else None
+    return r.stdout if r.returncode == 0 else None
+
+
+def panelize(text):
+    """A cheap model turns an answer that ignored the panel format into one; None when it cannot."""
+    out = "\n".join(ln.strip() for ln in (haiku(PANELIZE + text[:6000]) or "").splitlines() if ln.strip())
+    return out if is_panel(out) else None
+
+
+TOPIC = (
+    "A user chats with an assistant in Telegram. Decide whether his NEW message continues the PREVIOUS exchange "
+    "(a follow-up, refers to it, answers it) or starts a different topic. Reply with exactly one word: SAME or NEW.\n\n"
+)
+TOPIC_AFTER = 120
+
+
+def new_topic(prev_q, prev_a, text):
+    out = haiku(f"{TOPIC}PREVIOUS USER: {prev_q[:800]}\nPREVIOUS ASSISTANT: {prev_a[:800]}\n\nNEW: {text[:800]}", timeout=30)
+    return (out or "").strip().upper().startswith("NEW")
 
 
 def _spaced(panel):
@@ -1284,6 +1300,7 @@ class ClaudeChat:
         self.lang = "uz"
         self.last = time.time()
         self.seen = time.time() - NOTES_SPAN
+        self.prev = None
         self.lock = threading.Lock()
 
     @property
@@ -1315,6 +1332,15 @@ class ClaudeChat:
 
     def ask(self, text, message_id=None, quoted=""):
         lang = lang_of(text)
+        prev = self.prev
+        if prev and not self.turns and time.time() - self.last > TOPIC_AFTER and new_topic(prev[0], prev[1], text):
+            log.info("telegram chat: new topic, fresh conversation")
+            with self.lock:
+                self.close()
+                self.proc = None
+                _save_chat({})
+                self.prev = None
+        asked = text
         ctx = [f"- {time.strftime('%H:%M', time.localtime(t))} {x}" for t, x in recent_notes(self.seen)]
         self.seen = time.time()
         if ctx:
@@ -1334,7 +1360,7 @@ class ClaudeChat:
                     return
             queued = bool(self.turns)
             msg = send(esc(QUEUED[lang] if queued else WORKING[lang]))
-            self.turns.append({"placeholder": (msg or {}).get("message_id"), "started": time.time(), "lang": lang})
+            self.turns.append({"placeholder": (msg or {}).get("message_id"), "started": time.time(), "lang": lang, "asked": asked})
             self.lang, self.last = lang, time.time()
             try:
                 self.proc.stdin.write(json.dumps({"type": "user", "message": {"role": "user", "content": text}}) + "\n")
@@ -1367,6 +1393,8 @@ class ClaudeChat:
                     turn = self.turns.pop(0) if self.turns else None
                     self.doing, self.last = "", time.time()
                 answer = str(ev.get("result") or "").strip()
+                if turn and answer and not ev.get("is_error"):
+                    self.prev = (turn.get("asked") or "", answer)
                 if ev.get("is_error") or not answer:
                     note = "⚠️ " + esc((answer or "Claude did not answer").strip()[-800:])
                     if not (turn and turn["placeholder"] and edit(turn["placeholder"], note)):
@@ -1378,8 +1406,9 @@ class ClaudeChat:
                     deliver_panel(answer, None, self.lang)
         err = (proc.stderr.read() or "").strip() if proc.stderr else ""
         with self.lock:
-            left, self.turns = self.turns, []
+            left = []
             if self.proc is proc:
+                left, self.turns = self.turns, []
                 self.proc = None
         for turn in left:
             text = CANCELLED[turn["lang"]] if proc.returncode and proc.returncode < 0 else "⚠️ " + esc((err or "Claude stopped")[-500:])
@@ -1422,6 +1451,7 @@ class ClaudeChat:
 
     def reset(self):
         self.cancel()
+        self.prev = None
         _save_chat({})
 
 
