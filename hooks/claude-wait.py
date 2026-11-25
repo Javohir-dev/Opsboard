@@ -12,6 +12,7 @@ from urllib import request
 
 HERE = Path(__file__).resolve().parent.parent
 HOLD = 29 * 60
+COCKPIT = os.environ.get("OPS_COCKPIT") == "1"
 
 
 def _post(data, port, token, body):
@@ -59,15 +60,17 @@ def _later():
 def main():
     ev = json.load(sys.stdin)
     event = ev.get("hook_event_name")
+    if COCKPIT and event in ("PermissionRequest", "PreToolUse"):
+        return
     questions = [q for q in ((ev.get("tool_input") or {}).get("questions") or []) if isinstance(q, dict)]
     if event == "PreToolUse":
         if ev.get("tool_name") != "AskUserQuestion":
             return
-        if _entrypoint(ev.get("session_id")) == "claude-vscode" and not _later():
+        if (_entrypoint(ev.get("session_id")) == "claude-vscode" or COCKPIT) and not _later():
             return
         kind, message = "question", " / ".join(str(q.get("question") or "") for q in questions)
     elif event == "PermissionRequest":
-        if ev.get("tool_name") == "ExitPlanMode" or _entrypoint(ev.get("session_id")) != "claude-vscode":
+        if ev.get("tool_name") == "ExitPlanMode" or (_entrypoint(ev.get("session_id")) != "claude-vscode" and not COCKPIT):
             return
         if ev.get("tool_name") == "AskUserQuestion":
             kind, message = "question_request", " / ".join(str(q.get("question") or "") for q in questions)
@@ -82,7 +85,7 @@ def main():
         port = os.environ.get("OPS_PORT") or (saved.get("value") if isinstance(saved, dict) else saved) or 8095
     except (OSError, ValueError):
         port = 8095
-    body = {"session_id": ev.get("session_id"), "cwd": ev.get("cwd"), "transcript_path": ev.get("transcript_path"), "type": kind, "message": message, "questions": questions}
+    body = {"session_id": ev.get("session_id"), "cwd": ev.get("cwd"), "transcript_path": ev.get("transcript_path"), "type": kind, "message": message, "questions": questions, "cockpit": COCKPIT}
     req = _post(data, port, token, body).get("ok")
     if kind not in ("permission_request", "question_request") or not isinstance(req, str):
         return

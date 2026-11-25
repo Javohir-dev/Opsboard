@@ -14,6 +14,7 @@ from urllib import error, parse
 
 import claudeaccounts
 import claudewait
+import cockpitchat
 import config as cfg
 import demo
 import detect
@@ -100,6 +101,7 @@ def snapshot():
         data["wt_jobs"] = {} if DEMO else worktrees.jobs()
         data["telegram"] = {"configured": False} if DEMO else dict(telegram.public(), webapp=webapp.public())
         data["claude_wait"] = [] if DEMO else claudewait.public()
+        data["cockpit"] = [] if DEMO else cockpitchat.public()
         return redact(json.dumps(data, default=str))
 
 
@@ -150,7 +152,24 @@ class Handler(BaseHTTPRequestHandler):
         if not self.same_origin():
             self.send_error(403)
             return
-        if self.path.startswith("/api/telegram-file"):
+        if self.path.startswith("/api/cockpit/"):
+            try:
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+                if DEMO:
+                    raise ValueError("demo mode — nothing is started")
+                action = self.path.split("?", 1)[0].rsplit("/", 1)[-1]
+                if action == "new":
+                    out = {"ok": True, "session": cockpitchat.start(str(body.get("text") or ""), str(body.get("cwd") or ""), str(body.get("resume") or ""), bool(body.get("resume")))}
+                elif action == "send":
+                    out = {"ok": True, "session": cockpitchat.send(str(body.get("id") or ""), str(body.get("text") or ""))}
+                elif action == "stop":
+                    out = {"ok": True, "session": cockpitchat.stop(str(body.get("id") or ""), bool(body.get("close")))}
+                else:
+                    raise ValueError("unknown action")
+            except (ValueError, OSError) as exc:
+                out = {"ok": False, "error": str(exc)[:300]}
+            self.send(json.dumps(out), "application/json")
+        elif self.path.startswith("/api/telegram-file"):
             try:
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
                 if body.get("path"):

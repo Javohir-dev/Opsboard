@@ -22,6 +22,8 @@ _waiting, _decided, _lock = {}, {}, threading.Lock()
 
 
 def _mtime(path):
+    if not path:
+        return None
     try:
         return Path(path).stat().st_mtime
     except (OSError, TypeError):
@@ -64,6 +66,7 @@ def report(ev):
             "req": req,
             "questions": questions,
             "answers": {},
+            "cockpit": bool(ev.get("cockpit")),
             "alerted": kind in NOW and ON_NEW is not None,
         }
         item = dict(_waiting[sid], sid=sid)
@@ -75,7 +78,7 @@ def report(ev):
 
 def _alert_now(item, notify):
     meta = _session(item["sid"]) or {}
-    if meta.get("entrypoint") in ("sdk-cli", "background"):
+    if meta.get("entrypoint") in ("sdk-cli", "background") and not item.get("cockpit"):
         return
     try:
         notify(dict(item, name=meta.get("name") or "", minutes=0))
@@ -184,7 +187,7 @@ def public():
     out = []
     for w in sorted(items, key=lambda x: x["at"]):
         meta = _session(w["sid"]) or {}
-        if meta.get("entrypoint") in ("sdk-cli", "background") and not w.get("req"):
+        if meta.get("entrypoint") in ("sdk-cli", "background") and not w.get("req") and not w.get("cockpit"):
             continue
         out.append({
             "sid": w["sid"], "req": w.get("req"), "kind": w["kind"], "at": w["at"], "message": w["message"],

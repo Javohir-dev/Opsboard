@@ -1,0 +1,183 @@
+"""Claude Code sessions that Cockpit starts and you write to from the browser. Each is one long-lived
+`claude -p` process with stream-json input. Its permission prompts and questions come over stdio
+(`--permission-prompt-tool stdio`, as the VS Code extension does) and wait on the Waiting page,
+in the chat and in Telegram until you answer."""
+
+import json
+import os
+import re
+import signal
+import subprocess
+import threading
+import time
+import uuid
+from pathlib import Path
+
+import claudewait
+from core import claude_bin, log, project_root
+
+KEEP = 20
+_sessions, _lock = {}, threading.Lock()
+
+
+class CockpitSession:
+    def __init__(self, cwd, resume="", fork=False, title=""):
+        self.key = uuid.uuid4().hex[:10]
+        self.cwd = str(cwd)
+        self.sid = ""
+        self.title = title
+        self.busy = False
+        self.error = ""
+        self.started = self.last = time.time()
+        cmd = [claude_bin(), "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--permission-mode", "default", "--permission-prompt-tool", "stdio"]
+        if resume:
+            cmd += ["--resume", resume] + (["--fork-session"] if fork else [])
+        env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_CODE_")}
+        env["OPS_COCKPIT"] = "1"
+        self.proc = subprocess.Popen(cmd, cwd=self.cwd, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, start_new_session=True)
+        threading.Thread(target=self._read, daemon=True).start()
+
+    def alive(self):
+        return self.proc.poll() is None
+
+    def send(self, text):
+        if not self.alive():
+            raise ValueError("this session has ended — start a new one")
+        self.proc.stdin.write(json.dumps({"type": "user", "message": {"role": "user", "content": text}}) + "\n")
+        self.proc.stdin.flush()
+        self.busy, self.last = True, time.time()
+        if not self.title:
+            self.title = re.sub(r"\s+", " ", text).strip()[:60]
+
+    def _read(self):
+        for line in self.proc.stdout:
+            try:
+                ev = json.loads(line)
+            except ValueError:
+                continue
+            if ev.get("session_id") and not self.sid:
+                self.sid = ev["session_id"]
+            if ev.get("type") == "control_request":
+                self._control(ev)
+                continue
+            if ev.get("type") == "result":
+                self.busy, self.last = False, time.time()
+                if ev.get("is_error"):
+                    self.error = str(ev.get("result") or ev.get("subtype") or "Claude stopped with an error")[:300]
+        err = (self.proc.stderr.read() or "").strip() if self.proc.stderr else ""
+        self.busy = False
+        if self.proc.returncode and not self.error:
+            self.error = (err or f"Claude exited ({self.proc.returncode})")[-300:]
+
+    def _respond(self, request_id, response):
+        try:
+            self.proc.stdin.write(json.dumps({"type": "control_response", "response": {"subtype": "success", "request_id": request_id, "response": response}}) + "\n")
+            self.proc.stdin.flush()
+        except (OSError, ValueError):
+            pass
+
+    def _control(self, ev):
+        rid, req = ev.get("request_id"), ev.get("request") or {}
+        if req.get("subtype") != "can_use_tool":
+            self._respond(rid, {})
+            return
+        name, args = req.get("tool_name") or "", req.get("input") or {}
+        questions = [q for q in args.get("questions") or [] if isinstance(q, dict)] if name == "AskUserQuestion" else []
+        held = claudewait.report({
+            "session_id": self.sid or self.key, "cwd": self.cwd, "transcript_path": None, "cockpit": True,
+            "type": "question_request" if questions else "permission_request",
+            "message": " / ".join(str(q.get("question") or "") for q in questions) if questions else summary(name, args, req.get("description") or ""),
+            "questions": questions,
+        })
+        if not isinstance(held, str):
+            self._respond(rid, {"behavior": "deny", "message": "Opsboard could not ask the user (Claude waiting alerts are off)."})
+            return
+        threading.Thread(target=self._await, args=(rid, held, args), daemon=True).start()
+
+    def _await(self, rid, held, args):
+        while self.alive():
+            out = claudewait.poll(held)
+            if out.get("decision") == "allow":
+                self._respond(rid, {"behavior": "allow", "updatedInput": dict(args, answers=out["answers"]) if out.get("answers") else args})
+                return
+            if out.get("decision") == "deny":
+                self._respond(rid, {"behavior": "deny", "message": "The user denied this."})
+                return
+            if not out.get("open"):
+                self._respond(rid, {"behavior": "deny", "message": "The request expired without an answer."})
+                return
+            time.sleep(0.5)
+
+    def interrupt(self):
+        if self.alive():
+            try:
+                os.killpg(self.proc.pid, signal.SIGINT)
+            except (ProcessLookupError, PermissionError):
+                pass
+
+    def close(self):
+        if self.alive():
+            try:
+                self.proc.stdin.close()
+            except OSError:
+                pass
+
+    def public(self):
+        return {"key": self.key, "sid": self.sid, "cwd": self.cwd.replace(str(Path.home()), "~", 1), "title": self.title, "busy": self.busy,
+                "alive": self.alive(), "error": self.error, "started": self.started, "last": self.last}
+
+
+def summary(name, args, description=""):
+    for key in ("command", "file_path", "url", "pattern"):
+        if args.get(key):
+            return f"{name}: {str(args[key])[:400]}" + (f" — {description}" if description and key == "command" else "")
+    return f"{name}: {description}" if description else name
+
+
+def start(text, cwd="", resume="", fork=False):
+    text = (text or "").strip()
+    if not text:
+        raise ValueError("write the first message")
+    folder = Path(os.path.expanduser(cwd)) if cwd else project_root()
+    if not folder or not Path(folder).is_dir():
+        raise ValueError("choose an existing folder")
+    if resume and not re.fullmatch(r"[0-9a-f-]{8,64}", resume):
+        raise ValueError("not a session id")
+    s = CockpitSession(folder, resume, fork, "" if not resume else "")
+    s.send(text)
+    with _lock:
+        _sessions[s.key] = s
+        dead = [k for k, x in _sessions.items() if not x.alive()]
+        for k in dead[: max(0, len(_sessions) - KEEP)]:
+            _sessions.pop(k, None)
+    log.info("cockpit: started a session in %s", s.cwd)
+    return s.public()
+
+
+def find(ref):
+    with _lock:
+        return _sessions.get(ref) or next((s for s in _sessions.values() if s.sid and s.sid == ref), None)
+
+
+def send(ref, text):
+    s = find(ref)
+    if not s:
+        raise ValueError("this session is not one Cockpit started")
+    text = (text or "").strip()
+    if not text:
+        raise ValueError("write a message first")
+    s.send(text)
+    return s.public()
+
+
+def stop(ref, close=False):
+    s = find(ref)
+    if not s:
+        raise ValueError("unknown session")
+    s.close() if close else s.interrupt()
+    return s.public()
+
+
+def public():
+    with _lock:
+        return [s.public() for s in sorted(_sessions.values(), key=lambda x: -x.last)]

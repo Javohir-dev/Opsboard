@@ -1460,4 +1460,16 @@ dialog.accdlg .accswitch{margin:0;flex-direction:row}
 .ckwaits{display:flex;flex-direction:column;gap:12px}
 .ckcompose{margin-top:8px;display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
 .ckcompose.off{color:var(--muted);font-size:var(--fs-md)}
+.ckcompose.off span{flex:1;min-width:0}
+form.ckcompose{flex-direction:column;align-items:stretch;gap:8px}
+form.ckcompose textarea{resize:none;border:0;outline:none;background:transparent;color:var(--text);font:inherit;font-size:var(--fs-base);line-height:1.5;min-height:44px;max-height:240px}
+.ckcbar{display:flex;align-items:center;gap:8px}
+.ckcbar>span{flex:1;min-width:0}
+.ckcbar .wkb{display:inline-flex;align-items:center;gap:6px}
+.ckfolder{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
+.ckfolder input{flex:1;min-width:0;height:30px;box-sizing:border-box;padding:0 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:var(--fs-sm)}
+.ckempty{justify-content:center;align-items:center;text-align:center}
+.cknew{display:flex;align-items:center;justify-content:center;gap:8px;height:36px;border-radius:var(--r-sm);background:var(--accent);color:#fff;font-weight:600;font-size:var(--fs-md);text-decoration:none}
+.cknew:hover{text-decoration:none;filter:brightness(1.08)}
+.cknew.on{box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 40%,transparent)}
 .wkempty{display:flex;align-items:center;gap:10px;padding:18px;border:1px dashed var(--line);border-radius:var(--r-md);color:var(--muted)}
