@@ -13,12 +13,7 @@ function pageContext() {
 
 function assistBody() {
   const s = assistSession();
-  const items = ASSIST.items.map(it => {
-    if (it.kind === "user") return `<div class="asm me"><div class="asb">${esc(it.text).replace(/\n/g, "<br>")}</div></div>`;
-    if (it.kind === "assistant") return `<div class="asm ai md">${md(it.text)}</div>`;
-    const bad = it.tools.some(t => t.error);
-    return `<div class="asm step">${icon(bad ? "fail" : "ok", 12)}${esc(plural(it.tools.length, "step"))} · ${esc([...new Set(it.tools.map(t => t.name.replace(/^mcp__[^_]+__/, "")))].slice(0, 3).join(", "))}</div>`;
-  }).join("");
+  const items = ASSIST.items.map((it, n) => xItem(it, `as:${ASSIST.total - ASSIST.items.length + n}`)).join("");
   const waits = s?.sid ? waitList().filter(w => w.sid === s.sid).map(waitCard).join("") : "";
   const working = s?.busy ? `<div class="asworking"><span class="dot busy"></span>Working…</div>` : "";
   const empty = !items && !working ? `<div class="asempty">Ask about what is on this page, or tell me what to do. I can also pass work to another Claude session.</div>` : "";

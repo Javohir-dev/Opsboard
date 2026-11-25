@@ -384,8 +384,47 @@ def _user_text(content):
     return "\n\n".join(t for t in text if t), images
 
 
+def _tool_view(name, args):
+    """Title and IN text for one tool call, the way the Claude Code extension shows it."""
+    args = args or {}
+    base = lambda p: Path(p).name if p else ""
+    if name == "Bash":
+        return args.get("description") or "", args.get("command") or ""
+    if name == "Read":
+        extra = f"  (lines {args.get('offset', 1)}–{(args.get('offset') or 1) + args['limit']})" if args.get("limit") else ""
+        return base(args.get("file_path")), (args.get("file_path") or "") + extra
+    if name == "Write":
+        return base(args.get("file_path")), "\n".join(str(args.get("content") or "").splitlines()[:40])
+    if name == "Edit":
+        old = ["- " + x for x in str(args.get("old_string") or "").splitlines()[:12]]
+        new = ["+ " + x for x in str(args.get("new_string") or "").splitlines()[:12]]
+        return base(args.get("file_path")), "\n".join(old + new)
+    if name in ("Grep", "Glob"):
+        return args.get("pattern") or "", " ".join(str(x) for x in (args.get("pattern"), args.get("path") or args.get("glob") or "") if x)
+    if name in ("Agent", "Task"):
+        return args.get("description") or "", str(args.get("prompt") or "")[:1500]
+    if name == "Skill":
+        return args.get("skill") or "", str(args.get("args") or "")
+    if name == "ToolSearch":
+        return "", str(args.get("query") or "")
+    return describe(name, args), json.dumps(args, ensure_ascii=False, indent=1)[:1500]
+
+
+def _result_text(content):
+    if isinstance(content, str):
+        return content
+    out = []
+    for b in content or []:
+        if b.get("type") == "text":
+            out.append(b.get("text") or "")
+        elif b.get("type") == "image":
+            out.append("[image]")
+    return "\n".join(out)
+
+
 def chat_items(path):
-    """The visible conversation of a transcript: his prompts, Claude's text, and its tool calls grouped; read incrementally."""
+    """The visible conversation of a transcript, as the Claude Code extension shows it: his prompts, Claude's
+    text, each tool call with its input and output, and thinking time; read incrementally."""
     path = Path(path)
     st = path.stat()
     c = _CHAT.get(str(path))
@@ -397,9 +436,14 @@ def chat_items(path):
         fh.seek(c["pos"])
         chunk = fh.read()
     end = chunk.rfind(b"\n") + 1
+    base = c["pos"]
     c["pos"] += end
     items = c["items"]
-    for raw in chunk[:end].splitlines():
+    at = 0
+    for raw in chunk[:end].split(b"\n"):
+        offset, at = base + at, at + len(raw) + 1
+        if not raw.strip():
+            continue
         try:
             d = json.loads(raw)
         except ValueError:
@@ -411,28 +455,64 @@ def chat_items(path):
             content = m.get("content")
             if isinstance(content, list) and any(b.get("type") == "tool_result" for b in content):
                 for b in content:
-                    if b.get("type") == "tool_result" and b.get("is_error") and b.get("tool_use_id") in c["tools"]:
-                        c["tools"][b["tool_use_id"]]["error"] = True
+                    tool = c["tools"].get(b.get("tool_use_id")) if b.get("type") == "tool_result" else None
+                    if tool:
+                        tool["out"] = _NOISE.sub("", _result_text(b.get("content"))).strip()[:4000]
+                        tool["error"] = bool(b.get("is_error"))
+                        tool["done"] = True
                 continue
             text, images = _user_text(content)
             if text or images:
-                items.append({"kind": "user", "text": text[:20000], "images": images, "ts": ts})
+                refs = [f"{offset}:{k}" for k, b in enumerate(content) if isinstance(content, list) and b.get("type") == "image"]
+                items.append({"kind": "user", "text": text[:20000], "images": images, "imgs": refs[:8], "ts": ts})
         elif d.get("type") == "assistant":
             for b in m.get("content") or []:
-                if b.get("type") == "text" and (b.get("text") or "").strip():
+                if b.get("type") == "thinking":
+                    secs = round((d.get("thinkingDurationMs") or 0) / 1000)
+                    if items and items[-1]["kind"] == "thought":
+                        items[-1]["secs"] += secs
+                    else:
+                        items.append({"kind": "thought", "secs": secs, "ts": ts})
+                elif b.get("type") == "text" and (b.get("text") or "").strip():
                     items.append({"kind": "assistant", "text": b["text"][:40000], "ts": ts})
                 elif b.get("type") == "tool_use":
-                    tool = {"name": b.get("name") or "", "what": describe(b.get("name") or "", b.get("input") or {})[:200], "error": False}
+                    name = b.get("name") or ""
+                    title, given = _tool_view(name, b.get("input") or {})
+                    tool = {"kind": "tool", "name": name, "title": str(title)[:200], "in": str(given)[:4000], "out": "", "error": False, "done": False, "ts": ts}
                     c["tools"][b.get("id")] = tool
-                    if items and items[-1]["kind"] == "tools":
-                        items[-1]["tools"].append(tool)
-                    else:
-                        items.append({"kind": "tools", "tools": [tool], "ts": ts})
+                    items.append(tool)
     if len(items) > CHAT_KEEP * 2:
         del items[: len(items) - CHAT_KEEP]
     if len(c["tools"]) > 5000:
         c["tools"] = dict(list(c["tools"].items())[-2000:])
     return items
+
+
+IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
+
+
+def session_image(sid, ref):
+    """One image he pasted into a session, read from its transcript by line offset and block index."""
+    import base64
+
+    m = re.fullmatch(r"(\d{1,12}):(\d{1,3})", ref or "")
+    if not m:
+        raise ValueError("bad image reference")
+    with lock:
+        meta = next((x for x in state.get("sessions") or [] if x.get("id") == sid), None)
+    path = find_transcript((meta or {}).get("cwd") or "", sid)
+    if not path:
+        raise ValueError("no transcript")
+    with open(path, "rb") as fh:
+        fh.seek(int(m.group(1)))
+        d = json.loads(fh.readline())
+    if d.get("sessionId") not in (None, sid):
+        raise ValueError("not this session")
+    block = ((d.get("message") or {}).get("content") or [])[int(m.group(2))]
+    src = block.get("source") or {}
+    if block.get("type") != "image" or src.get("type") != "base64" or src.get("media_type") not in IMAGE_TYPES:
+        raise ValueError("not an image")
+    return src["media_type"], base64.b64decode(src.get("data") or "")
 
 
 def session_chat(sid):

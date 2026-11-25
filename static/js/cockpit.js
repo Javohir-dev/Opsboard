@@ -101,13 +101,7 @@ function ckThread(id, s) {
   if (!c || (Date.now() - c.at > 2500 && !c.loading)) ckLoad(id);
   if (!c) return `<div class="ckthread"><div class="skel skel-block"></div></div>`;
   if (c.error) return `<div class="ckthread"><div class="wkempty">${esc(c.error)}</div></div>`;
-  const items = c.items.map(it => {
-    if (it.kind === "user") return `<div class="ckmsg me"><div class="ckbub">${it.text ? `<div class="mdtext">${esc(it.text).replace(/\n/g, "<br>")}</div>` : ""}${it.images ? `<div class="muted fs-sm">${plural(it.images, "image")} attached</div>` : ""}</div></div>`;
-    if (it.kind === "assistant") return `<div class="ckmsg ai"><div class="ckai md">${md(it.text)}</div></div>`;
-    const bad = it.tools.filter(t => t.error).length;
-    const names = [...new Set(it.tools.map(t => t.name.replace(/^mcp__[^_]+__/, "")))].slice(0, 4).join(", ");
-    return `<details class="cktools"><summary>${icon(bad ? "fail" : "ok", 14)}<span>${plural(it.tools.length, "step")}</span><span class="muted">${esc(names)}</span></summary><ul>${it.tools.map(t => `<li class="${t.error ? "err" : ""}"><b>${esc(t.name.replace(/^mcp__[^_]+__/, ""))}</b> <span class="muted mono">${esc(t.what)}</span></li>`).join("")}</ul></details>`;
-  }).join("");
+  const items = c.items.map((it, n) => xItem(it, `${id}:${c.total - c.items.length + n}`)).join("");
   const waits = waitList().filter(w => w.sid === id).map(waitCard).join("");
   const working = s && s.status === "busy" ? `<div class="ckworking"><span class="dot busy"></span>${s.doing ? esc(s.doing.tool + " — " + s.doing.what) : "Thinking…"}</div>` : "";
   const older = c.total > c.items.length ? `<div class="muted fs-sm ckolder">Showing the last ${c.items.length} of ${c.total} entries</div>` : "";
@@ -120,6 +114,32 @@ function ckThread(id, s) {
     : `<div class="ckcompose off">${icon("cockpit", 15)}<span>This session runs in ${s.entrypoint === "claude-vscode" ? "VS Code" : "a terminal"}. Continue it here as a new branch with its whole history; the original stays as it is.</span><button type="button" class="wkb ok" data-ck-continue="${esc(id)}">Continue in Cockpit</button></div>`;
   return `<div class="ckthread" id="ckthread">${older}${items || '<div class="muted">No messages yet.</div>'}${working}${waits ? `<div class="ckwaits">${waits}</div>` : ""}</div>${foot}`;
 }
+
+const X_OPEN = new Set();
+function sidOf(key) { const k = key.slice(0, key.lastIndexOf(":")); return k === "as" ? (assistSession()?.sid || "") : k; }
+function xTime(ts) { const d = ts ? new Date(ts) : null; return d && !isNaN(d) ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : ""; }
+function xItem(it, key) {
+  if (it.kind === "user") return `<div class="xuser"><div class="xubox">${it.text ? esc(it.text).replace(/\n/g, "<br>") : ""}${(it.imgs || []).length ? `<div class="ximgs">${it.imgs.map(r => `<a href="/api/session-image?id=${encodeURIComponent(sidOf(key))}&ref=${encodeURIComponent(r)}" target="_blank" rel="noopener"><img loading="lazy" alt="Pasted image" src="/api/session-image?id=${encodeURIComponent(sidOf(key))}&ref=${encodeURIComponent(r)}"></a>`).join("")}</div>` : it.images ? `<div class="muted fs-sm">${plural(it.images, "image")} attached</div>` : ""}</div>${xTime(it.ts) ? `<span class="xts">${xTime(it.ts)}</span>` : ""}</div>`;
+  if (it.kind === "thought") return `<div class="xrow"><span class="xdot"></span><span class="muted">Thought for ${it.secs}s</span></div>`;
+  if (it.kind === "assistant") return `<div class="xrow"><span class="xdot"></span><div class="xtext md">${md(it.text)}</div></div>`;
+  if (it.kind !== "tool") return "";
+  const name = it.name.replace(/^mcp__[^_]+__/, "");
+  const tone = it.error ? "bad" : it.done ? "ok" : "run";
+  const open = X_OPEN.has(key) ? "open" : "";
+  const fileTool = ["Write", "Edit", "Read"].includes(it.name);
+  const head = `<div class="xth"><b>${esc(name)}</b>${it.title ? `<span class="${fileTool ? "xfile" : "muted"}">${esc(it.title)}</span>` : ""}</div>`;
+  let body = "";
+  if (it.name === "Read") body = it.error ? `<div class="xio ${open}" data-x="${esc(key)}"><div class="xline"><span>OUT</span><pre>${esc(it.out)}</pre></div></div>` : "";
+  else if (it.name === "Write" || it.name === "Edit") body = it.in ? `<div class="xio code ${open}" data-x="${esc(key)}"><pre>${it.name === "Edit" ? it.in.split("\n").map(l => `<span class="${l.startsWith("+ ") ? "add" : l.startsWith("- ") ? "del" : ""}">${esc(l)}</span>`).join("\n") : esc(it.in)}</pre></div>${it.error && it.out ? `<div class="xerr">${esc(it.out)}</div>` : ""}` : "";
+  else body = `<div class="xio ${open}" data-x="${esc(key)}">${it.in ? `<div class="xline"><span>IN</span><pre>${esc(it.in)}</pre></div>` : ""}${it.done ? `<div class="xline ${it.error ? "bad" : ""}"><span>OUT</span><pre>${esc(it.out || "(no output)")}</pre></div>` : ""}</div>`;
+  return `<div class="xrow"><span class="xdot ${tone}"></span><div class="xtool">${head}${body}</div></div>`;
+}
+document.addEventListener("click", e => {
+  const x = e.target.closest("[data-x]");
+  if (!x || getSelection().toString()) return;
+  X_OPEN.has(x.dataset.x) ? X_OPEN.delete(x.dataset.x) : X_OPEN.add(x.dataset.x);
+  x.classList.toggle("open");
+});
 
 function ckComposer(own, resume = "") {
   const busy = own && own.busy;

@@ -538,6 +538,18 @@ class Handler(BaseHTTPRequestHandler):
             except (error.URLError, OSError) as exc:
                 out = {"ok": False, "error": f"{exc.__class__.__name__}: {str(exc)[:200]}"}
             self.send(redact(json.dumps(out, ensure_ascii=False)), "application/json")
+        elif self.path.startswith("/api/session-image?"):
+            query = dict(p.split("=", 1) for p in self.path.split("?", 1)[1].split("&") if "=" in p)
+            try:
+                ctype, raw = sessions.session_image(query.get("id", ""), query.get("ref", "").replace("%3A", ":"))
+                self.send_response(200)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Cache-Control", "private, max-age=86400")
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+            except (ValueError, OSError, IndexError, KeyError, TypeError, AttributeError):
+                self.send_error(404)
         elif self.path.startswith("/api/session-chat?"):
             query = dict(p.split("=", 1) for p in self.path.split("?", 1)[1].split("&") if "=" in p)
             try:

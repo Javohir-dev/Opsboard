@@ -1499,3 +1499,32 @@ form.ckcompose textarea{resize:none;border:0;outline:none;background:transparent
 .asbar{display:flex;align-items:center;gap:8px}
 .asbar>span{flex:1;min-width:0}
 @media (max-width:760px){.assist{right:8px;left:8px;width:auto;bottom:76px;height:70vh}.assist-btn{right:14px;bottom:14px}}
+
+.xrow{display:flex;gap:10px;align-items:flex-start;min-width:0}
+.xdot{flex:none;width:7px;height:7px;border-radius:50%;background:var(--muted);margin-top:8px;opacity:.7}
+.xdot.ok{background:var(--ok);opacity:1}.xdot.bad{background:var(--bad);opacity:1}.xdot.run{background:var(--busy);opacity:1;animation:pulse 1.2s infinite}
+.xtext{flex:1;min-width:0;line-height:1.6;overflow-wrap:anywhere}
+.xtext>:first-child{margin-top:0}.xtext>:last-child{margin-bottom:0}
+.xtool{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.xth{display:flex;align-items:baseline;gap:8px;min-width:0;line-height:1.5}
+.xth b{flex:none}
+.xth span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.xth .xfile{color:var(--accent);font-family:var(--mono);font-size:var(--fs-sm)}
+.xio{border:1px solid var(--line);border-radius:8px;background:var(--bg);overflow:hidden;cursor:pointer;position:relative;max-height:150px}
+.xio.open{max-height:none;cursor:default}
+.xio:not(.open)::after{content:"";position:absolute;left:0;right:0;bottom:0;height:28px;background:linear-gradient(transparent,var(--bg));pointer-events:none}
+.xline{display:grid;grid-template-columns:44px minmax(0,1fr);border-top:1px solid var(--line)}
+.xline:first-child{border-top:0}
+.xline>span{padding:8px 0 0 12px;font-size:var(--fs-xs);font-weight:600;color:var(--muted);font-family:var(--mono)}
+.xline pre,.xio.code pre{margin:0;padding:8px 12px;font-family:var(--mono);font-size:var(--fs-sm);line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}
+.xline.bad pre{color:var(--bad)}
+.xio.code .add{color:var(--ok)}.xio.code .del{color:var(--bad)}
+.xerr{color:var(--bad);font-size:var(--fs-sm);font-family:var(--mono)}
+.xuser{display:flex;flex-direction:column;align-items:stretch;gap:4px}
+.xubox{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:10px 14px;line-height:1.5;overflow-wrap:anywhere}
+.xts{align-self:flex-end;font-size:var(--fs-xs);color:var(--muted)}
+.ckthread{gap:16px}
+.aslist .xio{max-height:110px}
+.ximgs{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.ximgs img{display:block;max-width:240px;max-height:180px;border-radius:6px;border:1px solid var(--line);object-fit:cover;background:var(--bg)}
+.aslist .ximgs img{max-width:150px;max-height:110px}
