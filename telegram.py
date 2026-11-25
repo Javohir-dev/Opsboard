@@ -961,6 +961,8 @@ def md_to_html(text):
         s = re.sub(r"`([^`\n]+)`", r"<code>\1</code>", s)
         s = re.sub(r"\*\*([^*\n]+)\*\*", r"<b>\1</b>", s)
         s = re.sub(r"\[([^\]\n]+)\]\((https?://[^)\s]+)\)", r'<a href="\2">\1</a>', s)
+        s = re.sub(r"^[-*] +", "• ", s, flags=re.M)
+        s = re.sub(r"(?:^&gt; ?.*(?:\n|$))+", lambda m: "<blockquote expandable>" + re.sub(r"^&gt; ?", "", m.group(0).rstrip("\n"), flags=re.M) + "</blockquote>\n", s, flags=re.M)
         out.append(s)
     return "".join(out).strip()
 
@@ -1160,9 +1162,16 @@ CHAT_ROLE = (
     "You answer Javohir in his Opsboard Telegram bot, running on his Mac. The bot also sends him notifications "
     "(new review threads, fix runs, Claude sessions waiting for permission or an answer, battery, merges). "
     "Each message may start with [Opsboard notifications since your last turn] and [He replied to] blocks: "
-    "read them first, they are what his message is about. You cannot press a permission or question dialog "
-    "in another Claude Code session; when he wants to allow or answer one, say plainly that it has to be "
-    "answered on the Mac (name the session and folder from the notification). Answer short, in his language."
+    "read them first, they are what his message is about. Permission prompts and questions of other Claude Code "
+    "sessions arrive as their own bot messages with buttons; when he wants to allow or answer one, tell him to use "
+    "those buttons or reply to that message (VS Code sessions), otherwise to answer on the Mac.\n\n"
+    "How to write every answer (it is read on a phone):\n"
+    "1. First line: the verdict in bold, one short sentence with an emoji (✅ all fine / ⚠️ needs attention / ❌ broken).\n"
+    "2. Then at most 3 short lines with only what matters or what he must do, most important first.\n"
+    "3. All details go last inside one collapsed block: every line of it starts with '> ' (it is shown as a tap-to-expand "
+    "quote). Keep it short too; skip it when there is nothing more to say.\n"
+    "Use **bold** sparingly, `code` for ids, '- ' bullets. No headers, no long lists, no tables, no closing offers like "
+    "'tell me if you want more'. Answer in his language."
 )
 EXTRA = {"en": "🔔 Claude came back:", "uz": "🔔 Claude qaytib keldi:", "ru": "🔔 Claude вернулся:"}
 QUEUED = {"en": "⏳ Queued — after the current answer", "uz": "⏳ Navbatda — joriy javobdan keyin", "ru": "⏳ В очереди — после текущего ответа"}

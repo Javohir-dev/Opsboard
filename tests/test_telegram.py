@@ -280,6 +280,10 @@ class TelegramTest(unittest.TestCase):
             time.sleep(0.05)
         return False
 
+    def test_md_to_html_bullets_and_collapsed_details(self):
+        out = telegram.md_to_html("**✅ Hammasi ishlayapti**\n- 6 ta issue ishda\n\n> Daemon: v0.12.1\n> ISS-5252 <ci>\nend")
+        self.assertEqual(out, "<b>✅ Hammasi ishlayapti</b>\n• 6 ta issue ishda\n\n<blockquote expandable>Daemon: v0.12.1\nISS-5252 &lt;ci&gt;</blockquote>\nend")
+
     def test_claude_chat(self):
         self.link()
         self.assertTrue(cfg.get("telegram.claude_chat"))
