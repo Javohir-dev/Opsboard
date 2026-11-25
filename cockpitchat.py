@@ -17,19 +17,32 @@ import claudewait
 from core import claude_bin, log, project_root
 
 KEEP = 20
+ASSIST_ROLE = (
+    "You are the Opsboard assistant: a small chat panel in the corner of Opsboard, the dashboard Javohir runs on his Mac "
+    "(sessions, Jira, GitLab, Docker, Postgres, worktrees, Claude accounts). Each of his messages starts with an "
+    "<ops-context> block: the Opsboard page he has open and the text visible on it. Use it; 'this', 'here' and "
+    "'that one' refer to it. You may read, edit and run what his request needs on this Mac. "
+    "When he asks to pass work to another Claude Code session (or to 'tell that session ...'), load ListAgents and "
+    "SendMessage with ToolSearch (select:ListAgents,SendMessage), find the session by name, send it the full "
+    "instruction in plain words, and tell him which session got it. Never delete user data, push, or spend a Claude "
+    "limit reset unless he says so in this chat. Answer short: the result first, in his language."
+)
 _sessions, _lock = {}, threading.Lock()
 
 
 class CockpitSession:
-    def __init__(self, cwd, resume="", fork=False, title=""):
+    def __init__(self, cwd, resume="", fork=False, title="", assistant=False):
         self.key = uuid.uuid4().hex[:10]
         self.cwd = str(cwd)
         self.sid = ""
         self.title = title
         self.busy = False
         self.error = ""
+        self.assistant = assistant
         self.started = self.last = time.time()
-        cmd = [claude_bin(), "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--permission-mode", "default", "--permission-prompt-tool", "stdio"]
+        cmd = [claude_bin(), "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--permission-mode", "auto" if assistant else "default", "--permission-prompt-tool", "stdio"]
+        if assistant:
+            cmd += ["--append-system-prompt", ASSIST_ROLE]
         if resume:
             cmd += ["--resume", resume] + (["--fork-session"] if fork else [])
         env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_CODE_")}
@@ -47,7 +60,7 @@ class CockpitSession:
         self.proc.stdin.flush()
         self.busy, self.last = True, time.time()
         if not self.title:
-            self.title = re.sub(r"\s+", " ", text).strip()[:60]
+            self.title = re.sub(r"\s+", " ", re.sub(r"<ops-context>[\s\S]*?</ops-context>", "", text)).strip()[:60]
 
     def _read(self):
         for line in self.proc.stdout:
@@ -123,7 +136,7 @@ class CockpitSession:
                 pass
 
     def public(self):
-        return {"key": self.key, "sid": self.sid, "cwd": self.cwd.replace(str(Path.home()), "~", 1), "title": self.title, "busy": self.busy,
+        return {"key": self.key, "sid": self.sid, "cwd": self.cwd.replace(str(Path.home()), "~", 1), "title": self.title, "busy": self.busy, "assistant": self.assistant,
                 "alive": self.alive(), "error": self.error, "started": self.started, "last": self.last}
 
 
@@ -134,16 +147,16 @@ def summary(name, args, description=""):
     return f"{name}: {description}" if description else name
 
 
-def start(text, cwd="", resume="", fork=False):
+def start(text, cwd="", resume="", fork=False, assistant=False):
     text = (text or "").strip()
     if not text:
         raise ValueError("write the first message")
-    folder = Path(os.path.expanduser(cwd)) if cwd else project_root()
+    folder = Path(os.path.expanduser(cwd)) if cwd else project_root() or (Path.home() if assistant else None)
     if not folder or not Path(folder).is_dir():
         raise ValueError("choose an existing folder")
     if resume and not re.fullmatch(r"[0-9a-f-]{8,64}", resume):
         raise ValueError("not a session id")
-    s = CockpitSession(folder, resume, fork, "" if not resume else "")
+    s = CockpitSession(folder, resume, fork, "", assistant)
     s.send(text)
     with _lock:
         _sessions[s.key] = s

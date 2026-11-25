@@ -23,9 +23,10 @@ function cockpitNav(ctx, r) {
 function ckOwned() { return data.cockpit || []; }
 function ckOwn(id) { return ckOwned().find(c => c.sid === id || c.key === id); }
 function ckAllSessions(ctx) {
+  const helper = new Set(ckOwned().filter(c => c.assistant).map(c => c.sid));
   const known = new Set(ctx.sessions.map(s => s.id));
-  const extra = ckOwned().filter(c => c.alive && !known.has(c.sid)).map(c => ({ id: c.sid || c.key, name: c.title || "New session", name_source: "user", title: "", status: c.busy ? "busy" : "idle", cockpit: true }));
-  return [...extra, ...ctx.sessions];
+  const extra = ckOwned().filter(c => c.alive && !c.assistant && !known.has(c.sid)).map(c => ({ id: c.sid || c.key, name: c.title || "New session", name_source: "user", title: "", status: c.busy ? "busy" : "idle", cockpit: true }));
+  return [...extra, ...ctx.sessions.filter(x => !helper.has(x.id))];
 }
 
 function ckPins() {

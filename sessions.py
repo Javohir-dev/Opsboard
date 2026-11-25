@@ -369,7 +369,7 @@ def descendants(procs, root):
 
 _CHAT = {}
 CHAT_KEEP = 300
-_NOISE = re.compile(r"<(system-reminder|local-command-[a-z]+|command-[a-z]+|ide_[a-z_]+|task-notification)>[\s\S]*?</\1>")
+_NOISE = re.compile(r"<(system-reminder|local-command-[a-z]+|command-[a-z]+|ide_[a-z_]+|task-notification|ops-context)>[\s\S]*?</\1>")
 
 
 def _user_text(content):
