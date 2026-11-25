@@ -1543,3 +1543,8 @@ main:has(.ckchat)>.ckchat{flex:1;min-height:0;height:auto;width:100%}
 .ckearly:hover{color:var(--text)}
 .ckmode select{height:30px;border-radius:6px;border:1px solid var(--line);background:var(--panel2);color:var(--text);font:inherit;font-size:var(--fs-sm);padding:0 6px}
 @media (max-width:760px){main:has(.ckchat){height:calc(100vh - 52px)}}
+.ckchat{position:relative}
+.ckdown{position:absolute;left:50%;bottom:150px;transform:translateX(-50%);z-index:5;width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:var(--panel2);color:var(--text);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35)}
+.ckdown .ic{transform:rotate(90deg)}
+.ckdown:hover{background:var(--panel)}
+.ckdown[hidden]{display:none}

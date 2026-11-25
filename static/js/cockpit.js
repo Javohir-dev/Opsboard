@@ -125,7 +125,7 @@ function ckThread(id, s) {
   else if (s && s.entrypoint !== "background") foot = COCKPIT.continueOpen === id
     ? ckComposer(null, id)
     : `<div class="ckcompose off">${icon("cockpit", 15)}<span>This session runs in ${s.entrypoint === "claude-vscode" ? "VS Code" : "a terminal"}. Continue it here as a new branch with its whole history; the original stays as it is.</span><button type="button" class="wkb ok" data-ck-continue="${esc(id)}">Continue in Cockpit</button></div>`;
-  return `<div class="ckthread" id="ckthread">${older}${items || '<div class="muted">No messages yet.</div>'}${working}${waits ? `<div class="ckwaits">${waits}</div>` : ""}</div>${foot}`;
+  return `<button type="button" class="ckdown" id="ckdown" data-ck-down aria-label="Scroll to the latest message" hidden>${icon("chevron", 18)}</button><div class="ckthread" id="ckthread">${older}${items || '<div class="muted">No messages yet.</div>'}${working}${waits ? `<div class="ckwaits">${waits}</div>` : ""}</div>${foot}`;
 }
 
 const X_OPEN = new Set();
@@ -303,3 +303,28 @@ document.addEventListener("click", e => {
   e.preventDefault();
   openLightbox(a.href);
 });
+
+COCKPIT.stick = {};
+function ckNear(t) { return t.scrollHeight - t.scrollTop - t.clientHeight < 80; }
+function ckAfterRender() {
+  const t = $("ckthread"), id = route().arg;
+  if (!t) return;
+  if (COCKPIT.stick[id] !== false) t.scrollTop = t.scrollHeight;
+  const b = $("ckdown"); if (b) b.hidden = COCKPIT.stick[id] !== false;
+}
+document.addEventListener("scroll", e => {
+  if (e.target.id !== "ckthread") return;
+  const id = route().arg, stick = ckNear(e.target);
+  COCKPIT.stick[id] = stick;
+  const b = $("ckdown"); if (b) b.hidden = stick;
+}, true);
+document.addEventListener("load", e => {
+  if (e.target.tagName === "IMG" && e.target.closest("#ckthread") && COCKPIT.stick[route().arg] !== false) { const t = $("ckthread"); t.scrollTop = t.scrollHeight; }
+}, true);
+document.addEventListener("click", e => {
+  if (!e.target.closest("[data-ck-down]")) return;
+  const t = $("ckthread"); if (!t) return;
+  COCKPIT.stick[route().arg] = true;
+  t.scrollTo({ top: t.scrollHeight, behavior: "smooth" });
+});
+addEventListener("hashchange", () => { const r = route(); if (r.page === "cockpit" && r.arg) COCKPIT.stick[r.arg] = true; });

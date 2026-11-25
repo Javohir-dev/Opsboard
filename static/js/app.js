@@ -82,6 +82,7 @@ function render() {
   renderBell();
   syncMrSticky();
   if (r.page === "mr") { mrAfterRender(); fixAfterRender(); }
+  if (r.page === "cockpit") ckAfterRender();
 }
 
 function keepsLocalState(el) {
