@@ -12,6 +12,7 @@ os.environ["OPS_CLAUDE_CREDENTIALS"] = os.path.join(DATA, "no-credentials.json")
 os.environ["OPS_CLAUDE_JSON"] = os.path.join(DATA, "no-claude.json")
 os.environ["OPS_CLAUDE_SETTINGS"] = os.path.join(DATA, "claude-settings.json")
 os.environ["OPS_ANTHROPIC_URL"] = "http://127.0.0.1:9"
+os.environ["OPS_CLAUDE_SESSIONS"] = os.path.join(DATA, "claude-sessions")
 for key in ("OPS_CONFIG", "OPS_NOTES", "OPS_TOKEN_FILE", "OPS_HIS_ROOT", "OPS_PORT"):
     os.environ.pop(key, None)
 sys.path.insert(0, str(ROOT))

@@ -13,6 +13,7 @@ from pathlib import Path
 from urllib import error, parse
 
 import claudeaccounts
+import claudewait
 import config as cfg
 import demo
 import detect
@@ -147,7 +148,14 @@ class Handler(BaseHTTPRequestHandler):
         if not self.same_origin():
             self.send_error(403)
             return
-        if self.path.startswith("/api/refresh-tasks"):
+        if self.path.startswith("/api/claude-wait"):
+            try:
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+                out = {"ok": claudewait.report(body if isinstance(body, dict) else {})}
+            except ValueError as exc:
+                out = {"ok": False, "error": str(exc)[:200]}
+            self.send(json.dumps(out), "application/json")
+        elif self.path.startswith("/api/refresh-tasks"):
             refresh_tasks.set()
             self.send('{"ok": true}', "application/json")
         elif self.path.startswith("/api/fix-preview") or self.path.startswith("/api/fix"):
@@ -588,6 +596,10 @@ def serve_demo(port):
     Server(("127.0.0.1", port), Handler).serve_forever()
 
 
+def check_claude_wait():
+    claudewait.check(send=telegram.claude_wait_alert if telegram.chat_id() else None)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=0)
@@ -618,6 +630,7 @@ def main():
         (6 * 3600, collect_version),
         (30, collect_claude_usage),
         (30, claudeaccounts.collect),
+        (30, check_claude_wait),
     ):
         loop(interval, fn)
     threading.Thread(target=lambda: detect.apply(detect.detect_all()[0]), daemon=True).start()

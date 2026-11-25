@@ -707,6 +707,24 @@ def _launch_fix(iid, push, skiptests=False):
     return next((r for r in runs.load_runs() if r.get("iid") == iid and r["status"] == "running"), None), ""
 
 
+WAIT_ALERT = {
+    "uz": {"permission_prompt": "ruxsat so'rayapti", "elicitation_dialog": "savol beryapti", "question": "savol beryapti", "idle_prompt": "keyingi buyruqni kutyapti", "head": "⏳ <b>Claude {what}</b> — {m} daqiqadan beri javob yo'q"},
+    "en": {"permission_prompt": "is asking for permission", "elicitation_dialog": "is asking a question", "question": "is asking a question", "idle_prompt": "is waiting for your next message", "head": "⏳ <b>Claude {what}</b> — no answer for {m} min"},
+    "ru": {"permission_prompt": "просит разрешение", "elicitation_dialog": "задаёт вопрос", "question": "задаёт вопрос", "idle_prompt": "ждёт следующего сообщения", "head": "⏳ <b>Claude {what}</b> — без ответа {m} мин"},
+}
+
+
+def claude_wait_alert(item):
+    w = WAIT_ALERT[_bot_lang()]
+    lines = [w["head"].format(what=w.get(item["kind"], item["kind"]), m=item["minutes"])]
+    where = " · ".join(x for x in (item.get("name"), (item.get("cwd") or "").replace(str(Path.home()), "~", 1)) if x)
+    if where:
+        lines.append(f"📂 <code>{esc(where)}</code>")
+    if item.get("message"):
+        lines.append(f"<i>{esc(item['message'])}</i>")
+    return send("\n".join(lines))
+
+
 def _fix_name(push, skiptests):
     skill = cfg.get("claude.fix_skill") or "fix"
     return f"{skill} ultra-skip" if skiptests else f"{skill} ultra" if push else skill
