@@ -651,6 +651,7 @@ def page_token():
 class Server(ThreadingHTTPServer):
     allow_reuse_address = True
     daemon_threads = True
+    request_queue_size = 128
 
 
 def serve_demo(port):
