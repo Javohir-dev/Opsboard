@@ -85,7 +85,7 @@ def collect_docker_stats():
             continue
         used, _, limit = s.get("MemUsage", "").partition(" / ")
         stats[s["Name"]] = {
-            "cpu": float(s.get("CPUPerc", "0").rstrip("%") or 0),
+            "cpu": float(s.get("CPUPerc", "0").rstrip("%")) if s.get("CPUPerc", "0").rstrip("%").replace(".", "", 1).isdigit() else 0.0,
             "mem": size_bytes(used.replace("i", "")),
             "mem_limit": size_bytes(limit.replace("i", "")),
         }

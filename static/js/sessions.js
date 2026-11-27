@@ -66,6 +66,7 @@ function macTiles() {
   const dockerMem = stats.reduce((a, s) => a + s.mem, 0), dockerCpu = stats.reduce((a, s) => a + s.cpu, 0);
   const rows = Object.fromEntries((d.rows || []).map(r => [r.Type, r]));
   const isMac = (m.os || "macOS") === "macOS";
+  const dockerDown = !!data.docker_df && !d.version;
   const memSub = isMac ? `pressure ${memUsedPct}% · wired ${bytes(m.mem_wired)} · compressed ${bytes(m.mem_compressed)}` : `in use ${memUsedPct}% · cache ${bytes(m.mem_cache)}`;
   const gpuSub = m.gpu == null ? "no supported GPU found" : [m.gpu_renderer != null ? `renderer ${m.gpu_renderer}%` : m.gpu_name || "", m.gpu_mem ? `in use ${bytes(m.gpu_mem)}` : ""].filter(Boolean).join(" · ");
   const powerSub = [m.power, m.battery_state, m.battery_minutes && m.battery_state === "discharging" ? `~${m.battery_minutes >= 60 ? `${Math.floor(m.battery_minutes / 60)}h ${m.battery_minutes % 60}m` : `${m.battery_minutes}m`} left` : "", m.cpu_speed_limit != null ? `CPU speed limit ${m.cpu_speed_limit}%` : "", `${m.processes || "?"} procs`].filter(Boolean).join(" · ");
@@ -76,8 +77,8 @@ function macTiles() {
     tile("GPU", m.gpu == null ? "n/a" : `${m.gpu}%`, gpuSub, spark(h.gpu, 100, "var(--busy)")),
     tile("Disk", `${bytes(m.disk_free, 0)} free`, `${bytes(m.disk_used, 0)} / ${bytes(m.disk_total, 0)}`, bar([[diskPct, color(diskPct)]])),
     tile("Network", `↓ ${bytes(m.net_in)}/s`, `↑ ${bytes(m.net_out)}/s`, spark(h.net_in, 0, "var(--accent)")),
-    tile(isMac ? "Docker VM" : "Docker", `${dockerCpu.toFixed(0)}% CPU`, `${bytes(dockerMem)} of ${bytes(d.mem)} · ${d.ncpu || "?"} vCPU · v${d.version || "?"}`, bar([[pct(dockerMem, d.mem), color(pct(dockerMem, d.mem))]])),
-    tile("Docker disk", rows.Images ? units(rows.Images.Size) : "—", `${units(rows.Images?.Reclaimable?.replace(/\s*\(.*\)/, "") || "?")} reclaimable · volumes ${units(rows["Local Volumes"]?.Size || "?")}`),
+    dockerDown ? tile(isMac ? "Docker VM" : "Docker", "Not running", isMac ? "Docker Desktop is not running" : "The Docker daemon is not running") : tile(isMac ? "Docker VM" : "Docker", `${dockerCpu.toFixed(0)}% CPU`, `${bytes(dockerMem)} of ${bytes(d.mem)} · ${d.ncpu || "?"} vCPU · v${d.version || "?"}`, bar([[pct(dockerMem, d.mem), color(pct(dockerMem, d.mem))]])),
+    dockerDown ? tile("Docker disk", "—", "Shown when Docker is running") : tile("Docker disk", rows.Images ? units(rows.Images.Size) : "—", `${units(rows.Images?.Reclaimable?.replace(/\s*\(.*\)/, "") || "?")} reclaimable · volumes ${units(rows["Local Volumes"]?.Size || "?")}`),
     tile(`Power${powerIcon(m)}`, m.battery != null ? `${m.battery}%` : m.power || "—", powerSub),
   ].join("")}</div></section>`;
 }
