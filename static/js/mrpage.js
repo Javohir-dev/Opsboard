@@ -569,6 +569,8 @@ function syncMrSticky() {
   const stuck = el.getBoundingClientRect().top <= top + 0.5 && scrollY > 0;
   if (stuck !== !!ui.mrStuck) { ui.mrStuck = stuck; el.classList.toggle("stuck", stuck); }
   document.documentElement.style.setProperty("--mrstick", el.offsetHeight + "px");
+  const bar = document.querySelector(".mrbar2");
+  if (bar) document.documentElement.style.setProperty("--mrdfh", (parseFloat(getComputedStyle(bar).top) || 0) + bar.offsetHeight + "px");
 }
 addEventListener("scroll", () => { if (route().page === "mr") syncMrSticky(); }, { passive: true });
 addEventListener("resize", () => { if (route().page === "mr") syncMrSticky(); });

@@ -1003,7 +1003,7 @@ a.cnt:hover { filter: brightness(1.15); }
 .mrmini .dicon { width: 24px; height: 24px; margin-left: -4px; flex: none; }
 .mrmini .mrstate { flex: none; padding: 1px 8px; font-size: var(--fs-sm); }
 .mrbar2 { top: var(--mrstick, 0px); }
-.mrlayout .dfh { top: calc(var(--mrstick, 0px) + 57px); }
+.mrlayout .dfh { top: var(--mrdfh, calc(var(--mrstick, 0px) + 53px)); }
 .dfile { scroll-margin-top: calc(var(--mrstick, 0px) + 70px); }
 .ftree, .mrlayout .mrthreads { top: calc(var(--mrstick, 0px) + 70px); max-height: calc(100vh - var(--mrstick, 0px) - 86px); }
 .mrside2, .runmain { top: calc(var(--mrstick, 0px) + 16px); }
